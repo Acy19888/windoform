@@ -75,12 +75,30 @@ function setFbStatus(text, type) {
 
 async function fetchAllData(apiKey, projectId, silent) {
   try {
-    const [customers, activities, quotes] = await Promise.all([
+    const [rawCustomers, activities, quotes] = await Promise.all([
       fsFetch(apiKey, projectId, 'crm_customers'),
       fsFetch(apiKey, projectId, 'crm_activities').catch(()=>[]),
       fsFetch(apiKey, projectId, 'crm_quotes').catch(()=>[]),
     ]);
-    fbCustomers = customers;
+
+    // ── Deduplicate crm_customers by name + email ──────────
+    // Same person may have been scanned multiple times at the fair.
+    // Keep the record with the most filled-in fields.
+    const seen = new Map();
+    rawCustomers.forEach(c => {
+      const key = [
+        (c.name  || '').trim().toLowerCase(),
+        (c.email || '').trim().toLowerCase(),
+      ].join('|');
+      if (!seen.has(key)) {
+        seen.set(key, c);
+      } else {
+        const prev  = seen.get(key);
+        const score = o => Object.values(o).filter(v => v !== null && v !== '' && v !== undefined).length;
+        if (score(c) > score(prev)) seen.set(key, c);
+      }
+    });
+    fbCustomers = [...seen.values()];
     fbActivities = {};
     activities.forEach(a => { const k = a.parentId||a.contactId||''; (fbActivities[k]||(fbActivities[k]=[])).push(a); });
     Object.values(fbActivities).forEach(arr => arr.sort((a,b) => (b.createdAt||'') > (a.createdAt||'') ? 1 : -1));
