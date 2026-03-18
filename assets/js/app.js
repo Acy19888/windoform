@@ -2780,13 +2780,12 @@ async function fetchCompanyPhotos() {
   gallery.style.display = '';
 }
 
+
 // ============================================================
-// FUARBOT SYNC — Firebase real-time integration
+// FUARBOT SYNC — Firestore REST API (no SDK needed)
 // ============================================================
-let fbApp      = null;
-let fbDb       = null;
-let fbUnsub    = null;
 let fuarbotContacts = [];
+let fbPollInterval  = null;
 
 const FB_CFG_KEY = 'crm_fuarbot_firebase_config';
 
@@ -2798,6 +2797,30 @@ function saveFbConfig(cfg) {
   localStorage.setItem(FB_CFG_KEY, JSON.stringify(cfg));
 }
 
+// ── Firestore REST helpers ────────────────────────────────
+function parseFirestoreValue(val) {
+  if (!val) return null;
+  if (val.stringValue  !== undefined) return val.stringValue;
+  if (val.integerValue !== undefined) return parseInt(val.integerValue, 10);
+  if (val.doubleValue  !== undefined) return val.doubleValue;
+  if (val.booleanValue !== undefined) return val.booleanValue;
+  if (val.nullValue    !== undefined) return null;
+  if (val.timestampValue !== undefined) return val.timestampValue;
+  if (val.arrayValue)  return (val.arrayValue.values || []).map(parseFirestoreValue);
+  if (val.mapValue)    return parseFirestoreFields(val.mapValue.fields || {});
+  return null;
+}
+function parseFirestoreFields(fields) {
+  const obj = {};
+  for (const [k, v] of Object.entries(fields || {})) obj[k] = parseFirestoreValue(v);
+  return obj;
+}
+function parseFirestoreDoc(doc) {
+  const id = doc.name.split('/').pop();
+  return { _id: id, ...parseFirestoreFields(doc.fields || {}) };
+}
+
+// ── Config UI ─────────────────────────────────────────────
 function showFbConfig() {
   const panel = document.getElementById('fb-config-panel');
   if (panel) panel.style.display = '';
@@ -2812,96 +2835,76 @@ function showFbConfig() {
 }
 
 function connectFuarbot() {
-  const get = id => (document.getElementById(id)?.value || '').trim();
+  const get   = id => (document.getElementById(id)?.value || '').trim();
   const apiKey    = get('fb-api-key');
   const projectId = get('fb-project-id');
   const errEl     = document.getElementById('fb-connect-error');
-
   if (!apiKey || !projectId) {
     if (errEl) { errEl.style.display = ''; errEl.textContent = 'API Key ve Project ID zorunludur!'; }
     return;
   }
   if (errEl) errEl.style.display = 'none';
-
-  const cfg = {
-    apiKey,
-    authDomain: get('fb-auth-domain') || projectId + '.firebaseapp.com',
-    projectId,
-    storageBucket: projectId + '.appspot.com',
-    appId: get('fb-app-id') || ''
-  };
-  saveFbConfig(cfg);
-  initFuarbotFirebase(cfg);
+  saveFbConfig({ apiKey, projectId, authDomain: get('fb-auth-domain'), appId: get('fb-app-id') });
+  startFuarbotSync(apiKey, projectId);
 }
 
-function initFuarbotFirebase(cfg) {
+// ── REST fetch ────────────────────────────────────────────
+async function fetchFuarbotFromRest(apiKey, projectId, silent) {
   try {
-    // Clean up previous
-    if (fbUnsub) { fbUnsub(); fbUnsub = null; }
-    try { firebase.app('fuarbot').delete(); } catch (_) {}
+    const base = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
+    let allDocs = [];
+    let pageToken = '';
 
-    fbApp = firebase.initializeApp(cfg, 'fuarbot');
-    fbDb  = firebase.app('fuarbot').firestore();
+    // Handle pagination (Firestore returns max 300 docs per request)
+    do {
+      const url = `${base}/crm_customers?key=${apiKey}&pageSize=300` + (pageToken ? `&pageToken=${pageToken}` : '');
+      const res  = await fetch(url);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error?.message || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      allDocs = allDocs.concat((data.documents || []).map(parseFirestoreDoc));
+      pageToken = data.nextPageToken || '';
+    } while (pageToken);
 
-    setFbStatus('Bağlanıyor…', 'warning');
+    fuarbotContacts = allDocs;
+    const count = fuarbotContacts.length;
 
-    // Real-time listener on crm_customers
-    fbUnsub = fbDb.collection('crm_customers')
-      .orderBy('updatedAt', 'desc')
-      .onSnapshot(
-        snap => {
-          fuarbotContacts = snap.docs.map(d => ({ _id: d.id, ...d.data() }));
-          const count = fuarbotContacts.length;
-          setFbStatus('Bağlı · ' + count + ' kişi', 'success');
-          document.getElementById('fb-config-panel').style.display = 'none';
-          const ctrl = document.getElementById('fb-controls');
-          if (ctrl) { ctrl.style.display = ''; ctrl.style.removeProperty('display'); }
-          // Use flex via class instead
-          ctrl.className = 'd-flex align-items-center gap-2 flex-wrap mb-3';
-          updateFuarbotBadge(count);
-          const syncEl = document.getElementById('fb-last-sync');
-          if (syncEl) syncEl.textContent = 'Son güncelleme: ' + new Date().toLocaleTimeString('tr-TR');
-          renderFuarbotContacts(fuarbotContacts);
-        },
-        err => {
-          console.error('Fuarbot snapshot error:', err);
-          const msg = err.code === 'permission-denied'
-            ? 'Erişim reddedildi. Firebase güvenlik kurallarını kontrol edin.'
-            : 'Bağlantı hatası: ' + err.message;
-          setFbStatus(msg, 'danger');
-          // Fallback: try without orderBy (in case index is missing)
-          fbUnsub = fbDb.collection('crm_customers').onSnapshot(
-            snap2 => {
-              fuarbotContacts = snap2.docs.map(d => ({ _id: d.id, ...d.data() }));
-              setFbStatus('Bağlı · ' + fuarbotContacts.length + ' kişi', 'success');
-              document.getElementById('fb-config-panel').style.display = 'none';
-              const ctrl = document.getElementById('fb-controls');
-              if (ctrl) ctrl.className = 'd-flex align-items-center gap-2 flex-wrap mb-3';
-              updateFuarbotBadge(fuarbotContacts.length);
-              renderFuarbotContacts(fuarbotContacts);
-            },
-            err2 => {
-              const msg2 = err2.code === 'permission-denied'
-                ? 'Erişim reddedildi — Firebase kurallarını kontrol edin.'
-                : err2.message;
-              setFbStatus('Hata: ' + msg2, 'danger');
-            }
-          );
-        }
-      );
+    setFbStatus('Bağlı · ' + count + ' kişi', 'success');
+    document.getElementById('fb-config-panel').style.display = 'none';
+    const ctrl = document.getElementById('fb-controls');
+    if (ctrl) ctrl.className = 'd-flex align-items-center gap-2 flex-wrap mb-3';
+    updateFuarbotBadge(count);
+    const syncEl = document.getElementById('fb-last-sync');
+    if (syncEl) syncEl.textContent = 'Son güncelleme: ' + new Date().toLocaleTimeString('tr-TR');
+    if (!silent) renderFuarbotContacts(fuarbotContacts);
+
   } catch (e) {
-    console.error('Firebase init error:', e);
-    setFbStatus('Başlatma hatası: ' + e.message, 'danger');
+    const msg = e.message.includes('PERMISSION_DENIED') || e.message.includes('403')
+      ? 'Erişim reddedildi — Firebase kurallarını kontrol edin (allow read: if true)'
+      : 'Hata: ' + e.message;
+    setFbStatus(msg, 'danger');
   }
 }
 
+function startFuarbotSync(apiKey, projectId) {
+  setFbStatus('Bağlanıyor…', 'warning');
+  // Stop previous poll
+  if (fbPollInterval) { clearInterval(fbPollInterval); fbPollInterval = null; }
+  // First fetch immediately
+  fetchFuarbotFromRest(apiKey, projectId, false);
+  // Then poll every 30 seconds for near-real-time sync
+  fbPollInterval = setInterval(() => fetchFuarbotFromRest(apiKey, projectId, true), 30000);
+}
+
+// ── Status / badge ────────────────────────────────────────
 function setFbStatus(text, type) {
   const el = document.getElementById('fb-status-badge');
   if (!el) return;
   el.className = 'badge bg-' + (type || 'secondary');
   el.textContent = text;
 }
-
 function updateFuarbotBadge(count) {
   const b = document.getElementById('fuarbot-badge');
   if (!b) return;
@@ -2909,37 +2912,36 @@ function updateFuarbotBadge(count) {
   else b.style.display = 'none';
 }
 
+// ── Search / filter ───────────────────────────────────────
 function filterFuarbotContacts() {
   const q = (document.getElementById('fb-search')?.value || '').toLowerCase();
-  if (!q) { renderFuarbotContacts(fuarbotContacts); return; }
-  const filtered = fuarbotContacts.filter(c =>
-    (c.name    || '').toLowerCase().includes(q) ||
-    (c.company || '').toLowerCase().includes(q) ||
-    (c.email   || '').toLowerCase().includes(q) ||
-    (c.phone   || '').toLowerCase().includes(q) ||
-    (c.source  || '').toLowerCase().includes(q)
-  );
-  renderFuarbotContacts(filtered, true);
+  renderFuarbotContacts(q
+    ? fuarbotContacts.filter(c =>
+        (c.name    || '').toLowerCase().includes(q) ||
+        (c.company || '').toLowerCase().includes(q) ||
+        (c.email   || '').toLowerCase().includes(q) ||
+        (c.phone   || '').toLowerCase().includes(q) ||
+        (c.source  || '').toLowerCase().includes(q))
+    : fuarbotContacts, !!q);
 }
 
+// ── HTML escape ───────────────────────────────────────────
 function esc(str) {
-  if (!str) return '';
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// ── Render list ───────────────────────────────────────────
 function renderFuarbotContacts(contacts, isFiltered) {
   const container = document.getElementById('fb-contact-list');
   if (!container) return;
-
   if (!contacts || contacts.length === 0) {
     container.innerHTML = '<div class="text-center py-5 text-muted">' +
       '<i class="bi bi-inbox" style="font-size:40px;display:block;margin-bottom:12px;"></i>' +
-      (isFiltered ? 'Arama sonucu bulunamadı.' : 'Henüz Fuarbot\'ta kayıtlı kişi yok.') +
-      '</div>';
+      (isFiltered ? 'Arama sonucu bulunamadı.' : 'Henüz Fuarbot\'ta kayıtlı kişi yok.') + '</div>';
     return;
   }
 
-  // Group by fair/source
+  // Group by fair source
   const groups = {};
   contacts.forEach(c => {
     const src = c.source || 'Fuarbot';
@@ -2949,50 +2951,43 @@ function renderFuarbotContacts(contacts, isFiltered) {
 
   let html = '';
   Object.entries(groups).forEach(([src, list]) => {
-    html += '<div class="mb-3">' +
-      '<div class="d-flex align-items-center mb-2 gap-2">' +
+    html += '<div class="mb-3"><div class="d-flex align-items-center mb-2 gap-2">' +
       '<span class="badge bg-primary">' + esc(src) + '</span>' +
-      '<span class="text-muted small">' + list.length + ' kişi</span>' +
-      '</div>';
-
+      '<span class="text-muted small">' + list.length + ' kişi</span></div>';
     list.forEach(c => {
-      const updatedAt = c.updatedAt ? new Date(c.updatedAt).toLocaleDateString('tr-TR') : '';
       const phone = c.phone || c.mobile || '';
+      const updatedAt = c.updatedAt ? new Date(c.updatedAt).toLocaleDateString('tr-TR') : '';
       html += '<div class="card mb-2 fuarbot-contact-card" data-id="' + esc(c._id) + '" style="border-left:3px solid #3b82f6;">' +
-        '<div class="card-body py-2 px-3">' +
-        '<div class="d-flex align-items-center gap-3">' +
+        '<div class="card-body py-2 px-3"><div class="d-flex align-items-center gap-3">' +
         '<div class="flex-grow-1">' +
         '<div class="d-flex align-items-center gap-2 flex-wrap">' +
         '<strong>' + esc(c.name || '—') + '</strong>' +
         (c.position ? '<span class="text-muted small">' + esc(c.position) + '</span>' : '') +
         (c.company  ? '<span class="badge bg-light text-dark border" style="font-size:11px;">' + esc(c.company) + '</span>' : '') +
         (c.status === 'new' ? '<span class="badge bg-warning text-dark" style="font-size:10px;">Yeni</span>' : '') +
-        '</div>' +
-        '<div class="d-flex gap-3 mt-1 flex-wrap" style="font-size:12px;color:#666;">' +
+        '</div><div class="d-flex gap-3 mt-1 flex-wrap" style="font-size:12px;color:#666;">' +
         (phone   ? '<span><i class="bi bi-telephone me-1"></i>' + esc(phone) + '</span>' : '') +
         (c.email ? '<span><i class="bi bi-envelope me-1"></i>' + esc(c.email) + '</span>' : '') +
-        (c.address ? '<span><i class="bi bi-geo-alt me-1"></i>' + esc(c.address) + '</span>' : '') +
+        (c.address ? '<span><i class="bi bi-geo-alt me-1"></i>' + esc(c.address.slice(0,40)) + '</span>' : '') +
         (updatedAt ? '<span class="ms-auto text-muted">' + updatedAt + '</span>' : '') +
         '</div>' +
         (c.notes ? '<div class="mt-1 text-muted" style="font-size:11px;"><i class="bi bi-chat-left-text me-1"></i>' + esc(c.notes.slice(0,120)) + (c.notes.length > 120 ? '…' : '') + '</div>' : '') +
         '</div>' +
         '<button class="btn btn-sm btn-outline-success flex-shrink-0" onclick="importFuarbotContact(\'' + esc(c._id) + '\')" title="CRM\'e Aktar">' +
-        '<i class="bi bi-cloud-download me-1"></i>Aktar' +
-        '</button>' +
+        '<i class="bi bi-cloud-download me-1"></i>Aktar</button>' +
         '</div></div></div>';
     });
     html += '</div>';
   });
-
   container.innerHTML = html;
 }
 
+// ── Import single contact ─────────────────────────────────
 async function importFuarbotContact(fbId) {
   const c = fuarbotContacts.find(x => x._id === fbId);
   if (!c) return;
-
   try {
-    // 1. Find or create company
+    // Find or create company
     let companyId = null;
     if (c.company && c.company.trim()) {
       const allComps = await new Promise((res, rej) => {
@@ -3007,20 +3002,12 @@ async function importFuarbotContact(fbId) {
       if (match) {
         companyId = match.id;
       } else {
-        const parts = (c.address || '').split(/[\s,]+/);
-        const cityRaw = parts.find(p => CITIES[p.toLowerCase().replace(/[^a-z]/g,'')]) || '';
         const newCo = {
-          name:            c.company.trim(),
-          phone:           c.phone || '',
-          email:           c.email || c.website ? '' : '',
-          website:         c.website || '',
-          address:         c.address || '',
-          city:            CITIES[cityRaw.toLowerCase().replace(/[^a-z]/g,'')] || '',
-          notes:           'Fuarbot\'tan aktarıldı. Kaynak: ' + (c.source || 'Fuarbot'),
-          marketingStatus: 'Aranacak',
-          qualityScore:    0,
-          createdAt:       new Date().toISOString(),
-          updatedAt:       new Date().toISOString()
+          name: c.company.trim(), phone: c.phone || '', email: '',
+          website: c.website || '', address: c.address || '', city: '',
+          notes: 'Fuarbot\'tan aktarıldı. Kaynak: ' + (c.source || 'Fuarbot'),
+          marketingStatus: 'Aranacak', qualityScore: 0,
+          createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
         };
         newCo.qualityScore = calculateCompanyQuality(newCo);
         companyId = await new Promise((res, rej) => {
@@ -3031,31 +3018,23 @@ async function importFuarbotContact(fbId) {
         });
       }
     }
-
-    // 2. Create contact
+    // Create contact
     const phone = c.phone || c.mobile || '';
     const newContact = {
-      name:      c.name  || '',
-      title:     c.position || '',
-      phone,
+      name: c.name || '', title: c.position || '', phone,
       phoneNormalized: phone.replace(/\D/g,''),
       phoneValid: /^0[0-9]{10}$/.test(phone.replace(/[\s\-()]/g,'')),
-      email:     c.email || '',
-      companyId,
-      status:    'Aktif',
-      notes:     'Fuarbot\'tan aktarıldı. Kaynak: ' + (c.source || 'Fuarbot') + (c.notes ? '\n' + c.notes : ''),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      email: c.email || '', companyId, status: 'Aktif',
+      notes: 'Fuarbot\'tan aktarıldı. Kaynak: ' + (c.source || 'Fuarbot') + (c.notes ? '\n' + c.notes : ''),
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
     };
     newContact.qualityScore = calculateContactQuality(newContact);
-
     await new Promise((res, rej) => {
       const tx3 = db.transaction(['contacts'], 'readwrite');
       const req3 = tx3.objectStore('contacts').add(newContact);
       req3.onsuccess = () => res(req3.result);
       req3.onerror   = () => rej(req3.error);
     });
-
     // Mark card as done
     const card = document.querySelector('.fuarbot-contact-card[data-id="' + fbId + '"]');
     if (card) {
@@ -3066,7 +3045,7 @@ async function importFuarbotContact(fbId) {
     }
     toast('✓ ' + c.name + ' CRM\'e aktarıldı', 'success');
   } catch (e) {
-    console.error('Fuarbot import error:', e);
+    console.error('Import error:', e);
     toast('Aktarım hatası: ' + e.message, 'error');
   }
 }
@@ -3074,19 +3053,17 @@ async function importFuarbotContact(fbId) {
 async function importAllFuarbotContacts() {
   if (!fuarbotContacts.length) { toast('Aktarılacak kişi yok', 'error'); return; }
   let count = 0;
-  for (const c of fuarbotContacts) {
-    try { await importFuarbotContact(c._id); count++; } catch (_) {}
-  }
+  for (const c of fuarbotContacts) { try { await importFuarbotContact(c._id); count++; } catch (_) {} }
   toast('✓ ' + count + ' kişi CRM\'e aktarıldı!', 'success');
 }
 
+// ── Page init ─────────────────────────────────────────────
 function loadFuarbotPage() {
   const cfg = loadFbConfig();
   if (cfg && cfg.apiKey && cfg.projectId) {
-    if (!fbDb) {
-      initFuarbotFirebase(cfg);
+    if (!fbPollInterval) {
+      startFuarbotSync(cfg.apiKey, cfg.projectId);
     } else {
-      // Already connected — just re-render
       document.getElementById('fb-config-panel').style.display = 'none';
       const ctrl = document.getElementById('fb-controls');
       if (ctrl) ctrl.className = 'd-flex align-items-center gap-2 flex-wrap mb-3';
