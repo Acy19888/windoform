@@ -241,6 +241,9 @@ function renderQuoteCard(q, showContact) {
       <i class="bi bi-person me-1"></i>${esc(c.name||'—')}${c.company?' · '+esc(c.company):''}
     </div>` : '';
   })() : '';
+  const previewBtn = q._id
+    ? `<button class="btn btn-sm btn-outline-primary fb-preview-btn" onclick="showQuotePreview('${esc(q._id)}')"><i class="bi bi-eye me-1"></i>Önizle</button>`
+    : '';
   return `<div class="fb-quote-card">
     <div class="d-flex justify-content-between align-items-start gap-2">
       <div style="flex:1;min-width:0;">
@@ -252,6 +255,7 @@ function renderQuoteCard(q, showContact) {
       <div class="text-end flex-shrink-0">
         <div class="fb-quote-total">${total} ${s}</div>
         <div style="font-size:11px;color:#aaa;">${date}</div>
+        <div class="mt-1">${previewBtn}</div>
       </div>
     </div>
   </div>`;
@@ -421,6 +425,110 @@ async function importAllFuarbotContacts() {
   }
   if (skipped > 0) toast(`✓ ${imported} aktarıldı · ${skipped} zaten mevcut (atlandı)`, 'info');
   else toast(`✓ ${imported} kişi aktarıldı`, 'success');
+}
+
+// ── Quote Preview Modal ───────────────────────────────────
+function showQuotePreview(qId) {
+  // Find quote across all contacts
+  let q = null;
+  for (const arr of Object.values(fbQuotes)) {
+    q = arr.find(x => x._id === qId);
+    if (q) break;
+  }
+  if (!q) return;
+
+  // Recipient: prefer snapshot fields saved with the quote, fall back to fbCustomers
+  const c = fbCustomers.find(x => x._id === q.contactId) || {};
+  const name    = q.contactName    || c.name    || '';
+  const company = q.contactCompany || c.company || '';
+  const email   = q.contactEmail   || c.email   || '';
+  const phone   = q.contactPhone   || c.phone   || c.mobile || '';
+  const address = q.contactAddress || c.address || '';
+
+  const s = SYM[q.currency] || q.currency || '€';
+  const fmt = n => Number(n||0).toLocaleString('tr-TR', {minimumFractionDigits:2, maximumFractionDigits:2});
+  const dateStr = q.createdAt ? new Date(q.createdAt).toLocaleDateString('tr-TR') : '';
+  const sentStr = q.sentAt    ? new Date(q.sentAt).toLocaleDateString('tr-TR')    : '';
+
+  const linesHtml = (q.lines||[]).length ? (q.lines||[]).map((l, i) => `
+    <tr>
+      <td style="text-align:center;">${i+1}</td>
+      <td>${esc(l.product||'')}${l.description?`<br><span style="font-size:10px;color:#888;">${esc(l.description)}</span>`:''}</td>
+      <td style="text-align:center;">${l.qty||1} ${esc(l.unit||'')}</td>
+      <td style="text-align:right;">${fmt(l.unitPrice)} ${s}</td>
+      <td style="text-align:right;font-weight:700;">${fmt((l.qty||1)*(l.unitPrice||0))} ${s}</td>
+    </tr>`).join('') :
+    `<tr><td colspan="5" style="text-align:center;color:#aaa;padding:20px;">—</td></tr>`;
+
+  const total = Number(q.totalNet||q.totalGross||0);
+  const badge = q.status==='sent'
+    ? `<span style="background:#d1fae5;color:#065f46;padding:3px 10px;border-radius:20px;font-size:11px;">✓ Gönderildi${sentStr?' · '+sentStr:''}</span>`
+    : `<span style="background:#e5e7eb;color:#555;padding:3px 10px;border-radius:20px;font-size:11px;">Taslak</span>`;
+
+  document.body.insertAdjacentHTML('beforeend', `
+  <div class="fb-preview-overlay" id="fb-preview-overlay" onclick="if(event.target===this)document.getElementById('fb-preview-overlay').remove()">
+    <div class="fb-preview-modal">
+      <div class="fb-preview-toolbar no-print">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-weight:700;font-size:14px;">${esc(q.quoteNumber||'Teklif')}</span>
+          ${badge}
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button onclick="window.print()" class="btn btn-primary btn-sm"><i class="bi bi-printer me-1"></i>Yazdır / PDF</button>
+          <button onclick="document.getElementById('fb-preview-overlay').remove()" class="btn btn-outline-secondary btn-sm"><i class="bi bi-x"></i></button>
+        </div>
+      </div>
+      <div class="fb-preview-paper" id="fb-print-area">
+        <!-- Header -->
+        <div class="fb-pp-header">
+          <div>
+            <div class="fb-pp-company">WINDOFORM</div>
+            <div class="fb-pp-company-sub">Professional Window Solutions</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:22px;font-weight:800;color:#1a1a2e;letter-spacing:-0.5px;">TEKLİF</div>
+            <div style="font-size:13px;color:#2b5597;font-weight:600;">${esc(q.quoteNumber||'')}</div>
+            <div style="font-size:11px;color:#888;margin-top:2px;">${dateStr}</div>
+          </div>
+        </div>
+        <!-- Recipient -->
+        <div class="fb-pp-recipient">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#888;margin-bottom:4px;">Alıcı</div>
+          ${name    ? `<div style="font-weight:700;font-size:14px;">${esc(name)}</div>` : ''}
+          ${company ? `<div style="font-size:13px;">${esc(company)}</div>` : ''}
+          ${address ? `<div style="font-size:12px;color:#666;margin-top:2px;">${esc(address)}</div>` : ''}
+          ${email   ? `<div style="font-size:12px;color:#666;">${esc(email)}</div>` : ''}
+          ${phone   ? `<div style="font-size:12px;color:#666;">${esc(phone)}</div>` : ''}
+        </div>
+        <!-- Items table -->
+        <table class="fb-pp-table">
+          <thead>
+            <tr>
+              <th style="width:32px;text-align:center;">#</th>
+              <th>Ürün / Hizmet</th>
+              <th style="width:80px;text-align:center;">Miktar</th>
+              <th style="width:110px;text-align:right;">Birim Fiyat</th>
+              <th style="width:120px;text-align:right;">Toplam</th>
+            </tr>
+          </thead>
+          <tbody>${linesHtml}</tbody>
+        </table>
+        <!-- Totals -->
+        <div class="fb-pp-totals">
+          <div class="fb-pp-total-row">
+            <span>Net Toplam</span>
+            <span style="font-size:18px;font-weight:800;color:#2b5597;">${fmt(total)} ${s}</span>
+          </div>
+        </div>
+        <!-- Footer -->
+        <div class="fb-pp-footer">
+          <div style="color:#888;font-size:10px;text-align:center;padding-top:16px;border-top:1px solid #eee;">
+            Windoform · windoform.de${sentStr ? ' · Gönderildi: '+sentStr : ''}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`);
 }
 
 // ── Page init ─────────────────────────────────────────────
