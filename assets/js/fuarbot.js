@@ -106,7 +106,7 @@ async function fetchAllData(apiKey, projectId, silent) {
     quotes.forEach(q => { const k = q.contactId||''; (fbQuotes[k]||(fbQuotes[k]=[])).push(q); });
     Object.values(fbQuotes).forEach(arr => arr.sort((a,b) => (b.createdAt||'') > (a.createdAt||'') ? 1 : -1));
 
-    setFbStatus('Bağlı · ' + customers.length + ' kişi', 'success');
+    setFbStatus('Bağlı · ' + fbCustomers.length + ' kişi', 'success');
     document.getElementById('fb-config-panel').style.display = 'none';
     document.getElementById('fb-tabs-wrapper').style.display = '';
     const syncEl = document.getElementById('fb-last-sync');
