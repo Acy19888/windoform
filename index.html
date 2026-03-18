@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CRM Sistemi</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+  <link rel="stylesheet" href="./assets/css/styles.css">
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="logo">
+    <div class="logo-icon"><i class="bi bi-briefcase-fill"></i></div>
+    <div class="logo-label">
+      <strong>CRM</strong>
+      <span>M&#xfc;&#x15f;teri Y&#xf6;netimi</span>
+    </div>
+  </div>
+  <nav>
+    <a href="#" data-page="dashboard"  onclick="showPage('dashboard');return false;"><i class="bi bi-graph-up"></i>Dashboard</a>
+    <a href="#" data-page="companies"  onclick="showPage('companies');return false;" class="active"><i class="bi bi-building"></i>Firmalar</a>
+    <a href="#" data-page="contacts"   onclick="showPage('contacts');return false;"><i class="bi bi-people"></i>&#x4b;i&#x15f;iler</a>
+  </nav>
+  <div class="divider"></div>
+  <div class="section-label">&#x130;&#x15f;lemler</div>
+  <nav>
+    <a href="#" data-page="fuarbot" onclick="showPage('fuarbot');return false;" style="position:relative;">
+      <i class="bi bi-arrow-repeat"></i>Fuarbot Sync
+      <span id="fuarbot-badge" class="badge bg-danger" style="display:none;position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:10px;padding:2px 5px;">0</span>
+    </a>
+    <a href="#" data-page="import"     onclick="showPage('import');return false;"><i class="bi bi-upload"></i>Excel Aktar</a>
+    <a href="#" data-page="reports"    onclick="showPage('reports');return false;"><i class="bi bi-bar-chart"></i>Raporlar</a>
+    <a href="#" data-page="duplicates" onclick="showPage('duplicates');return false;"><i class="bi bi-copy"></i>Tekrar Kay&#x131;tlar</a>
+    <a href="#" onclick="exportCSV();return false;"><i class="bi bi-download"></i>CSV &#x130;ndir</a>
+  </nav>
+  <div class="divider"></div>
+  <div class="section-label">H&#x131;zl&#x131; Ekle</div>
+  <nav>
+    <a href="#" data-page="add-company" onclick="showPage('add-company');return false;"><i class="bi bi-plus-circle"></i>Firma Ekle</a>
+    <a href="#" data-page="add-contact" onclick="showPage('add-contact');return false;"><i class="bi bi-person-plus"></i>&#x4b;i&#x15f;i Ekle</a>
+  </nav>
+</div>
+
+<main>
+
+<!-- FUARBOT SYNC -->
+<div id="fuarbot" class="page">
+  <div class="page-topbar">
+    <div class="page-topbar-left">
+      <h1><i class="bi bi-arrow-repeat me-2" style="color:#3b82f6;"></i>Fuarbot Sync</h1>
+    </div>
+    <div class="page-topbar-right d-flex align-items-center gap-2">
+      <span id="fb-status-badge" class="badge bg-secondary">Bağlı değil</span>
+      <button class="btn btn-sm btn-outline-primary" onclick="showFbConfig()"><i class="bi bi-gear me-1"></i>Bağlantı Ayarları</button>
+    </div>
+  </div>
+  <div class="page-content">
+
+    <!-- Firebase Config Panel -->
+    <div id="fb-config-panel" class="card mb-4 border-primary">
+      <div class="card-body">
+        <h5 class="card-title mb-1"><i class="bi bi-cloud-fill me-2 text-primary"></i>Firebase Bağlantısı</h5>
+        <p class="text-muted small mb-3">fuarbot ile aynı Firebase projesinin bilgilerini girin. Değerleri fuarbot'un <code>.env</code> dosyasından alabilirsiniz.</p>
+        <div class="row g-2">
+          <div class="col-md-6">
+            <label class="form-label form-label-sm fw-semibold">API Key <span class="text-danger">*</span></label>
+            <input type="text" class="form-control form-control-sm" id="fb-api-key" placeholder="AIzaSy...">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label form-label-sm fw-semibold">Project ID <span class="text-danger">*</span></label>
+            <input type="text" class="form-control form-control-sm" id="fb-project-id" placeholder="mein-projekt-12345">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label form-label-sm">Auth Domain</label>
+            <input type="text" class="form-control form-control-sm" id="fb-auth-domain" placeholder="projekt.firebaseapp.com (optional)">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label form-label-sm">App ID</label>
+            <input type="text" class="form-control form-control-sm" id="fb-app-id" placeholder="1:123456:web:abc... (optional)">
+          </div>
+        </div>
+        <div class="mt-3 d-flex gap-2">
+          <button class="btn btn-primary btn-sm" onclick="connectFuarbot()"><i class="bi bi-plug me-1"></i>Bağlan</button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('fb-config-panel').style.display='none'">İptal</button>
+        </div>
+        <div id="fb-connect-error" class="alert alert-danger mt-2 mb-0 py-2 small" style="display:none;"></div>
+      </div>
+    </div>
+
+    <!-- Controls bar (visible when connected) -->
+    <div id="fb-controls" class="d-flex align-items-center gap-2 flex-wrap mb-3" style="display:none!important;">
+      <button class="btn btn-success btn-sm" onclick="importAllFuarbotContacts()">
+        <i class="bi bi-cloud-download me-1"></i>Tümünü CRM'e Aktar
+      </button>
+      <button class="btn btn-outline-secondary btn-sm" onclick="renderFuarbotContacts(fuarbotContacts)">
+        <i class="bi bi-arrow-clockwise me-1"></i>Yenile
+      </button>
+      <input type="text" id="fb-search" class="form-control form-control-sm" style="max-width:220px;" placeholder="Ara…" oninput="filterFuarbotContacts()">
+      <span id="fb-last-sync" class="text-muted small ms-auto"></span>
+    </div>
+
+    <!-- Contact list -->
+    <div id="fb-contact-list"></div>
+
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard" class="page">
+  <div class="page-topbar">
+    <div class="page-topbar-left"><h1>Dashboard</h1></div>
+  </div>
+  <div class="page-content">
+    <div class="row mb-4">
+      <div class="col-6 col-md-3 mb-3">
+        <div class="stat-card">
+          <div class="stat-card-icon blue"><i class="bi bi-building"></i></div>
+          <div>
+            <div class="number" id="stat-companies">0</div>
+            <div class="label">Toplam Firma</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3 mb-3">
+        <div class="stat-card">
+          <div class="stat-card-icon green"><i class="bi bi-people-fill"></i></div>
+          <div>
+            <div class="number" id="stat-contacts">0</div>
+            <div class="label">Toplam Ki&#x15f;i</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3 mb-3">
+        <div class="stat-card">
+          <div class="stat-card-icon amber"><i class="bi bi-star-fill"></i></div>
+          <div>
+            <div class="number" id="stat-avg-quality">0</div>
+            <div class="label">Ort. Kalite %</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3 mb-3">
+        <div class="stat-card">
+          <div class="stat-card-icon purple"><i class="bi bi-award-fill"></i></div>
+          <div>
+            <div class="number" id="stat-high-quality">0</div>
+            <div class="label">Y&#x00fc;ksek Kalite</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-lg-6 mb-4"><div class="card p-4"><h5>&#x130;llere G&#x00f6;re Firma</h5><div class="chart-container"><canvas id="chart-cities"></canvas></div></div></div>
+      <div class="col-lg-6 mb-4"><div class="card p-4"><h5>Sekt&#x00f6;r Da&#x11f;&#x131;l&#x131;m&#x131;</h5><div class="chart-container"><canvas id="chart-sector"></canvas></div></div></div>
+      <div class="col-lg-6 mb-4"><div class="card p-4"><h5>Kalite Da&#x11f;&#x131;l&#x131;m&#x131;</h5><div class="chart-container"><canvas id="chart-quality"></canvas></div></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- F&#x130;RMALAR -->
+<div id="companies" class="page active">
+  <div class="page-topbar">
+    <div class="page-topbar-left">
+      <h1>Firmalar</h1>
+      <span id="company-count" style="color:#6b7280;font-size:13px;"></span>
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="showPage('add-company')"><i class="bi bi-plus-lg me-1"></i>Firma Ekle</button>
+  </div>
+  <div class="page-content">
+    <div class="bulk-bar" id="company-bulk-bar">
+      <i class="bi bi-check2-square text-danger"></i>
+      <span id="company-bulk-count" style="font-weight:600;"></span>
+      <button class="btn btn-sm btn-danger" onclick="bulkDeleteCompanies()"><i class="bi bi-trash me-1"></i>Sil</button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="clearCompanySelection()">&#x130;ptal</button>
+    </div>
+    <div class="filter-bar">
+      <div class="row g-2">
+        <div class="col-md-4"><input type="text" id="company-search" class="form-control form-control-sm" placeholder="&#x1f50d;  Ad, &#x15f;ehir, sekt&#x00f6;r ara&#x2026;"></div>
+        <div class="col-md-3"><select id="company-city-filter" class="form-select form-select-sm"><option value="">T&#x00fc;m &#x130;ller</option></select></div>
+        <div class="col-md-3"><select id="company-sector-filter" class="form-select form-select-sm"><option value="">T&#x00fc;m Sekt&#x00f6;rler</option></select></div>
+        <div class="col-md-2"><button class="btn btn-sm btn-outline-secondary w-100" onclick="clearCompanyFilters()"><i class="bi bi-x-circle me-1"></i>Temizle</button></div>
+      </div>
+    </div>
+    <div class="table-wrapper">
+      <table class="table table-hover mb-0">
+        <thead>
+          <tr>
+            <th style="width:38px;"><input type="checkbox" id="company-select-all" class="form-check-input" onchange="toggleCompanySelectAll()"></th>
+            <th class="sortable" onclick="sortCompanies('name')">Firma Ad&#x131; <span class="sort-icon" id="sort-companies-name">&#x2195;</span></th>
+            <th class="sortable" onclick="sortCompanies('city')">&#x130;l / &#x130;l&#xe7;e <span class="sort-icon" id="sort-companies-city">&#x2195;</span></th>
+            <th style="width:70px;" class="sortable" onclick="sortCompanies('contacts')">Ki&#x15f;i <span class="sort-icon" id="sort-companies-contacts">&#x2195;</span></th>
+            <th style="width:110px;" class="sortable" onclick="sortCompanies('quality')">Kalite <span class="sort-icon" id="sort-companies-quality">&#x2195;</span></th>
+            <th style="width:55px;"></th>
+          </tr>
+        </thead>
+        <tbody id="companies-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- K&#x130;&#x15e;&#x130;LER -->
+<div id="contacts" class="page">
+  <div class="page-topbar">
+    <div class="page-topbar-left">
+      <h1>Ki&#x15f;iler</h1>
+      <span id="contact-count" style="color:#6b7280;font-size:13px;"></span>
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="showPage('add-contact')"><i class="bi bi-plus-lg me-1"></i>Ki&#x15f;i Ekle</button>
+  </div>
+  <div class="page-content">
+    <div class="bulk-bar" id="contact-bulk-bar">
+      <i class="bi bi-check2-square text-danger"></i>
+      <span id="contact-bulk-count" style="font-weight:600;"></span>
+      <button class="btn btn-sm btn-danger" onclick="bulkDeleteContacts()"><i class="bi bi-trash me-1"></i>Sil</button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="clearContactSelection()">&#x130;ptal</button>
+    </div>
+    <div class="filter-bar">
+      <div class="row g-2">
+        <div class="col-md-4"><input type="text" id="contact-search" class="form-control form-control-sm" placeholder="&#x1f50d;  Ad, unvan, telefon ara&#x2026;"></div>
+        <div class="col-md-4"><select id="contact-company-filter" class="form-select form-select-sm"><option value="">T&#x00fc;m Firmalar</option></select></div>
+        <div class="col-md-3"><select id="contact-status-filter" class="form-select form-select-sm"><option value="">T&#x00fc;m Durumlar</option><option>Aktif</option><option>Pasif</option><option>Aday</option></select></div>
+        <div class="col-md-1"><button class="btn btn-sm btn-outline-secondary w-100" onclick="clearContactFilters()" title="Temizle"><i class="bi bi-x-circle"></i></button></div>
+      </div>
+    </div>
+    <div class="table-wrapper">
+      <table class="table table-hover mb-0">
+        <thead>
+          <tr>
+            <th style="width:38px;"><input type="checkbox" id="contact-select-all" class="form-check-input" onchange="toggleContactSelectAll()"></th>
+            <th class="sortable" onclick="sortContacts('name')">Ad Soyad <span class="sort-icon" id="sort-contacts-name">&#x2195;</span></th>
+            <th>Firma</th>
+            <th>Telefon</th>
+            <th style="width:80px;">Durum</th>
+            <th style="width:110px;" class="sortable" onclick="sortContacts('quality')">Kalite <span class="sort-icon" id="sort-contacts-quality">&#x2195;</span></th>
+            <th style="width:55px;"></th>
+          </tr>
+        </thead>
+        <tbody id="contacts-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- EXCEL AKTAR -->
+<div id="import" class="page">
+  <div class="page-topbar">
+    <div class="page-topbar-left"><h1>Excel Aktar</h1></div>
+  </div>
+  <div class="page-content">
+    <div class="card p-4 mb-4">
+      <div class="upload-zone" id="upload-zone" ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" onclick="document.getElementById('file-input').click()">
+        <i class="bi bi-cloud-arrow-up" style="font-size:48px;color:#3b82f6;display:block;margin-bottom:12px;"></i>
+        <p class="mb-1"><strong>Excel dosyas&#x131;n&#x131; buraya s&#x00fc;r&#x00fc;kleyin</strong> veya t&#x131;klayarak se&#xe7;in</p>
+        <small class="text-muted">.xlsx veya .xls &#x2014; maksimum 50MB</small>
+      </div>
+      <input type="file" id="file-input" accept=".xlsx,.xls" onchange="handleFileSelect(event)" style="display:none;">
+      <div id="import-preview" class="mt-3" style="display:none;">
+        <div class="alert alert-info py-2 mb-0" id="import-preview-msg"></div>
+      </div>
+    </div>
+    <!-- Import: Sütun Eşleştirme (HubSpot-style editable mapping) -->
+    <div id="smart-preview-ui" style="display:none;" class="card p-4 mb-4">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <i class="bi bi-sliders text-primary" style="font-size:20px;"></i>
+        <h5 class="mb-0">S&#x00fc;tun E&#x15f;le&#x15f;tirme</h5>
+        <span id="import-row-count" class="badge bg-secondary ms-2" style="font-size:11px;"></span>
+      </div>
+      <p class="text-muted mb-2" style="font-size:13px;">
+        Her Excel s&#x00fc;tununu hangi CRM alan&#x131;na aktarmak istedi&#x11f;inizi se&#xe7;in.
+        <strong style="color:#dc2626;">Firma Ad&#x131;</strong> alan&#x131; zorunludur &#x2014; di&#x11f;erleri iste&#x11f;e ba&#x11f;l&#x131;d&#x131;r.
+      </p>
+      <!-- Firma field warning -->
+      <div id="import-firma-warning" class="alert alert-danger py-2 mb-3" style="display:none;font-size:13px;">
+        <i class="bi bi-exclamation-circle-fill me-1"></i>
+        <strong>Firma Ad&#x131;</strong> alan&#x131; e&#x15f;le&#x15f;tirilmedi. A&#x15f;a&#x11f;&#x131;daki tablodan firma ad&#x131; i&#xe7;eren s&#x00fc;tunu se&#xe7;in.
+      </div>
+      <!-- Editable mapping table -->
+      <div class="table-responsive mb-3" style="max-height:380px;overflow-y:auto;">
+        <table class="table table-sm table-hover mb-0" style="font-size:13px;">
+          <thead class="table-light" style="position:sticky;top:0;">
+            <tr>
+              <th style="min-width:150px;">Excel S&#x00fc;tunu</th>
+              <th style="min-width:130px;">&#x00d6;rnek Veri</th>
+              <th style="min-width:165px;">CRM Alan&#x131;</th>
+            </tr>
+          </thead>
+          <tbody id="smart-mapping-list"></tbody>
+        </table>
+      </div>
+      <!-- Data preview (collapsible) -->
+      <details class="mb-3">
+        <summary style="cursor:pointer;font-size:12px;color:#64748b;">
+          <i class="bi bi-table me-1"></i>Veri &#x00d6;nizlemesi (&#x130;lk 5 Sat&#x131;r)
+        </summary>
+        <div id="smart-data-preview" class="table-responsive mt-2" style="font-size:12px;"></div>
+      </details>
+      <button id="btn-import" class="btn btn-primary" onclick="doImportPreCheck()">
+        <i class="bi bi-upload me-1"></i>&#x130;&#xe7;eri Al
+      </button>
+      <button class="btn btn-outline-secondary ms-2" onclick="cancelImport()">&#x130;ptal</button>
+    </div>
+
+    <!-- Duplicate Review UI -->
+    <div id="duplicate-review-ui" style="display:none;" class="card p-4 mb-4">
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <i class="bi bi-exclamation-triangle-fill text-warning" style="font-size:20px;"></i>
+        <h5 class="mb-0">Benzer Kay&#x131;tlar Bulundu</h5>
+      </div>
+      <p class="text-muted mb-3" style="font-size:13px;">
+        A&#x15f;a&#x11f;&#x131;daki firmalar veritaban&#x131;nda zaten mevcut. Her biri i&#xe7;in yap&#x131;lacak i&#x15f;lemi se&#xe7;in.
+      </p>
+      <div class="d-flex gap-2 mb-3 flex-wrap">
+        <span class="text-muted" style="font-size:12px;line-height:30px;">Toplu i&#x15f;lem:</span>
+        <button class="btn btn-sm btn-outline-primary" onclick="setBulkDupAction('sub')"><i class="bi bi-diagram-2 me-1"></i>T&#x00fc;m&#x00fc;n&#x00fc; Alt Bayi Yap</button>
+        <button class="btn btn-sm btn-outline-info" onclick="setBulkDupAction('parent')"><i class="bi bi-diagram-3 me-1"></i>T&#x00fc;m&#x00fc;n&#x00fc; Ana Firma Yap</button>
+        <button class="btn btn-sm btn-outline-success" onclick="setBulkDupAction('update')"><i class="bi bi-arrow-repeat me-1"></i>T&#x00fc;m&#x00fc;n&#x00fc; G&#x00fc;ncelle</button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="setBulkDupAction('skip')"><i class="bi bi-skip-forward me-1"></i>T&#x00fc;m&#x00fc;n&#x00fc; Atla</button>
+      </div>
+      <div id="duplicate-review-table" class="mb-3"></div>
+      <button class="btn btn-primary" onclick="finalizeDuplicatesAndImport()"><i class="bi bi-check2-circle me-1"></i>Devam Et ve &#x130;&#xe7;eri Al</button>
+      <button class="btn btn-outline-secondary ms-2" onclick="cancelImport()">&#x130;ptal</button>
+    </div>
+    <div class="card p-4">
+      <h5>Son Aktar&#x131;mlar</h5>
+      <div id="import-history-list"><p class="text-muted small mb-0">Hen&#x00fc;z aktar&#x131;m yap&#x131;lmad&#x131;.</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- RAPORLAR -->
+<div id="reports" class="page">
+  <div class="page-topbar">
+    <div class="page-topbar-left"><h1>Raporlar</h1></div>
+  </div>
+  <div class="page-content">
+    <div class="row">
+      <div class="col-lg-6 mb-4">
+        <div class="card p-4">
+          <h5>Sekt&#x00f6;rlere G&#x00f6;re Firma</h5>
+          <table class="table table-sm mt-3"><thead><tr><th>Sekt&#x00f6;r</th><th class="text-end">Say&#x131;</th></tr></thead><tbody id="report-sector-table"></tbody></table>
+        </div>
+      </div>
+      <div class="col-lg-6 mb-4">
+        <div class="card p-4">
+          <h5>&#x130;llere G&#x00f6;re Firma</h5>
+          <table class="table table-sm mt-3"><thead><tr><th>&#x130;l</th><th class="text-end">Say&#x131;</th></tr></thead><tbody id="report-city-table"></tbody></table>
+        </div>
+      </div>
+      <div class="col-lg-6 mb-4">
+        <div class="card p-4">
+          <h5>Kalite Da&#x11f;&#x131;l&#x131;m&#x131;</h5>
+          <table class="table table-sm mt-3"><thead><tr><th>Seviye</th><th class="text-end">Firma</th><th class="text-end">Ki&#x15f;i</th></tr></thead><tbody id="report-quality-table"></tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TEKRAR KAYITLAR -->
+<div id="duplicates" class="page">
+  <div class="page-topbar">
+    <div class="page-topbar-left"><h1>Tekrar Kay&#x131;tlar</h1></div>
+  </div>
+  <div class="page-content">
+    <div class="row">
+      <div class="col-lg-6 mb-4">
+        <div class="card p-4">
+          <h5>Ayn&#x131; Adl&#x131; Firmalar</h5>
+          <div id="duplicate-companies"><p class="text-muted small">Y&#x00fc;kleniyor&#x2026;</p></div>
+        </div>
+      </div>
+      <div class="col-lg-6 mb-4">
+        <div class="card p-4">
+          <h5>Ayn&#x131; Telefonlu Ki&#x15f;iler</h5>
+          <div id="duplicate-contacts"><p class="text-muted small">Y&#x00fc;kleniyor&#x2026;</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- F&#x130;RMA EKLE -->
+<div id="add-company" class="page">
+  <div class="page-topbar">
+    <div class="page-topbar-left"><h1>Firma Ekle</h1></div>
+    <button class="btn btn-outline-secondary btn-sm" onclick="showPage('companies')"><i class="bi bi-arrow-left me-1"></i>Geri</button>
+  </div>
+  <div class="page-content">
+    <div class="card p-4" style="max-width:640px;">
+      <form id="add-company-form" onsubmit="saveCompany(event)">
+        <div class="row g-3">
+          <div class="col-12"><label class="form-label fw-semibold">Firma Ad&#x131; <span class="text-danger">*</span></label><input type="text" class="form-control" id="ac-name" required></div>
+          <div class="col-md-6"><label class="form-label">Sekt&#x00f6;r</label><select class="form-select" id="ac-sector"><option value="">Se&#xe7;in&#x2026;</option></select></div>
+          <div class="col-md-6"><label class="form-label">Telefon</label><input type="tel" class="form-control" id="ac-phone" placeholder="+90 5xx xxx xx xx"></div>
+          <div class="col-md-6"><label class="form-label">E-posta</label><input type="email" class="form-control" id="ac-email"></div>
+          <div class="col-md-6"><label class="form-label">Website</label><input type="text" class="form-control" id="ac-website" placeholder="https://"></div>
+          <div class="col-12"><label class="form-label">Vergi / TC No</label><input type="text" class="form-control" id="ac-tax"></div>
+          <div class="col-12"><label class="form-label">Adres <small class="text-muted">(yaz&#x131;nca &#x15f;ehir/il&#xe7;e otomatik alg&#x131;lan&#x131;r)</small></label><textarea class="form-control" id="ac-address" rows="2" onblur="autoDetectLocation('add-company')"></textarea></div>
+          <div class="col-md-6"><label class="form-label">&#x130;l</label><input type="text" class="form-control" id="ac-city"></div>
+          <div class="col-md-6"><label class="form-label">&#x130;l&#xe7;e</label><input type="text" class="form-control" id="ac-district"></div>
+          <div class="col-md-6"><label class="form-label">Enlem</label><input type="number" class="form-control" id="ac-lat" step="any" placeholder="&#x00f6;r. 41.0082"></div>
+          <div class="col-md-6"><label class="form-label">Boylam</label><input type="number" class="form-control" id="ac-lon" step="any" placeholder="&#x00f6;r. 28.9784"></div>
+          <div class="col-12"><label class="form-label">Notlar</label><textarea class="form-control" id="ac-notes" rows="2"></textarea></div>
+          <div class="col-12">
+            <button type="submit" class="btn btn-primary me-2"><i class="bi bi-check-lg me-1"></i>Kaydet</button>
+            <button type="button" class="btn btn-outline-secondary" onclick="showPage('companies')">&#x130;ptal</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- K&#x130;&#x15e;&#x130; EKLE -->
+<div id="add-contact" class="page">
+  <div class="page-topbar">
+    <div class="page-topbar-left"><h1>Ki&#x15f;i Ekle</h1></div>
+    <button class="btn btn-outline-secondary btn-sm" onclick="showPage('contacts')"><i class="bi bi-arrow-left me-1"></i>Geri</button>
+  </div>
+  <div class="page-content">
+    <div class="card p-4" style="max-width:540px;">
+      <form id="add-contact-form" onsubmit="saveContact(event)">
+        <div class="row g-3">
+          <div class="col-12"><label class="form-label fw-semibold">Ad Soyad <span class="text-danger">*</span></label><input type="text" class="form-control" id="act-name" required></div>
+          <div class="col-md-6"><label class="form-label">Unvan</label><input type="text" class="form-control" id="act-title" placeholder="M&#x00fc;d&#x00fc;r, Yetkili&#x2026;"></div>
+          <div class="col-md-6"><label class="form-label">Telefon</label><input type="tel" class="form-control" id="act-phone"></div>
+          <div class="col-12"><label class="form-label">E-posta</label><input type="email" class="form-control" id="act-email"></div>
+          <div class="col-12">
+            <label class="form-label">Firma</label>
+            <input type="text" class="form-control" id="act-company" list="company-datalist" autocomplete="off">
+            <datalist id="company-datalist"></datalist>
+          </div>
+          <div class="col-md-6"><label class="form-label">Durum</label><select class="form-select" id="act-status"><option value="Aktif">Aktif</option><option value="Pasif">Pasif</option><option value="Aday">Aday</option></select></div>
+          <div class="col-12"><label class="form-label">Notlar</label><textarea class="form-control" id="act-notes" rows="2"></textarea></div>
+          <div class="col-12">
+            <button type="submit" class="btn btn-primary me-2"><i class="bi bi-check-lg me-1"></i>Kaydet</button>
+            <button type="button" class="btn btn-outline-secondary" onclick="showPage('contacts')">&#x130;ptal</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<!-- LOADING OVERLAY -->
+<div class="loading-overlay" id="loading-overlay">
+  <div class="spinner"></div>
+  <p id="loading-text">Y&#x00fc;kleniyor&#x2026;</p>
+</div>
+
+<!-- MODALS -->
+<div class="modal fade" id="compModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <span id="comp-name"></span>
+          <span id="comp-quality-badge" class="badge ms-2"></span>
+          <span id="comp-marketing-badge" class="badge ms-1" style="font-size:11px;"></span>
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Row 1: İletişim + Konum -->
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <div class="modal-section-title">&#x130;leti&#x15f;im</div>
+            <p class="mb-1"><strong>Telefon:</strong> <span id="comp-phone-wrap"></span></p>
+            <p class="mb-1"><strong>E-posta:</strong> <span id="comp-email-wrap"></span></p>
+            <p class="mb-1"><strong>Website:</strong> <span id="comp-website-wrap"></span></p>
+            <p class="mb-1"><strong>Sekt&#xf6;r:</strong> <span id="comp-sector"></span></p>
+            <p class="mb-1"><strong>Vergi No:</strong> <span id="comp-tax"></span></p>
+            <p class="mb-1" id="comp-tax-office-wrap" style="display:none;"><strong>Vergi Dairesi:</strong> <span id="comp-tax-office"></span></p>
+            <p class="mb-1" id="comp-fax-wrap" style="display:none;"><strong>Faks:</strong> <span id="comp-fax"></span></p>
+          </div>
+          <div class="col-md-6">
+            <div class="modal-section-title">Konum</div>
+            <p class="mb-1"><strong>Adres:</strong> <span id="comp-address"></span></p>
+            <p class="mb-1" id="comp-neighbourhood-wrap" style="display:none;"><strong>Mahalle:</strong> <span id="comp-neighbourhood" class="text-muted"></span></p>
+            <p class="mb-1"><strong>&#x130;l:</strong> <span id="comp-city"></span></p>
+            <p class="mb-1" id="comp-district-wrap"><strong>&#x130;l&#xe7;e:</strong> <span id="comp-district"></span></p>
+            <p class="mb-1" id="comp-state-wrap" style="display:none;"><strong>Eyalet/B&#xf6;lge:</strong> <span id="comp-state"></span></p>
+            <p class="mb-1" id="comp-postcode-wrap" style="display:none;"><strong>Posta Kodu:</strong> <span id="comp-postcode"></span></p>
+            <p class="mb-1" id="comp-country-wrap" style="display:none;"><strong>&#xdc;lke:</strong> <span id="comp-country"></span></p>
+            <div id="comp-hierarchy-info" style="display:none;"></div>
+            <div id="comp-maps-links" style="display:none;"></div>
+            <div id="comp-static-map" class="mt-2 mb-2" style="display:none;"></div>
+            <div id="comp-photo-wrap" class="mb-1"></div>
+          </div>
+        </div>
+
+        <!-- Pazarlama Durumu -->
+        <div id="comp-marketing-wrap" class="mb-3">
+          <div class="modal-section-title">Pazarlama Durumu</div>
+          <div class="d-flex flex-wrap gap-1 align-items-center">
+            <span id="comp-marketing-status-badge" class="badge fs-6 px-3 py-2">-</span>
+            <span id="comp-priority-badge" class="badge bg-secondary ms-1"></span>
+            <div class="ms-auto d-flex gap-1">
+              <button class="btn btn-xs btn-outline-success" style="font-size:11px;padding:2px 8px;" onclick="setMarketingStatus('Arandı')">Arandı</button>
+              <button class="btn btn-xs btn-outline-primary" style="font-size:11px;padding:2px 8px;" onclick="setMarketingStatus('Teklifte')">Teklifte</button>
+              <button class="btn btn-xs btn-outline-warning" style="font-size:11px;padding:2px 8px;" onclick="setMarketingStatus('Takipte')">Takipte</button>
+              <button class="btn btn-xs btn-outline-danger" style="font-size:11px;padding:2px 8px;" onclick="setMarketingStatus('Hayır')">Hayır</button>
+              <button class="btn btn-xs btn-outline-dark" style="font-size:11px;padding:2px 8px;" onclick="setMarketingStatus('Müşteri')">Müşteri</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sosyal Medya -->
+        <div id="comp-social-wrap" style="display:none;" class="mb-3">
+          <div class="modal-section-title"><i class="bi bi-share me-1"></i>Sosyal Medya</div>
+          <div class="d-flex flex-wrap gap-2" id="comp-social-links"></div>
+        </div>
+
+        <!-- İş Metrikleri -->
+        <div id="comp-metrics-wrap" style="display:none;" class="mb-3">
+          <div class="modal-section-title"><i class="bi bi-bar-chart-line me-1"></i>İş Bilgileri</div>
+          <div class="row g-2">
+            <div class="col-6 col-md-3" id="comp-revenue-wrap" style="display:none;">
+              <small class="text-muted d-block">Ciro</small>
+              <strong id="comp-revenue" style="font-size:13px;"></strong>
+            </div>
+            <div class="col-6 col-md-3" id="comp-employees-wrap" style="display:none;">
+              <small class="text-muted d-block">Çalışan</small>
+              <strong id="comp-employees" style="font-size:13px;"></strong>
+            </div>
+            <div class="col-6 col-md-3" id="comp-sic-wrap" style="display:none;">
+              <small class="text-muted d-block">SIC</small>
+              <span id="comp-sic" style="font-size:13px;"></span>
+            </div>
+            <div class="col-6 col-md-3" id="comp-naics-wrap" style="display:none;">
+              <small class="text-muted d-block">NAICS</small>
+              <span id="comp-naics" style="font-size:13px;"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Açıklama -->
+        <div id="comp-description-wrap" style="display:none;" class="mb-3">
+          <div class="modal-section-title"><i class="bi bi-info-circle me-1"></i>Açıklama</div>
+          <p class="text-muted mb-0" id="comp-description" style="font-size:13px;white-space:pre-wrap;"></p>
+        </div>
+
+        <!-- Notlar -->
+        <div id="comp-notes-wrap" style="display:none;" class="mb-3">
+          <div class="modal-section-title">Notlar</div>
+          <p class="text-muted mb-0" id="comp-notes" style="font-size:14px;white-space:pre-wrap;"></p>
+        </div>
+
+        <!-- Fotoğraf Galerisi -->
+        <div id="comp-photo-gallery" style="display:none;" class="mb-3">
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <div class="modal-section-title mb-0"><i class="bi bi-images me-1"></i>Fotoğraflar</div>
+            <button class="btn btn-sm btn-outline-secondary" onclick="fetchCompanyPhotos()" id="btn-fetch-photos">
+              <i class="bi bi-cloud-download me-1"></i>Google Maps'tan Getir
+            </button>
+          </div>
+          <div id="comp-photos-strip" class="d-flex gap-2 overflow-auto pb-1" style="min-height:100px;"></div>
+        </div>
+
+        <hr>
+        <div class="modal-section-title">Çalışanlar (<span id="comp-contact-count">0</span>)</div>
+        <div id="comp-contacts-list"></div>
+
+        <!-- Adres Kontrol &amp; Güncelle Paneli -->
+        <div id="comp-update-panel" style="display:none;" class="border rounded p-3 mt-3">
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <h6 class="mb-0 text-primary"><i class="bi bi-search me-1"></i>Adres &amp; &#x130;leti&#x15f;im G&#x00fc;ncelle</h6>
+            <button type="button" class="btn-close" onclick="toggleUpdatePanel()"></button>
+          </div>
+          <div class="mb-3">
+            <small class="text-muted d-block mb-1"><i class="bi bi-globe me-1"></i>&#x130;nternette ara:</small>
+            <div id="comp-search-links" class="d-flex flex-wrap gap-1"></div>
+          </div>
+          <div class="row g-2">
+            <div class="col-12">
+              <label class="form-label form-label-sm mb-1 fw-semibold">Adres</label>
+              <textarea class="form-control form-control-sm" id="cu-address" rows="2" placeholder="Adres giriniz&#x2026;"></textarea>
+            </div>
+            <div class="col-12">
+              <label class="form-label form-label-sm mb-1 fw-semibold">Mahalle</label>
+              <input type="text" class="form-control form-control-sm" id="cu-neighbourhood" placeholder="Mahalle ad&#x131;">
+            </div>
+            <div class="col-6">
+              <label class="form-label form-label-sm mb-1 fw-semibold">&#x130;l</label>
+              <input type="text" class="form-control form-control-sm" id="cu-city" placeholder="Bursa, &#x130;stanbul&#x2026;">
+            </div>
+            <div class="col-6">
+              <label class="form-label form-label-sm mb-1 fw-semibold">&#x130;l&#xe7;e</label>
+              <input type="text" class="form-control form-control-sm" id="cu-district" placeholder="Kad&#x131;k&#x00f6;y">
+            </div>
+            <div class="col-6">
+              <label class="form-label form-label-sm mb-1 fw-semibold">Telefon</label>
+              <input type="tel" class="form-control form-control-sm" id="cu-phone" placeholder="+90 5xx xxx xx xx">
+            </div>
+            <div class="col-6">
+              <label class="form-label form-label-sm mb-1 fw-semibold">E-posta</label>
+              <input type="email" class="form-control form-control-sm" id="cu-email" placeholder="info@firma.com">
+            </div>
+            <div class="col-12">
+              <label class="form-label form-label-sm mb-1 fw-semibold">Website</label>
+              <input type="text" class="form-control form-control-sm" id="cu-website" placeholder="www.firma.com">
+            </div>
+            <div class="col-12"><hr class="my-1"></div>
+            <div class="col-5">
+              <label class="form-label form-label-sm mb-1 fw-semibold"><i class="bi bi-geo-alt-fill text-danger me-1"></i>Enlem</label>
+              <input type="number" class="form-control form-control-sm" id="cu-lat" step="any" placeholder="41.0082">
+            </div>
+            <div class="col-5">
+              <label class="form-label form-label-sm mb-1 fw-semibold"><i class="bi bi-geo-alt-fill text-danger me-1"></i>Boylam</label>
+              <input type="number" class="form-control form-control-sm" id="cu-lon" step="any" placeholder="28.9784">
+            </div>
+            <div class="col-2 d-flex align-items-end">
+              <button type="button" class="btn btn-sm btn-outline-danger w-100" onclick="reverseGeocodeFromPanel()" title="Enlem/Boylamdan adres, il, il&#xe7;e doldur">
+                <i class="bi bi-crosshair"></i>
+              </button>
+            </div>
+            <div class="col-12">
+              <small class="text-muted"><i class="bi bi-info-circle me-1"></i>Enlem/Boylam gir &#x2192; <strong><i class="bi bi-crosshair"></i></strong> butona bas &#x2192; Adres, &#x130;l, &#x130;l&#xe7;e otomatik dolar.</small>
+            </div>
+          </div>
+          <div class="d-flex flex-wrap gap-2 mt-2">
+            <button type="button" class="btn btn-outline-primary btn-sm" onclick="enrichCompanyFromGoogle()">
+              <i class="bi bi-magic me-1"></i>Otomatik Doldur
+            </button>
+            <button class="btn btn-success btn-sm" onclick="saveCompanyContactUpdate()">
+              <i class="bi bi-check-lg me-1"></i>G&#x00fc;ncelle &amp; Kaydet
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" onclick="toggleUpdatePanel()">&#x130;ptal</button>
+          </div>
+          <div id="enrich-candidates" style="display:none;" class="mt-3">
+            <div class="d-flex align-items-center justify-content-between mb-1">
+              <small class="fw-semibold text-secondary"><i class="bi bi-list-check me-1"></i>Bulunan sonu&#xe7;lar &#x2014; do&#x11f;ru olan&#x131; se&#xe7;in:</small>
+              <button type="button" class="btn btn-sm btn-link text-secondary p-0" onclick="document.getElementById('enrich-candidates').style.display='none'">Kapat</button>
+            </div>
+            <div id="enrich-candidates-list"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-info btn-sm" onclick="toggleUpdatePanel()"><i class="bi bi-search me-1"></i>Adres Kontrol</button>
+        <button type="button" class="btn btn-outline-success btn-sm" onclick="fetchCompanyPhotos()"><i class="bi bi-images me-1"></i>Foto&#x11f;raflar</button>
+        <button type="button" class="btn btn-outline-primary btn-sm" onclick="editCompanyModal()"><i class="bi bi-pencil me-1"></i>D&#x00fc;zenle</button>
+        <button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteCompanyModal()"><i class="bi bi-trash me-1"></i>Sil</button>
+        <button type="button" class="btn btn-secondary btn-sm ms-auto" data-bs-dismiss="modal">Kapat</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="contModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <span id="cont-name"></span>
+          <span id="cont-quality-badge" class="badge ms-2"></span>
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2"><strong>Unvan:</strong> <span id="cont-title"></span></p>
+        <p class="mb-2"><strong>Telefon:</strong> <span id="cont-phone-wrap"></span></p>
+        <p class="mb-2"><strong>E-posta:</strong> <span id="cont-email-wrap"></span></p>
+        <p class="mb-2"><strong>Firma:</strong> <span id="cont-company-badge"></span></p>
+        <p class="mb-2"><strong>Durum:</strong> <span id="cont-status"></span></p>
+        <p class="mb-0"><strong>Notlar:</strong> <span id="cont-notes" class="text-muted"></span></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-primary btn-sm" onclick="editContactModal()"><i class="bi bi-pencil me-1"></i>D&#x00fc;zenle</button>
+        <button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteContactModal()"><i class="bi bi-trash me-1"></i>Sil</button>
+        <button type="button" class="btn btn-secondary btn-sm ms-auto" data-bs-dismiss="modal">Kapat</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="editCompModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Firma Düzenle</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="ec-id">
+        <div class="row g-3">
+          <div class="col-12"><label class="form-label fw-semibold">Firma Adı</label><input type="text" class="form-control" id="ec-name" required></div>
+          <div class="col-md-6"><label class="form-label">Sektör</label><select class="form-select" id="ec-sector"><option value="">Seçin…</option></select></div>
+          <div class="col-md-6"><label class="form-label">Pazarlama Durumu</label>
+            <select class="form-select" id="ec-marketing-status">
+              <option value="Aranacak">Aranacak</option>
+              <option value="Arandı">Arandı</option>
+              <option value="Teklifte">Teklifte</option>
+              <option value="Takipte">Takipte</option>
+              <option value="Müşteri">Müşteri</option>
+              <option value="Hayır">Hayır</option>
+            </select>
+          </div>
+          <div class="col-md-6"><label class="form-label">Telefon</label><input type="tel" class="form-control" id="ec-phone"></div>
+          <div class="col-md-6"><label class="form-label">Faks</label><input type="text" class="form-control" id="ec-fax"></div>
+          <div class="col-md-6"><label class="form-label">E-posta</label><input type="email" class="form-control" id="ec-email"></div>
+          <div class="col-md-6"><label class="form-label">Website</label><input type="text" class="form-control" id="ec-website"></div>
+          <div class="col-md-6"><label class="form-label">Vergi / TC No</label><input type="text" class="form-control" id="ec-tax"></div>
+          <div class="col-md-6"><label class="form-label">Vergi Dairesi</label><input type="text" class="form-control" id="ec-tax-office"></div>
+          <div class="col-12"><label class="form-label">Adres</label><textarea class="form-control" id="ec-address" rows="2" onblur="autoDetectLocation('edit-company')"></textarea></div>
+          <div class="col-md-4"><label class="form-label">&#x130;l</label><input type="text" class="form-control" id="ec-city"></div>
+          <div class="col-md-4"><label class="form-label">İlçe</label><input type="text" class="form-control" id="ec-district"></div>
+          <div class="col-md-4"><label class="form-label">Posta Kodu</label><input type="text" class="form-control" id="ec-postcode"></div>
+          <div class="col-md-6"><label class="form-label">Enlem</label><input type="number" class="form-control" id="ec-lat" step="any"></div>
+          <div class="col-md-6"><label class="form-label">Boylam</label><input type="number" class="form-control" id="ec-lon" step="any"></div>
+          <div class="col-md-6"><label class="form-label">Çalışan Sayısı</label><input type="text" class="form-control" id="ec-employees"></div>
+          <div class="col-md-6"><label class="form-label">Ciro</label><input type="text" class="form-control" id="ec-revenue"></div>
+          <div class="col-md-6"><label class="form-label">LinkedIn</label><input type="text" class="form-control" id="ec-linkedin" placeholder="https://linkedin.com/company/…"></div>
+          <div class="col-md-6"><label class="form-label">Instagram</label><input type="text" class="form-control" id="ec-instagram" placeholder="https://instagram.com/…"></div>
+          <div class="col-md-6"><label class="form-label">Facebook</label><input type="text" class="form-control" id="ec-facebook" placeholder="https://facebook.com/…"></div>
+          <div class="col-md-6"><label class="form-label">Twitter / X</label><input type="text" class="form-control" id="ec-twitter" placeholder="https://x.com/…"></div>
+          <div class="col-12"><label class="form-label">Açıklama</label><textarea class="form-control" id="ec-description" rows="2"></textarea></div>
+          <div class="col-12"><label class="form-label">Notlar</label><textarea class="form-control" id="ec-notes" rows="2"></textarea></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary btn-sm" onclick="saveEditedCompany()"><i class="bi bi-check-lg me-1"></i>Kaydet</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm ms-auto" data-bs-dismiss="modal">İptal</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="editContModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Ki&#x15f;i D&#x00fc;zenle</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="ect-id">
+        <div class="row g-3">
+          <div class="col-12"><label class="form-label fw-semibold">Ad Soyad</label><input type="text" class="form-control" id="ect-name" required></div>
+          <div class="col-md-6"><label class="form-label">Unvan</label><input type="text" class="form-control" id="ect-title"></div>
+          <div class="col-md-6"><label class="form-label">Telefon</label><input type="tel" class="form-control" id="ect-phone"></div>
+          <div class="col-12"><label class="form-label">E-posta</label><input type="email" class="form-control" id="ect-email"></div>
+          <div class="col-12">
+            <label class="form-label">Firma</label>
+            <input type="text" class="form-control" id="ect-company" list="company-datalist-edit" autocomplete="off">
+            <datalist id="company-datalist-edit"></datalist>
+          </div>
+          <div class="col-md-6"><label class="form-label">Durum</label><select class="form-select" id="ect-status"><option>Aktif</option><option>Pasif</option><option>Aday</option></select></div>
+          <div class="col-12"><label class="form-label">Notlar</label><textarea class="form-control" id="ect-notes" rows="2"></textarea></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary btn-sm" onclick="saveEditedContact()"><i class="bi bi-check-lg me-1"></i>Kaydet</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm ms-auto" data-bs-dismiss="modal">&#x130;ptal</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<!-- CDN -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<!-- Firebase (compat SDK for vanilla JS) -->
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="./assets/js/app.js?v=20260318g"></script>
+</body>
+</html>

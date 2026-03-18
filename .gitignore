@@ -1,0 +1,51 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+.env
+venv/
+.venv/
+
+# Veritabanı ve yükleme dosyaları (kişisel veri)
+data.sqlite
+*.sqlite
+*.db
+uploads/
+*.xlsx
+*.xls
+*.csv
+
+# Log dosyaları
+*.log
+crm_server.log
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Ortam değişkenleri
+.env
+.env.local
+.env.*.local
+
+# Build çıktıları
+dist/
+build/
