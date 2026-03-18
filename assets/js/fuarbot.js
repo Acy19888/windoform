@@ -1,293 +1,247 @@
-
-// ============================================================
-// FUARBOT SYNC — Firestore REST API (no SDK needed)
-// ============================================================
-let fuarbotContacts = [];
-let fbPollInterval  = null;
+// fuarbot.js — Fuarbot Firebase sync (Firestore REST API, no SDK)
+// Collections: crm_customers | crm_activities | crm_quotes
 
 const FB_CFG_KEY = 'crm_fuarbot_firebase_config';
+let fbPollInterval = null;
+let fbCustomers    = [];
+let fbActivities   = {};
+let fbQuotes       = {};
+let fbSelectedId   = null;
 
+// ── Config ────────────────────────────────────────────────
 function loadFbConfig() {
-  try { return JSON.parse(localStorage.getItem(FB_CFG_KEY) || 'null'); }
-  catch { return null; }
+  try { return JSON.parse(localStorage.getItem(FB_CFG_KEY) || 'null'); } catch { return null; }
 }
-function saveFbConfig(cfg) {
-  localStorage.setItem(FB_CFG_KEY, JSON.stringify(cfg));
-}
+function saveFbConfig(cfg) { localStorage.setItem(FB_CFG_KEY, JSON.stringify(cfg)); }
 
-// ── Firestore REST helpers ────────────────────────────────
-function parseFirestoreValue(val) {
-  if (!val) return null;
-  if (val.stringValue  !== undefined) return val.stringValue;
-  if (val.integerValue !== undefined) return parseInt(val.integerValue, 10);
-  if (val.doubleValue  !== undefined) return val.doubleValue;
-  if (val.booleanValue !== undefined) return val.booleanValue;
-  if (val.nullValue    !== undefined) return null;
-  if (val.timestampValue !== undefined) return val.timestampValue;
-  if (val.arrayValue)  return (val.arrayValue.values || []).map(parseFirestoreValue);
-  if (val.mapValue)    return parseFirestoreFields(val.mapValue.fields || {});
-  return null;
-}
-function parseFirestoreFields(fields) {
-  const obj = {};
-  for (const [k, v] of Object.entries(fields || {})) obj[k] = parseFirestoreValue(v);
-  return obj;
-}
-function parseFirestoreDoc(doc) {
-  const id = doc.name.split('/').pop();
-  return { _id: id, ...parseFirestoreFields(doc.fields || {}) };
-}
-
-// ── Config UI ─────────────────────────────────────────────
 function showFbConfig() {
-  const panel = document.getElementById('fb-config-panel');
-  if (panel) panel.style.display = '';
+  document.getElementById('fb-config-panel').style.display = '';
+  document.getElementById('fb-layout').style.display = 'none';
   const cfg = loadFbConfig();
   if (cfg) {
-    const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
-    set('fb-api-key',     cfg.apiKey);
-    set('fb-project-id',  cfg.projectId);
-    set('fb-auth-domain', cfg.authDomain);
-    set('fb-app-id',      cfg.appId);
+    const s = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+    s('fb-api-key', cfg.apiKey); s('fb-project-id', cfg.projectId); s('fb-auth-domain', cfg.authDomain);
   }
 }
 
 function connectFuarbot() {
-  const get   = id => (document.getElementById(id)?.value || '').trim();
-  const apiKey    = get('fb-api-key');
-  const projectId = get('fb-project-id');
-  const errEl     = document.getElementById('fb-connect-error');
-  if (!apiKey || !projectId) {
-    if (errEl) { errEl.style.display = ''; errEl.textContent = 'API Key ve Project ID zorunludur!'; }
-    return;
-  }
-  if (errEl) errEl.style.display = 'none';
-  saveFbConfig({ apiKey, projectId, authDomain: get('fb-auth-domain'), appId: get('fb-app-id') });
+  const g = id => (document.getElementById(id)?.value || '').trim();
+  const apiKey = g('fb-api-key'), projectId = g('fb-project-id');
+  const errEl = document.getElementById('fb-connect-error');
+  if (!apiKey || !projectId) { errEl.style.display = ''; errEl.textContent = 'API Key ve Project ID zorunludur!'; return; }
+  errEl.style.display = 'none';
+  saveFbConfig({ apiKey, projectId, authDomain: g('fb-auth-domain') || projectId + '.firebaseapp.com' });
   startFuarbotSync(apiKey, projectId);
 }
 
-// ── REST fetch ────────────────────────────────────────────
-async function fetchFuarbotFromRest(apiKey, projectId, silent) {
+// ── Firestore REST helpers ────────────────────────────────
+function fsVal(v) {
+  if (!v) return null;
+  if (v.stringValue   !== undefined) return v.stringValue;
+  if (v.integerValue  !== undefined) return parseInt(v.integerValue, 10);
+  if (v.doubleValue   !== undefined) return v.doubleValue;
+  if (v.booleanValue  !== undefined) return v.booleanValue;
+  if (v.timestampValue!== undefined) return v.timestampValue;
+  if (v.nullValue     !== undefined) return null;
+  if (v.arrayValue)  return (v.arrayValue.values || []).map(fsVal);
+  if (v.mapValue)    return fsFields(v.mapValue.fields || {});
+  return null;
+}
+function fsFields(f) { const o = {}; for (const [k,v] of Object.entries(f||{})) o[k]=fsVal(v); return o; }
+function fsDoc(d)    { return { _id: d.name.split('/').pop(), ...fsFields(d.fields||{}) }; }
+
+async function fsFetch(apiKey, projectId, col) {
+  const base = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
+  let docs = [], token = '';
+  do {
+    const url = `${base}/${col}?key=${apiKey}&pageSize=300${token ? '&pageToken='+token : ''}`;
+    const res = await fetch(url);
+    if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error?.message||'HTTP '+res.status); }
+    const data = await res.json();
+    docs = docs.concat((data.documents||[]).map(fsDoc));
+    token = data.nextPageToken || '';
+  } while (token);
+  return docs;
+}
+
+// ── Data sync ─────────────────────────────────────────────
+function setFbStatus(text, type) {
+  const el = document.getElementById('fb-status-badge');
+  if (el) { el.className = 'badge bg-' + (type||'secondary'); el.textContent = text; }
+  const b = document.getElementById('fuarbot-badge');
+  if (b) { b.style.display = (type==='success' && fbCustomers.length) ? '' : 'none'; if (fbCustomers.length) b.textContent = fbCustomers.length; }
+}
+
+async function fetchAllData(apiKey, projectId, silent) {
   try {
-    const base = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
-    let allDocs = [];
-    let pageToken = '';
+    const [customers, activities, quotes] = await Promise.all([
+      fsFetch(apiKey, projectId, 'crm_customers'),
+      fsFetch(apiKey, projectId, 'crm_activities').catch(()=>[]),
+      fsFetch(apiKey, projectId, 'crm_quotes').catch(()=>[]),
+    ]);
+    fbCustomers = customers;
+    fbActivities = {};
+    activities.forEach(a => { const k = a.parentId||a.contactId||''; (fbActivities[k]||(fbActivities[k]=[])).push(a); });
+    Object.values(fbActivities).forEach(arr => arr.sort((a,b) => (b.createdAt||'') > (a.createdAt||'') ? 1 : -1));
+    fbQuotes = {};
+    quotes.forEach(q => { const k = q.contactId||''; (fbQuotes[k]||(fbQuotes[k]=[])).push(q); });
+    Object.values(fbQuotes).forEach(arr => arr.sort((a,b) => (b.createdAt||'') > (a.createdAt||'') ? 1 : -1));
 
-    // Handle pagination (Firestore returns max 300 docs per request)
-    do {
-      const url = `${base}/crm_customers?key=${apiKey}&pageSize=300` + (pageToken ? `&pageToken=${pageToken}` : '');
-      const res  = await fetch(url);
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error?.message || `HTTP ${res.status}`);
-      }
-      const data = await res.json();
-      allDocs = allDocs.concat((data.documents || []).map(parseFirestoreDoc));
-      pageToken = data.nextPageToken || '';
-    } while (pageToken);
-
-    fuarbotContacts = allDocs;
-    const count = fuarbotContacts.length;
-
-    setFbStatus('Bağlı · ' + count + ' kişi', 'success');
+    setFbStatus('Bağlı · ' + customers.length + ' kişi', 'success');
     document.getElementById('fb-config-panel').style.display = 'none';
-    const ctrl = document.getElementById('fb-controls');
-    if (ctrl) ctrl.className = 'd-flex align-items-center gap-2 flex-wrap mb-3';
-    updateFuarbotBadge(count);
+    document.getElementById('fb-layout').style.display = '';
     const syncEl = document.getElementById('fb-last-sync');
-    if (syncEl) syncEl.textContent = 'Son güncelleme: ' + new Date().toLocaleTimeString('tr-TR');
-    if (!silent) renderFuarbotContacts(fuarbotContacts);
-
+    if (syncEl) syncEl.textContent = new Date().toLocaleTimeString('tr-TR');
+    if (!silent) { renderCustomerList(fbCustomers); if (fbSelectedId) showDetail(fbSelectedId); }
   } catch (e) {
-    const msg = e.message.includes('PERMISSION_DENIED') || e.message.includes('403')
-      ? 'Erişim reddedildi — Firebase kurallarını kontrol edin (allow read: if true)'
-      : 'Hata: ' + e.message;
-    setFbStatus(msg, 'danger');
+    setFbStatus((e.message.includes('PERMISSION')||e.message.includes('403')) ? 'Erişim reddedildi — Firebase kurallarını kontrol edin' : 'Hata: ' + e.message, 'danger');
   }
 }
 
 function startFuarbotSync(apiKey, projectId) {
   setFbStatus('Bağlanıyor…', 'warning');
-  // Stop previous poll
-  if (fbPollInterval) { clearInterval(fbPollInterval); fbPollInterval = null; }
-  // First fetch immediately
-  fetchFuarbotFromRest(apiKey, projectId, false);
-  // Then poll every 30 seconds for near-real-time sync
-  fbPollInterval = setInterval(() => fetchFuarbotFromRest(apiKey, projectId, true), 30000);
+  if (fbPollInterval) clearInterval(fbPollInterval);
+  fetchAllData(apiKey, projectId, false);
+  fbPollInterval = setInterval(() => fetchAllData(apiKey, projectId, true), 30000);
 }
 
-// ── Status / badge ────────────────────────────────────────
-function setFbStatus(text, type) {
-  const el = document.getElementById('fb-status-badge');
+// ── Render helpers ────────────────────────────────────────
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function fbFilterList() {
+  const q = (document.getElementById('fb-search')?.value||'').toLowerCase();
+  renderCustomerList(q ? fbCustomers.filter(c =>
+    (c.name||'').toLowerCase().includes(q)||(c.company||'').toLowerCase().includes(q)||
+    (c.email||'').toLowerCase().includes(q)||(c.source||'').toLowerCase().includes(q)) : fbCustomers);
+}
+
+function renderCustomerList(list) {
+  const el = document.getElementById('fb-customer-list');
+  const cEl = document.getElementById('fb-count-label');
+  if (cEl) cEl.textContent = list.length + ' kişi';
   if (!el) return;
-  el.className = 'badge bg-' + (type || 'secondary');
-  el.textContent = text;
-}
-function updateFuarbotBadge(count) {
-  const b = document.getElementById('fuarbot-badge');
-  if (!b) return;
-  if (count > 0) { b.style.display = ''; b.textContent = count; }
-  else b.style.display = 'none';
-}
-
-// ── Search / filter ───────────────────────────────────────
-function filterFuarbotContacts() {
-  const q = (document.getElementById('fb-search')?.value || '').toLowerCase();
-  renderFuarbotContacts(q
-    ? fuarbotContacts.filter(c =>
-        (c.name    || '').toLowerCase().includes(q) ||
-        (c.company || '').toLowerCase().includes(q) ||
-        (c.email   || '').toLowerCase().includes(q) ||
-        (c.phone   || '').toLowerCase().includes(q) ||
-        (c.source  || '').toLowerCase().includes(q))
-    : fuarbotContacts, !!q);
+  if (!list.length) { el.innerHTML = '<div class="p-3 text-muted text-center small">Bulunamadı</div>'; return; }
+  el.innerHTML = list.map(c => {
+    const qn = (fbQuotes[c._id]||[]).length, an = (fbActivities[c._id]||[]).length;
+    return `<div class="fb-card${c._id===fbSelectedId?' active':''}" onclick="showDetail('${esc(c._id)}')">
+      <div class="fb-card-name">${esc(c.name||'—')}</div>
+      <div class="fb-card-sub">${esc(c.company||'')}${c.position?' · '+esc(c.position):''}</div>
+      <div class="d-flex gap-1 mt-1 flex-wrap">
+        <span class="badge bg-info text-dark fb-card-badge">${esc(c.source||'Fuarbot')}</span>
+        ${qn?`<span class="badge bg-warning text-dark fb-card-badge">${qn} teklif</span>`:''}
+        ${an?`<span class="badge bg-light text-dark border fb-card-badge">${an} aktivite</span>`:''}
+      </div>
+    </div>`;
+  }).join('');
 }
 
-// ── HTML escape ───────────────────────────────────────────
-function esc(str) {
-  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+// ── Detail pane ───────────────────────────────────────────
+function showDetail(id) {
+  fbSelectedId = id;
+  document.querySelectorAll('.fb-card').forEach(el =>
+    el.classList.toggle('active', el.getAttribute('onclick')?.includes(`'${id}'`)));
+  const c = fbCustomers.find(x => x._id === id);
+  if (!c) return;
+  const quotes = fbQuotes[id]||[], acts = fbActivities[id]||[];
+  const phone = c.phone || c.mobile || '';
+  document.getElementById('fb-detail').innerHTML = `
+    <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+      <div><h4 class="mb-0">${esc(c.name||'—')}</h4>${c.position?`<div class="text-muted">${esc(c.position)}</div>`:''}</div>
+      <button class="btn btn-sm btn-success" onclick="importFuarbotContact('${esc(id)}')"><i class="bi bi-cloud-download me-1"></i>CRM'e Aktar</button>
+    </div>
+    <div class="card mb-3"><div class="card-body py-2 px-3" style="font-size:13px;">
+      ${c.company ?`<div class="mb-1"><i class="bi bi-building me-2 text-primary"></i>${esc(c.company)}</div>`:''}
+      ${phone     ?`<div class="mb-1"><i class="bi bi-telephone me-2 text-primary"></i>${esc(phone)}</div>`:''}
+      ${c.email   ?`<div class="mb-1"><i class="bi bi-envelope me-2 text-primary"></i>${esc(c.email)}</div>`:''}
+      ${c.website ?`<div class="mb-1"><i class="bi bi-globe me-2 text-primary"></i>${esc(c.website)}</div>`:''}
+      ${c.address ?`<div class="mb-1"><i class="bi bi-geo-alt me-2 text-primary"></i>${esc(c.address)}</div>`:''}
+      ${c.notes   ?`<div class="mt-2 text-muted border-top pt-2">${esc(c.notes)}</div>`:''}
+    </div></div>
+    <ul class="nav nav-tabs mb-3">
+      <li class="nav-item"><a class="nav-link active" onclick="fbTab('quotes','${id}');return false;" id="fb-tab-quotes-${id}" href="#">
+        <i class="bi bi-file-earmark-text me-1"></i>Teklifler${quotes.length?`<span class="badge bg-warning text-dark ms-1">${quotes.length}</span>`:''}
+      </a></li>
+      <li class="nav-item"><a class="nav-link" onclick="fbTab('timeline','${id}');return false;" id="fb-tab-timeline-${id}" href="#">
+        <i class="bi bi-clock-history me-1"></i>Timeline${acts.length?`<span class="badge bg-secondary ms-1">${acts.length}</span>`:''}
+      </a></li>
+    </ul>
+    <div id="fb-panel-quotes-${id}">${renderQuotes(quotes)}</div>
+    <div id="fb-panel-timeline-${id}" style="display:none;">${renderTimeline(acts)}</div>`;
 }
 
-// ── Render list ───────────────────────────────────────────
-function renderFuarbotContacts(contacts, isFiltered) {
-  const container = document.getElementById('fb-contact-list');
-  if (!container) return;
-  if (!contacts || contacts.length === 0) {
-    container.innerHTML = '<div class="text-center py-5 text-muted">' +
-      '<i class="bi bi-inbox" style="font-size:40px;display:block;margin-bottom:12px;"></i>' +
-      (isFiltered ? 'Arama sonucu bulunamadı.' : 'Henüz Fuarbot\'ta kayıtlı kişi yok.') + '</div>';
-    return;
-  }
-
-  // Group by fair source
-  const groups = {};
-  contacts.forEach(c => {
-    const src = c.source || 'Fuarbot';
-    if (!groups[src]) groups[src] = [];
-    groups[src].push(c);
+function fbTab(tab, id) {
+  ['quotes','timeline'].forEach(t => {
+    document.getElementById(`fb-panel-${t}-${id}`).style.display = t===tab ? '' : 'none';
+    document.getElementById(`fb-tab-${t}-${id}`).classList.toggle('active', t===tab);
   });
-
-  let html = '';
-  Object.entries(groups).forEach(([src, list]) => {
-    html += '<div class="mb-3"><div class="d-flex align-items-center mb-2 gap-2">' +
-      '<span class="badge bg-primary">' + esc(src) + '</span>' +
-      '<span class="text-muted small">' + list.length + ' kişi</span></div>';
-    list.forEach(c => {
-      const phone = c.phone || c.mobile || '';
-      const updatedAt = c.updatedAt ? new Date(c.updatedAt).toLocaleDateString('tr-TR') : '';
-      html += '<div class="card mb-2 fuarbot-contact-card" data-id="' + esc(c._id) + '" style="border-left:3px solid #3b82f6;">' +
-        '<div class="card-body py-2 px-3"><div class="d-flex align-items-center gap-3">' +
-        '<div class="flex-grow-1">' +
-        '<div class="d-flex align-items-center gap-2 flex-wrap">' +
-        '<strong>' + esc(c.name || '—') + '</strong>' +
-        (c.position ? '<span class="text-muted small">' + esc(c.position) + '</span>' : '') +
-        (c.company  ? '<span class="badge bg-light text-dark border" style="font-size:11px;">' + esc(c.company) + '</span>' : '') +
-        (c.status === 'new' ? '<span class="badge bg-warning text-dark" style="font-size:10px;">Yeni</span>' : '') +
-        '</div><div class="d-flex gap-3 mt-1 flex-wrap" style="font-size:12px;color:#666;">' +
-        (phone   ? '<span><i class="bi bi-telephone me-1"></i>' + esc(phone) + '</span>' : '') +
-        (c.email ? '<span><i class="bi bi-envelope me-1"></i>' + esc(c.email) + '</span>' : '') +
-        (c.address ? '<span><i class="bi bi-geo-alt me-1"></i>' + esc(c.address.slice(0,40)) + '</span>' : '') +
-        (updatedAt ? '<span class="ms-auto text-muted">' + updatedAt + '</span>' : '') +
-        '</div>' +
-        (c.notes ? '<div class="mt-1 text-muted" style="font-size:11px;"><i class="bi bi-chat-left-text me-1"></i>' + esc(c.notes.slice(0,120)) + (c.notes.length > 120 ? '…' : '') + '</div>' : '') +
-        '</div>' +
-        '<button class="btn btn-sm btn-outline-success flex-shrink-0" onclick="importFuarbotContact(\'' + esc(c._id) + '\')" title="CRM\'e Aktar">' +
-        '<i class="bi bi-cloud-download me-1"></i>Aktar</button>' +
-        '</div></div></div>';
-    });
-    html += '</div>';
-  });
-  container.innerHTML = html;
 }
 
-// ── Import single contact ─────────────────────────────────
-async function importFuarbotContact(fbId) {
-  const c = fuarbotContacts.find(x => x._id === fbId);
+function renderQuotes(quotes) {
+  if (!quotes.length) return '<div class="text-muted small text-center py-3">Henüz teklif yok</div>';
+  const sym = { USD:'$', EUR:'€', TRY:'₺', GBP:'£' };
+  return quotes.map(q => {
+    const s = sym[q.currency]||q.currency||'€';
+    const total = q.totalNet != null ? Number(q.totalNet).toLocaleString('tr-TR',{minimumFractionDigits:2}) : '—';
+    const date  = q.createdAt ? new Date(q.createdAt).toLocaleDateString('tr-TR') : '';
+    const badge = q.status==='sent' ? '<span class="badge bg-success ms-1">Gönderildi</span>' : '<span class="badge bg-secondary ms-1">Taslak</span>';
+    const lines = (q.lines||[]).map(l=>`<div style="font-size:11px;color:#666;">${esc(l.product||'')} · ${l.qty} × ${Number(l.unitPrice||0).toLocaleString('tr-TR',{minimumFractionDigits:2})} ${s}</div>`).join('');
+    return `<div class="fb-quote-card">
+      <div class="d-flex justify-content-between align-items-start">
+        <div><span class="fb-quote-num">${esc(q.quoteNumber||'—')}</span>${badge}
+          <div class="fb-quote-prod mt-1">${esc(q.product||'')}</div>${lines}</div>
+        <div class="text-end"><div class="fb-quote-total">${total} ${s}</div><div style="font-size:11px;color:#aaa;">${date}</div></div>
+      </div></div>`;
+  }).join('');
+}
+
+function renderTimeline(acts) {
+  if (!acts.length) return '<div class="text-muted small text-center py-3">Henüz aktivite yok</div>';
+  const icons = { email:'envelope', whatsapp:'whatsapp', quote:'file-earmark-text', scanned:'camera', edit:'pencil', note:'chat-left-text', status:'arrow-repeat' };
+  return '<div class="fb-timeline">' + acts.map(a => {
+    const type = a.type||'note';
+    const time = a.createdAt ? new Date(a.createdAt).toLocaleString('tr-TR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
+    return `<div class="fb-tl-item type-${esc(type)}">
+      <div class="fb-tl-label"><i class="bi bi-${icons[type]||'circle'} me-1"></i>${esc(a.text||a.label||type)}</div>
+      <div class="fb-tl-time">${time}${a.createdBy?' · '+esc(a.createdBy):''}</div>
+    </div>`;
+  }).join('') + '</div>';
+}
+
+// ── Import to IndexedDB ───────────────────────────────────
+async function importFuarbotContact(id) {
+  const c = fbCustomers.find(x => x._id === id);
   if (!c) return;
   try {
-    // Find or create company
     let companyId = null;
-    if (c.company && c.company.trim()) {
-      const allComps = await new Promise((res, rej) => {
-        const tx = db.transaction(['companies'], 'readonly');
-        const req = tx.objectStore('companies').getAll();
-        req.onsuccess = () => res(req.result);
-        req.onerror   = () => rej(req.error);
-      });
-      const match = allComps.find(co =>
-        (co.name || '').toLowerCase().trim() === c.company.toLowerCase().trim()
-      );
-      if (match) {
-        companyId = match.id;
-      } else {
-        const newCo = {
-          name: c.company.trim(), phone: c.phone || '', email: '',
-          website: c.website || '', address: c.address || '', city: '',
-          notes: 'Fuarbot\'tan aktarıldı. Kaynak: ' + (c.source || 'Fuarbot'),
-          marketingStatus: 'Aranacak', qualityScore: 0,
-          createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-        };
-        newCo.qualityScore = calculateCompanyQuality(newCo);
-        companyId = await new Promise((res, rej) => {
-          const tx2 = db.transaction(['companies'], 'readwrite');
-          const req2 = tx2.objectStore('companies').add(newCo);
-          req2.onsuccess = () => res(req2.result);
-          req2.onerror   = () => rej(req2.error);
-        });
+    if (c.company?.trim()) {
+      const all = await new Promise((res,rej) => { const tx=db.transaction(['companies'],'readonly'); const r=tx.objectStore('companies').getAll(); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); });
+      const match = all.find(co => (co.name||'').toLowerCase().trim() === c.company.toLowerCase().trim());
+      if (match) { companyId = match.id; } else {
+        const nc = { name:c.company.trim(), phone:c.phone||'', email:'', website:c.website||'', address:c.address||'', city:'', notes:'Fuarbot: '+(c.source||'Fuarbot'), marketingStatus:'Aranacak', qualityScore:0, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
+        nc.qualityScore = calculateCompanyQuality(nc);
+        companyId = await new Promise((res,rej) => { const tx2=db.transaction(['companies'],'readwrite'); const r2=tx2.objectStore('companies').add(nc); r2.onsuccess=()=>res(r2.result); r2.onerror=()=>rej(r2.error); });
       }
     }
-    // Create contact
-    const phone = c.phone || c.mobile || '';
-    const newContact = {
-      name: c.name || '', title: c.position || '', phone,
-      phoneNormalized: phone.replace(/\D/g,''),
-      phoneValid: /^0[0-9]{10}$/.test(phone.replace(/[\s\-()]/g,'')),
-      email: c.email || '', companyId, status: 'Aktif',
-      notes: 'Fuarbot\'tan aktarıldı. Kaynak: ' + (c.source || 'Fuarbot') + (c.notes ? '\n' + c.notes : ''),
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-    };
-    newContact.qualityScore = calculateContactQuality(newContact);
-    await new Promise((res, rej) => {
-      const tx3 = db.transaction(['contacts'], 'readwrite');
-      const req3 = tx3.objectStore('contacts').add(newContact);
-      req3.onsuccess = () => res(req3.result);
-      req3.onerror   = () => rej(req3.error);
-    });
-    // Mark card as done
-    const card = document.querySelector('.fuarbot-contact-card[data-id="' + fbId + '"]');
-    if (card) {
-      card.style.opacity = '0.45';
-      card.style.borderLeftColor = '#22c55e';
-      const btn = card.querySelector('button');
-      if (btn) { btn.disabled = true; btn.className = 'btn btn-sm btn-secondary flex-shrink-0'; btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Aktarıldı'; }
-    }
+    const phone = c.phone||c.mobile||'';
+    const ct = { name:c.name||'', title:c.position||'', phone, phoneNormalized:phone.replace(/\D/g,''), phoneValid:/^0[0-9]{10}$/.test(phone.replace(/[\s\-()]/g,'')), email:c.email||'', companyId, status:'Aktif', notes:'Fuarbot: '+(c.source||'Fuarbot')+(c.notes?'\n'+c.notes:''), createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
+    ct.qualityScore = calculateContactQuality(ct);
+    await new Promise((res,rej) => { const tx3=db.transaction(['contacts'],'readwrite'); const r3=tx3.objectStore('contacts').add(ct); r3.onsuccess=()=>res(r3.result); r3.onerror=()=>rej(r3.error); });
     toast('✓ ' + c.name + ' CRM\'e aktarıldı', 'success');
-  } catch (e) {
-    console.error('Import error:', e);
-    toast('Aktarım hatası: ' + e.message, 'error');
-  }
+  } catch (e) { toast('Hata: ' + e.message, 'error'); }
 }
 
 async function importAllFuarbotContacts() {
-  if (!fuarbotContacts.length) { toast('Aktarılacak kişi yok', 'error'); return; }
-  let count = 0;
-  for (const c of fuarbotContacts) { try { await importFuarbotContact(c._id); count++; } catch (_) {} }
-  toast('✓ ' + count + ' kişi CRM\'e aktarıldı!', 'success');
+  if (!fbCustomers.length) { toast('Aktarılacak kişi yok', 'error'); return; }
+  let n = 0;
+  for (const c of fbCustomers) { try { await importFuarbotContact(c._id); n++; } catch(_){} }
+  toast('✓ ' + n + ' kişi aktarıldı', 'success');
 }
 
 // ── Page init ─────────────────────────────────────────────
 function loadFuarbotPage() {
   const cfg = loadFbConfig();
-  if (cfg && cfg.apiKey && cfg.projectId) {
-    if (!fbPollInterval) {
-      startFuarbotSync(cfg.apiKey, cfg.projectId);
-    } else {
-      document.getElementById('fb-config-panel').style.display = 'none';
-      const ctrl = document.getElementById('fb-controls');
-      if (ctrl) ctrl.className = 'd-flex align-items-center gap-2 flex-wrap mb-3';
-      renderFuarbotContacts(fuarbotContacts);
-    }
-  } else {
-    showFbConfig();
-  }
+  if (cfg?.apiKey && cfg?.projectId) {
+    if (!fbPollInterval) startFuarbotSync(cfg.apiKey, cfg.projectId);
+    else { document.getElementById('fb-config-panel').style.display='none'; document.getElementById('fb-layout').style.display=''; renderCustomerList(fbCustomers); if (fbSelectedId) showDetail(fbSelectedId); }
+  } else { showFbConfig(); }
 }
