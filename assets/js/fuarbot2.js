@@ -135,7 +135,7 @@ function startFuarbotSync(apiKey, projectId) {
   setFbStatus('Bağlanıyor…', 'warning');
   if (fbPollInterval) clearInterval(fbPollInterval);
   fetchAllData(apiKey, projectId, false);
-  fbPollInterval = setInterval(() => fetchAllData(apiKey, projectId, true), 3 * 60 * 1000); // 3 min
+  fbPollInterval = setInterval(() => fetchAllData(apiKey, projectId, true), 12 * 60 * 60 * 1000); // 12h
 }
 
 // ── Main tab switching ────────────────────────────────────
