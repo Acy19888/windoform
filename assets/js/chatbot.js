@@ -1,10 +1,10 @@
 // ═══════════════════════════════════════════════════════════
 // WINDOFORM AI ASİSTAN — chatbot.js
-// Uses Google Gemini API (browser-compatible) + local intent matching
+// Uses Anthropic Claude API + local intent matching
 // ═══════════════════════════════════════════════════════════
 
-const CHAT_GEMINI_URL =
-  'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent';
+const CHAT_CLAUDE_URL   = 'https://api.anthropic.com/v1/messages';
+const CHAT_CLAUDE_MODEL = 'claude-haiku-4-5-20251001'; // fast + affordable
 
 let _chatOpen    = false;
 let _chatHistory = []; // { role:'user'|'model', text:string, action?:{type,params} }
@@ -213,7 +213,7 @@ function initChatbot() {
     '- 📄 "Cem Yuksel son teklif"\n' +
     '- ✍️ "Schreib ein Angebot an Müller mit WD-40 à 5 EUR 100 Stk."\n' +
     '- 📊 "Toplam stok değeri nedir?"\n\n' +
-    '_Gemini API anahtarı ile daha karmaşık sorulara da yanıt verebilirim._'
+    '_Claude API anahtarı ile daha karmaşık sorulara da yanıt verebilirim._'
   );
 }
 
@@ -261,20 +261,20 @@ async function chatSend() {
     return;
   }
 
-  // 2. Gemini API fallback
-  const key = _loadGeminiKey();
+  // 2. Claude API fallback
+  const key = _loadClaudeKey();
   if (!key) {
     _chatAddMsg('model',
-      '⚠️ Gemini API anahtarı bulunamadı.\n\n' +
-      '**Nasıl eklersiniz:**\nSol menüden **Fuarbot** → ayarlar ikonuna tıklayın → **Gemini API Key** alanını doldurun.\n\n' +
-      '[🔑 Google AI Studio\'dan ücretsiz alın](https://aistudio.google.com/app/apikey)'
+      '⚠️ Claude API anahtarı bulunamadı.\n\n' +
+      '**Nasıl eklersiniz:**\nSol menüden **Fuarbot** → ⚙️ ayarlar ikonuna tıklayın → **Claude API Key** alanını doldurun.\n\n' +
+      '[🔑 Anthropic Console\'dan alın](https://console.anthropic.com/settings/keys)'
     );
     return;
   }
 
   _chatSetTyping(true);
   try {
-    const reply = await _callGemini(text, key);
+    const reply = await _callClaude(text, key);
     _chatSetTyping(false);
 
     // Parse CREATE_QUOTE action
@@ -292,7 +292,7 @@ async function chatSend() {
     }
   } catch(e) {
     _chatSetTyping(false);
-    _chatAddMsg('model', `❌ **Gemini Hatası:** ${e.message}\n\nAPI anahtarınızı kontrol edin.`);
+    _chatAddMsg('model', `❌ **Claude API Hatası:** ${e.message}\n\nAPI anahtarınızı kontrol edin.`);
   }
 }
 
@@ -383,7 +383,7 @@ function _chatLocalIntent(rawText) {
       '- **Teklif oluştur:** "Schreib Angebot an [Müşteri] mit [Ürün] à [Fiyat] [Döviz] [Miktar] Stk."\n' +
       '- **Son teklifler:** "Son 5 teklifi göster"\n' +
       '- **Stok değeri:** "Toplam stok değeri"\n\n' +
-      '_Karmaşık sorular için Gemini API key gereklidir._'
+      '_Karmaşık sorular için Claude API key gereklidir._'
     };
   }
 
@@ -481,7 +481,7 @@ function _chatLocalIntent(rawText) {
     return _parseCreateQuote(rawText);
   }
 
-  return null; // no local match → Gemini
+  return null; // no local match → Claude
 }
 
 function _isCreateIntent(t) {
@@ -506,7 +506,7 @@ function _parseCreateQuote(text) {
   const rawCur       = (currencyMatch?.[1] || 'EUR').toUpperCase();
   const currency     = rawCur === '€' ? 'EUR' : rawCur === '$' ? 'USD' : rawCur === '₺' ? 'TRY' : rawCur;
 
-  if (!customerName && !product) return null; // can't parse → Gemini
+  if (!customerName && !product) return null; // can't parse → Claude
 
   const sym   = {EUR:'€',USD:'$',TRY:'₺'}[currency]||'€';
   const total = (qty * unitPrice).toLocaleString('de-DE',{minimumFractionDigits:2});
@@ -547,55 +547,66 @@ function _chatGetQuotes() {
   return (typeof tkAllQuotes !== 'undefined' && tkAllQuotes) ? tkAllQuotes : [];
 }
 
-// ── Gemini API ────────────────────────────────────────────
-async function _callGemini(userMsg, apiKey) {
+// ── Claude API ────────────────────────────────────────────
+async function _callClaude(userMsg, apiKey) {
   const context = _buildContext();
 
-  const systemPrompt = `Du bist ein intelligenter Assistent für das Windoform Lager- und Teklif-System.
-Antworte auf Deutsch oder Türkisch je nach Benutzersprache (gemischte Sprache OK).
-Nutze **fett** für wichtige Zahlen/Namen. Halte Antworten kurz und präzise.
+  const systemPrompt =
+    `Du bist ein intelligenter Assistent für das Windoform Lager- und Teklif-System.\n` +
+    `Antworte auf Deutsch oder Türkisch je nach Benutzersprache (gemischte Sprache OK).\n` +
+    `Nutze **fett** für wichtige Zahlen/Namen. Halte Antworten kurz und präzise.\n\n` +
+    `WENN der Benutzer ein Angebot erstellen will, schreibe in der ERSTEN Zeile exakt:\n` +
+    `ACTION:CREATE_QUOTE:{"customerName":"...","customerCompany":"...","product":"...","qty":1,"unitPrice":0.00,"currency":"EUR","unit":"Stk.","description":""}\n` +
+    `Danach kurze Bestätigung auf Deutsch/Türkisch.\n\n` +
+    `AKTUELLE DATEN:\n${context}`;
 
-WENN der Benutzer ein Angebot erstellen will, schreibe in der ersten Zeile:
-ACTION:CREATE_QUOTE:{"customerName":"...","customerCompany":"...","product":"...","qty":1,"unitPrice":0.00,"currency":"EUR","unit":"Stk.","description":""}
+  // Build conversation history for Claude (last 8 turns, role: user|assistant)
+  const messages = [];
+  const hist = _chatHistory.slice(-9, -1); // exclude last (current) user msg
+  for (const h of hist) {
+    messages.push({
+      role:    h.role === 'user' ? 'user' : 'assistant',
+      content: h.text || '',
+    });
+  }
+  // Add current user message
+  messages.push({ role: 'user', content: userMsg });
 
-Danach kurze Bestätigung auf Deutsch/Türkisch.
-
-AKTUELLE DATEN:
-${context}`;
-
-  // Build conversation (last 8 turns)
-  const contents = [];
-  const hist = _chatHistory.slice(-9, -1);
-
-  if (hist.length === 0) {
-    // First message — include system in user turn
-    contents.push({ role:'user', parts:[{ text: systemPrompt + '\n\nFrage: ' + userMsg }] });
-  } else {
-    // Include prior turns (Gemini needs alternating user/model)
-    for (const h of hist) {
-      const role = h.role === 'user' ? 'user' : 'model';
-      contents.push({ role, parts:[{ text: h.text }] });
+  // Claude requires alternating user/assistant — ensure no consecutive same roles
+  const cleaned = [];
+  for (const m of messages) {
+    if (cleaned.length && cleaned[cleaned.length-1].role === m.role) {
+      // Merge consecutive same-role messages
+      cleaned[cleaned.length-1].content += '\n' + m.content;
+    } else {
+      cleaned.push({ ...m });
     }
-    contents.push({ role:'user', parts:[{ text: userMsg }] });
   }
 
   const body = {
-    system_instruction: { parts:[{ text: systemPrompt }] },
-    contents,
-    generationConfig: { temperature:0.2, maxOutputTokens:600, topP:0.85 }
+    model:      CHAT_CLAUDE_MODEL,
+    max_tokens: 700,
+    system:     systemPrompt,
+    messages:   cleaned,
   };
 
-  const res = await fetch(`${CHAT_GEMINI_URL}?key=${apiKey}`, {
-    method:'POST',
-    headers:{ 'Content-Type':'application/json' },
-    body: JSON.stringify(body)
+  const res = await fetch(CHAT_CLAUDE_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type':                          'application/json',
+      'x-api-key':                             apiKey,
+      'anthropic-version':                     '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify(body),
   });
+
   if (!res.ok) {
     const e = await res.json().catch(()=>({}));
     throw new Error(e.error?.message || 'HTTP ' + res.status);
   }
   const data = await res.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || 'Yanıt alınamadı.';
+  return data.content?.[0]?.text || 'Yanıt alınamadı.';
 }
 
 function _buildContext() {
@@ -659,14 +670,14 @@ function chatExecCreateQuote(params) {
 }
 
 // ── Config helpers ────────────────────────────────────────
-function _loadGeminiKey() {
-  try { return JSON.parse(localStorage.getItem('windoform_cfg') || '{}').geminiKey || ''; }
+function _loadClaudeKey() {
+  try { return JSON.parse(localStorage.getItem('windoform_cfg') || '{}').claudeKey || ''; }
   catch { return ''; }
 }
-function saveGeminiKey(key) {
+function saveClaudeKey(key) {
   try {
     const cfg = JSON.parse(localStorage.getItem('windoform_cfg') || '{}');
-    cfg.geminiKey = key;
+    cfg.claudeKey = key;
     localStorage.setItem('windoform_cfg', JSON.stringify(cfg));
   } catch { /* ignore */ }
 }

@@ -83,12 +83,12 @@
         <hr class="my-3">
         <div class="row g-2">
           <div class="col-12">
-            <label class="form-label form-label-sm fw-semibold"><i class="bi bi-robot me-1 text-primary"></i>Gemini API Key <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size:10px;">AI Asistan</span></label>
+            <label class="form-label form-label-sm fw-semibold"><i class="bi bi-robot me-1 text-primary"></i>Claude API Key <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size:10px;">AI Asistan</span></label>
             <div class="input-group input-group-sm">
-              <input type="password" class="form-control form-control-sm" id="gemini-api-key" placeholder="AIzaSy..." autocomplete="off">
-              <button class="btn btn-outline-secondary btn-sm" type="button" onclick="saveGeminiKey(document.getElementById('gemini-api-key').value.trim());toast('✓ Gemini API key kaydedildi','success')"><i class="bi bi-floppy me-1"></i>Kaydet</button>
+              <input type="password" class="form-control form-control-sm" id="claude-api-key" placeholder="sk-ant-api03-..." autocomplete="off">
+              <button class="btn btn-outline-secondary btn-sm" type="button" onclick="saveClaudeKey(document.getElementById('claude-api-key').value.trim());toast('✓ Claude API key kaydedildi','success')"><i class="bi bi-floppy me-1"></i>Kaydet</button>
             </div>
-            <div class="text-muted mt-1" style="font-size:11px;"><a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Google AI Studio</a>'dan ücretsiz alın</div>
+            <div class="text-muted mt-1" style="font-size:11px;"><a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>'dan alın</div>
           </div>
         </div>
         <div class="mt-3 d-flex gap-2">
