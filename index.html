@@ -1364,22 +1364,69 @@
 </div>
 
 <div class="modal fade" id="contModal" tabindex="-1">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">
+        <h5 class="modal-title d-flex align-items-center gap-2 flex-wrap">
           <span id="cont-name"></span>
-          <span id="cont-quality-badge" class="badge ms-2"></span>
+          <span id="cont-quality-badge" class="badge ms-1"></span>
         </h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <div class="modal-body">
-        <p class="mb-2"><strong>Unvan:</strong> <span id="cont-title"></span></p>
-        <p class="mb-2"><strong>Telefon:</strong> <span id="cont-phone-wrap"></span></p>
-        <p class="mb-2"><strong>E-posta:</strong> <span id="cont-email-wrap"></span></p>
-        <p class="mb-2"><strong>Firma:</strong> <span id="cont-company-badge"></span></p>
-        <p class="mb-2"><strong>Durum:</strong> <span id="cont-status"></span></p>
-        <p class="mb-0"><strong>Notlar:</strong> <span id="cont-notes" class="text-muted"></span></p>
+      <div class="modal-body p-0">
+        <!-- Tab bar -->
+        <ul class="nav nav-tabs px-3 pt-3 border-bottom-0">
+          <li class="nav-item">
+            <a class="nav-link active" id="cont-tab-info" href="#" onclick="contSwitchTab('info');return false;">
+              <i class="bi bi-person me-1"></i>Bilgi
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" id="cont-tab-timeline" href="#" onclick="contSwitchTab('timeline');return false;">
+              <i class="bi bi-clock-history me-1"></i>Zaman Tüneli
+              <span id="cont-timeline-badge" class="badge bg-secondary ms-1" style="display:none;font-size:10px;"></span>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" id="cont-tab-quotes" href="#" onclick="contSwitchTab('quotes');return false;">
+              <i class="bi bi-file-earmark-text me-1"></i>Teklifler
+              <span id="cont-quotes-badge" class="badge bg-warning text-dark ms-1" style="display:none;font-size:10px;"></span>
+            </a>
+          </li>
+        </ul>
+
+        <!-- Panel: Bilgi -->
+        <div id="cont-panel-info" class="p-3">
+          <div class="row g-2" style="font-size:14px;">
+            <div class="col-md-6">
+              <div class="mb-2"><span class="text-muted small">Unvan</span><br><span id="cont-title" class="fw-semibold"></span></div>
+              <div class="mb-2"><span class="text-muted small">Telefon</span><br><span id="cont-phone-wrap"></span></div>
+              <div class="mb-2"><span class="text-muted small">E-posta</span><br><span id="cont-email-wrap"></span></div>
+            </div>
+            <div class="col-md-6">
+              <div class="mb-2"><span class="text-muted small">Firma</span><br><span id="cont-company-badge"></span></div>
+              <div class="mb-2"><span class="text-muted small">Durum</span><br><span id="cont-status"></span></div>
+            </div>
+            <div class="col-12">
+              <div class="mb-0"><span class="text-muted small">Notlar</span><br><span id="cont-notes" class="text-muted" style="white-space:pre-wrap;font-size:13px;"></span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel: Zaman Tüneli -->
+        <div id="cont-panel-timeline" style="display:none;" class="p-3">
+          <div id="cont-timeline-content" style="max-height:420px;overflow-y:auto;">
+            <div class="text-muted small text-center py-4"><i class="bi bi-hourglass-split me-2"></i>Yükleniyor…</div>
+          </div>
+        </div>
+
+        <!-- Panel: Teklifler -->
+        <div id="cont-panel-quotes" style="display:none;" class="p-3">
+          <div id="cont-quotes-content" style="max-height:420px;overflow-y:auto;">
+            <div class="text-muted small text-center py-4"><i class="bi bi-hourglass-split me-2"></i>Yükleniyor…</div>
+          </div>
+        </div>
+
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline-primary btn-sm" onclick="editContactModal()"><i class="bi bi-pencil me-1"></i>D&#x00fc;zenle</button>

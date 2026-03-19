@@ -419,6 +419,17 @@ async function importFuarbotContact(id) {
     ct.qualityScore = calculateContactQuality(ct);
     await new Promise((res,rej) => { const tx3=db.transaction(['contacts'],'readwrite'); const r3=tx3.objectStore('contacts').add(ct); r3.onsuccess=()=>res(r3.result); r3.onerror=()=>rej(r3.error); });
     toast('✓ ' + c.name + ' CRM\'e aktarıldı', 'success');
+
+    // ── Remove from list + update badge ──────────────────
+    fbCustomers = fbCustomers.filter(x => x._id !== id);
+    renderCustomerList(fbCustomers);
+    setFbStatus('Bağlı · ' + fbCustomers.length + ' kişi', 'success');
+    // Clear detail pane if it was showing this contact
+    if (fbSelectedId === id) {
+      fbSelectedId = null;
+      const det = document.getElementById('fb-detail');
+      if (det) det.innerHTML = `<div class="fb-empty"><i class="bi bi-person-lines-fill" style="font-size:48px;opacity:.2;"></i><span>Soldaki listeden bir müşteri seçin</span></div>`;
+    }
   } catch (e) { toast('Hata: ' + e.message, 'error'); }
 }
 
@@ -435,6 +446,8 @@ async function importAllFuarbotContacts() {
   }
   if (skipped > 0) toast(`✓ ${imported} aktarıldı · ${skipped} zaten mevcut (atlandı)`, 'info');
   else toast(`✓ ${imported} kişi aktarıldı`, 'success');
+  // Badge already updated per-contact inside importFuarbotContact; final sync:
+  setFbStatus('Bağlı · ' + fbCustomers.length + ' kişi', 'success');
 }
 
 // ── Quote Preview Modal ───────────────────────────────────

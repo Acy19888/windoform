@@ -1436,7 +1436,56 @@ async function showContactModal(id) {
   document.getElementById('cont-status').textContent = c.status || '-';
   document.getElementById('cont-notes').textContent  = c.notes || '-';
 
+  // Reset to Info tab
+  contSwitchTab('info');
+
+  // ── Find matching Fuarbot data by email or name ───────
+  const email   = (c.email || '').toLowerCase().trim();
+  const nameLow = (c.name  || '').toLowerCase().trim();
+  let fbCust = null;
+  if (typeof fbCustomers !== 'undefined' && fbCustomers.length) {
+    fbCust = fbCustomers.find(x =>
+      (email && (x.email||'').toLowerCase().trim() === email) ||
+      (nameLow && (x.name||'').toLowerCase().trim() === nameLow)
+    );
+  }
+
+  // ── Populate Timeline ─────────────────────────────────
+  const tlContent  = document.getElementById('cont-timeline-content');
+  const tlBadge    = document.getElementById('cont-timeline-badge');
+  const fbActs     = fbCust && typeof fbActivities !== 'undefined' ? (fbActivities[fbCust._id] || []) : [];
+  if (fbActs.length && typeof renderTimeline === 'function') {
+    tlContent.innerHTML = renderTimeline(fbActs);
+    tlBadge.textContent = fbActs.length;
+    tlBadge.style.display = '';
+  } else {
+    tlContent.innerHTML = '<div class="text-muted small text-center py-4"><i class="bi bi-clock-history me-2 opacity-25"></i>Fuarbot\'ta aktivite bulunamadı.</div>';
+    tlBadge.style.display = 'none';
+  }
+
+  // ── Populate Quotes ───────────────────────────────────
+  const qContent = document.getElementById('cont-quotes-content');
+  const qBadge   = document.getElementById('cont-quotes-badge');
+  const fbQts    = fbCust && typeof fbQuotes !== 'undefined' ? (fbQuotes[fbCust._id] || []) : [];
+  if (fbQts.length && typeof renderQuoteCard === 'function') {
+    qContent.innerHTML = fbQts.map(q => renderQuoteCard(q)).join('');
+    qBadge.textContent = fbQts.length;
+    qBadge.style.display = '';
+  } else {
+    qContent.innerHTML = '<div class="text-muted small text-center py-4"><i class="bi bi-file-earmark-text me-2 opacity-25"></i>Fuarbot\'ta teklif bulunamadı.</div>';
+    qBadge.style.display = 'none';
+  }
+
   new bootstrap.Modal(document.getElementById('contModal')).show();
+}
+
+function contSwitchTab(tab) {
+  ['info','timeline','quotes'].forEach(t => {
+    const panel = document.getElementById(`cont-panel-${t}`);
+    const navEl = document.getElementById(`cont-tab-${t}`);
+    if (panel) panel.style.display = t === tab ? '' : 'none';
+    if (navEl) navEl.classList.toggle('active', t === tab);
+  });
 }
 
 function editContactModal() {
