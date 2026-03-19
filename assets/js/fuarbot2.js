@@ -1536,7 +1536,61 @@ function _tkAutoQuoteNum() {
   return `TKL-${yy}${mm}${dd}-${rnd}`;
 }
 
+// ── Teklif formu: Firmalar datalist + otomatik doldur ────────
+let _tkAllCompanies  = [];
+let _tkAllContacts   = [];
+
+async function _tkPopulateDataLists() {
+  try {
+    const [companies, contacts] = await Promise.all([
+      dbAll('companies'),
+      dbAll('contacts'),
+    ]);
+    _tkAllCompanies = companies || [];
+    _tkAllContacts  = contacts  || [];
+
+    // Company datalist
+    const cdl = document.getElementById('tk-company-datalist');
+    if (cdl) {
+      cdl.innerHTML = _tkAllCompanies.map(co => `<option value="${esc(co.name)}">`).join('');
+    }
+    // Contact datalist (name)
+    const ndl = document.getElementById('tk-contact-datalist');
+    if (ndl) {
+      ndl.innerHTML = _tkAllContacts.map(cn => `<option value="${esc(cn.name)}">`).join('');
+    }
+  } catch(e) {}
+}
+
+function _tkCompanyPick() {
+  const val = (document.getElementById('tk-edit-ccompany')?.value || '').trim().toLowerCase();
+  if (!val) return;
+  const co = _tkAllCompanies.find(c => (c.name||'').toLowerCase() === val);
+  if (!co) return;
+  // Fill email/phone/address if currently empty
+  const setIfEmpty = (id, v) => { const el = document.getElementById(id); if (el && !el.value.trim() && v) el.value = v; };
+  setIfEmpty('tk-edit-cemail', co.email);
+  setIfEmpty('tk-edit-cphone', co.phone);
+  setIfEmpty('tk-edit-caddr',  [co.address, co.city, co.country].filter(Boolean).join(', '));
+}
+
+function _tkContactPick() {
+  const val = (document.getElementById('tk-edit-cname')?.value || '').trim().toLowerCase();
+  if (!val) return;
+  const cn = _tkAllContacts.find(c => (c.name||'').toLowerCase() === val);
+  if (!cn) return;
+  const setIfEmpty = (id, v) => { const el = document.getElementById(id); if (el && !el.value.trim() && v) el.value = v; };
+  setIfEmpty('tk-edit-cemail', cn.email);
+  setIfEmpty('tk-edit-cphone', cn.phone);
+  // If contact has a company, fill company name too
+  if (cn.companyId && _tkAllCompanies.length) {
+    const co = _tkAllCompanies.find(c => c.id === cn.companyId);
+    if (co) setIfEmpty('tk-edit-ccompany', co.name);
+  }
+}
+
 function tkNewQuote() {
+  _tkPopulateDataLists();   // load Firmalar + Kişiler into datalists
   tkEditingId = null;
   document.getElementById('tk-edit-title').textContent = 'Yeni Teklif';
   document.getElementById('tk-edit-num').value   = _tkAutoQuoteNum();
@@ -1557,6 +1611,7 @@ function tkNewQuote() {
 }
 
 function tkEditQuote(id) {
+  _tkPopulateDataLists();   // load Firmalar + Kişiler into datalists
   const q = tkFindQuote(id);
   if (!q) return;
   tkEditingId = id;

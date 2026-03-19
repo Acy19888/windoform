@@ -1115,8 +1115,8 @@
         <div class="card bg-light border-0 mb-3 p-3">
           <div class="fw-semibold small text-muted text-uppercase mb-2"><i class="bi bi-person me-1"></i>Müşteri</div>
           <div class="row g-2">
-            <div class="col-md-4"><input type="text" class="form-control form-control-sm" id="tk-edit-cname" placeholder="Ad Soyad"></div>
-            <div class="col-md-4"><input type="text" class="form-control form-control-sm" id="tk-edit-ccompany" placeholder="Firma Adı"></div>
+            <div class="col-md-4"><input type="text" class="form-control form-control-sm" id="tk-edit-cname" placeholder="Ad Soyad" list="tk-contact-datalist" onchange="_tkContactPick()"><datalist id="tk-contact-datalist"></datalist></div>
+            <div class="col-md-4"><input type="text" class="form-control form-control-sm" id="tk-edit-ccompany" placeholder="Firma Adı" list="tk-company-datalist" onchange="_tkCompanyPick()"><datalist id="tk-company-datalist"></datalist></div>
             <div class="col-md-4"><input type="email" class="form-control form-control-sm" id="tk-edit-cemail" placeholder="E-posta"></div>
             <div class="col-md-4"><input type="tel" class="form-control form-control-sm" id="tk-edit-cphone" placeholder="Telefon"></div>
             <div class="col-md-8"><input type="text" class="form-control form-control-sm" id="tk-edit-caddr" placeholder="Adres"></div>
