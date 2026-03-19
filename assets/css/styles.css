@@ -766,3 +766,10 @@ main {
   .fb-preview-paper { margin: 0; box-shadow: none; padding: 20px 24px; }
   .fb-pp-table thead tr { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* PDF iframe mode */
+.fb-preview-modal--pdf { display: flex; flex-direction: column; height: 90vh; }
+.fb-preview-iframe {
+  flex: 1; width: 100%; border: none;
+  background: #525659;
+}

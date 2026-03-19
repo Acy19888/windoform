@@ -465,33 +465,19 @@ function showQuotePreview(qId) {
     ? `<span style="background:#d1fae5;color:#065f46;padding:3px 10px;border-radius:20px;font-size:11px;">✓ Gönderildi${sentStr?' · '+sentStr:''}</span>`
     : `<span style="background:#e5e7eb;color:#555;padding:3px 10px;border-radius:20px;font-size:11px;">Taslak</span>`;
 
-  document.body.insertAdjacentHTML('beforeend', `
-  <div class="fb-preview-overlay" id="fb-preview-overlay" onclick="if(event.target===this)document.getElementById('fb-preview-overlay').remove()">
-    <div class="fb-preview-modal">
-      <div class="fb-preview-toolbar no-print">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-weight:700;font-size:14px;">${esc(q.quoteNumber||'Teklif')}</span>
-          ${badge}
-        </div>
-        <div style="display:flex;gap:8px;">
-          <button onclick="window.print()" class="btn btn-primary btn-sm"><i class="bi bi-printer me-1"></i>Yazdır / PDF</button>
-          <button onclick="document.getElementById('fb-preview-overlay').remove()" class="btn btn-outline-secondary btn-sm"><i class="bi bi-x"></i></button>
-        </div>
-      </div>
-      <div class="fb-preview-paper" id="fb-print-area">
-        <!-- Header -->
+  // ── Use the real PDF when available, fall back to HTML template ──
+  const hasPdf = !!q.pdfBase64;
+  const contentHtml = hasPdf
+    ? `<iframe src="data:application/pdf;base64,${q.pdfBase64}" class="fb-preview-iframe" title="${esc(q.quoteNumber||'Teklif')}"></iframe>`
+    : `<div class="fb-preview-paper">
         <div class="fb-pp-header">
-          <div>
-            <div class="fb-pp-company">WINDOFORM</div>
-            <div class="fb-pp-company-sub">Professional Window Solutions</div>
-          </div>
+          <div><div class="fb-pp-company">WINDOFORM</div><div class="fb-pp-company-sub">Professional Window Solutions</div></div>
           <div style="text-align:right;">
-            <div style="font-size:22px;font-weight:800;color:#1a1a2e;letter-spacing:-0.5px;">TEKLİF</div>
+            <div style="font-size:22px;font-weight:800;color:#1a1a2e;">TEKLİF</div>
             <div style="font-size:13px;color:#2b5597;font-weight:600;">${esc(q.quoteNumber||'')}</div>
             <div style="font-size:11px;color:#888;margin-top:2px;">${dateStr}</div>
           </div>
         </div>
-        <!-- Recipient -->
         <div class="fb-pp-recipient">
           <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#888;margin-bottom:4px;">Alıcı</div>
           ${name    ? `<div style="font-weight:700;font-size:14px;">${esc(name)}</div>` : ''}
@@ -500,33 +486,44 @@ function showQuotePreview(qId) {
           ${email   ? `<div style="font-size:12px;color:#666;">${esc(email)}</div>` : ''}
           ${phone   ? `<div style="font-size:12px;color:#666;">${esc(phone)}</div>` : ''}
         </div>
-        <!-- Items table -->
         <table class="fb-pp-table">
-          <thead>
-            <tr>
-              <th style="width:32px;text-align:center;">#</th>
-              <th>Ürün / Hizmet</th>
-              <th style="width:80px;text-align:center;">Miktar</th>
-              <th style="width:110px;text-align:right;">Birim Fiyat</th>
-              <th style="width:120px;text-align:right;">Toplam</th>
-            </tr>
-          </thead>
+          <thead><tr>
+            <th style="width:32px;text-align:center;">#</th><th>Ürün / Hizmet</th>
+            <th style="width:80px;text-align:center;">Miktar</th>
+            <th style="width:110px;text-align:right;">Birim Fiyat</th>
+            <th style="width:120px;text-align:right;">Toplam</th>
+          </tr></thead>
           <tbody>${linesHtml}</tbody>
         </table>
-        <!-- Totals -->
         <div class="fb-pp-totals">
           <div class="fb-pp-total-row">
             <span>Net Toplam</span>
             <span style="font-size:18px;font-weight:800;color:#2b5597;">${fmt(total)} ${s}</span>
           </div>
         </div>
-        <!-- Footer -->
-        <div class="fb-pp-footer">
-          <div style="color:#888;font-size:10px;text-align:center;padding-top:16px;border-top:1px solid #eee;">
-            Windoform · windoform.de${sentStr ? ' · Gönderildi: '+sentStr : ''}
-          </div>
+        <div style="color:#888;font-size:10px;text-align:center;padding-top:16px;border-top:1px solid #eee;margin-top:16px;">
+          Windoform · windoform.de${sentStr ? ' · Gönderildi: '+sentStr : ''}
+        </div>
+      </div>`;
+
+  const actionBtn = hasPdf
+    ? `<a href="data:application/pdf;base64,${q.pdfBase64}" download="${esc(q.quoteNumber||'teklif')}.pdf" class="btn btn-success btn-sm"><i class="bi bi-download me-1"></i>PDF İndir</a>`
+    : `<button onclick="window.print()" class="btn btn-primary btn-sm"><i class="bi bi-printer me-1"></i>Yazdır / PDF</button>`;
+
+  document.body.insertAdjacentHTML('beforeend', `
+  <div class="fb-preview-overlay" id="fb-preview-overlay" onclick="if(event.target===this)document.getElementById('fb-preview-overlay').remove()">
+    <div class="fb-preview-modal${hasPdf ? ' fb-preview-modal--pdf' : ''}">
+      <div class="fb-preview-toolbar no-print">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-weight:700;font-size:14px;">${esc(q.quoteNumber||'Teklif')}</span>
+          ${badge}
+        </div>
+        <div style="display:flex;gap:8px;">
+          ${actionBtn}
+          <button onclick="document.getElementById('fb-preview-overlay').remove()" class="btn btn-outline-secondary btn-sm"><i class="bi bi-x"></i></button>
         </div>
       </div>
+      ${contentHtml}
     </div>
   </div>`);
 }
