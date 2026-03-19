@@ -1565,27 +1565,35 @@ async function _tkPopulateDataLists() {
 function _tkCompanyPick() {
   const val = (document.getElementById('tk-edit-ccompany')?.value || '').trim().toLowerCase();
   if (!val) return;
-  const co = _tkAllCompanies.find(c => (c.name||'').toLowerCase() === val);
+  // Exact match first, then startsWith (handles partial typing before full selection)
+  const co = _tkAllCompanies.find(c => (c.name||'').toLowerCase() === val)
+          || _tkAllCompanies.find(c => (c.name||'').toLowerCase().startsWith(val));
   if (!co) return;
-  // Fill email/phone/address if currently empty
-  const setIfEmpty = (id, v) => { const el = document.getElementById(id); if (el && !el.value.trim() && v) el.value = v; };
-  setIfEmpty('tk-edit-cemail', co.email);
-  setIfEmpty('tk-edit-cphone', co.phone);
-  setIfEmpty('tk-edit-caddr',  [co.address, co.city, co.country].filter(Boolean).join(', '));
+  // Always overwrite with company data when a match is found
+  const fill = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
+  fill('tk-edit-cemail', co.email);
+  fill('tk-edit-cphone', co.phone || co.phoneNormalized);
+  const addr = [co.address, co.district, co.city].filter(Boolean).join(', ');
+  if (addr) fill('tk-edit-caddr', addr);
 }
 
 function _tkContactPick() {
   const val = (document.getElementById('tk-edit-cname')?.value || '').trim().toLowerCase();
   if (!val) return;
-  const cn = _tkAllContacts.find(c => (c.name||'').toLowerCase() === val);
+  const cn = _tkAllContacts.find(c => (c.name||'').toLowerCase() === val)
+          || _tkAllContacts.find(c => (c.name||'').toLowerCase().startsWith(val));
   if (!cn) return;
-  const setIfEmpty = (id, v) => { const el = document.getElementById(id); if (el && !el.value.trim() && v) el.value = v; };
-  setIfEmpty('tk-edit-cemail', cn.email);
-  setIfEmpty('tk-edit-cphone', cn.phone);
-  // If contact has a company, fill company name too
+  const fill = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
+  fill('tk-edit-cemail', cn.email);
+  fill('tk-edit-cphone', cn.phone);
+  // If contact has a company, fill company name + company details too
   if (cn.companyId && _tkAllCompanies.length) {
     const co = _tkAllCompanies.find(c => c.id === cn.companyId);
-    if (co) setIfEmpty('tk-edit-ccompany', co.name);
+    if (co) {
+      fill('tk-edit-ccompany', co.name);
+      if (!document.getElementById('tk-edit-cemail')?.value) fill('tk-edit-cemail', co.email);
+      if (!document.getElementById('tk-edit-cphone')?.value) fill('tk-edit-cphone', co.phone || co.phoneNormalized);
+    }
   }
 }
 
