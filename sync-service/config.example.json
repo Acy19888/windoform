@@ -1,5 +1,28 @@
 {
+  "_comment": "Kopiere diese Datei als config.json und füll alle Felder aus. config.json wird NICHT in Git eingecheckt.",
+
+  "netsis": {
+    "baseUrl":  "http://192.168.1.50:8080/NetOpenX.Rest/",
+    "username": "admin",
+    "password": "NETSIS_SIFREN",
+    "company":  "WINDOFORM",
+    "branch":   ""
+  },
+
+  "firebase": {
+    "projectId": "FIREBASE_PROJECT_ID",
+    "apiKey":    "FIREBASE_API_KEY"
+  },
+
+  "sync": {
+    "stokIntervalMinutes":    30,
+    "cariIntervalMinutes":    60,
+    "invoiceIntervalMinutes": 5,
+    "syncCariler":            false
+  },
+
   "mssql": {
+    "_comment": "Nur für sync-production.js (Üretim-Sync) — für Netsis REST nicht benötigt",
     "server":                 "192.168.1.10",
     "database":               "NETSIS_URETIM",
     "user":                   "windoform_reader",
@@ -7,12 +30,6 @@
     "port":                   1433,
     "encrypt":                false,
     "trustServerCertificate": true,
-
     "query": ""
-  },
-
-  "firebase": {
-    "projectId": "FIREBASE_PROJECT_ID",
-    "apiKey":    "FIREBASE_API_KEY"
   }
 }
