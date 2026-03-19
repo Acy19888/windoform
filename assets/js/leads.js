@@ -42,7 +42,7 @@ async function loadLeads() {
   try {
     [leadsData, _ldAllCompanies] = await Promise.all([
       fsFetch(cfg.apiKey, cfg.projectId, LD_COL),
-      (typeof dbGetAll === 'function' ? dbGetAll('companies') : Promise.resolve([])).catch(() => []),
+      (typeof dbAll === 'function' ? dbAll('companies') : Promise.resolve([])).catch(() => []),
     ]);
     leadsData.sort((a, b) => (b.createdAt || '') > (a.createdAt || '') ? 1 : -1);
     renderLeads();
@@ -625,8 +625,8 @@ function _ldCompanyPick() {
 // ── Firmalardan Aktar — open import modal ─────────────────
 async function ldImportFromFirmalar() {
   // Re-fetch companies in case they changed since page load
-  if (typeof dbGetAll === 'function') {
-    _ldAllCompanies = await dbGetAll('companies').catch(() => _ldAllCompanies);
+  if (typeof dbAll === 'function') {
+    _ldAllCompanies = await dbAll('companies').catch(() => _ldAllCompanies);
   }
   if (!_ldAllCompanies.length) {
     alert('Firmalar veritabanında henüz şirket bulunamadı.');
