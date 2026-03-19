@@ -576,11 +576,11 @@ function calculateCompanyQuality(c) {
 
 function calculateContactQuality(c) {
   let s = 0;
-  if (c.name)       s += 30;
-  if (c.phoneValid) s += 30;
-  if (c.email)      s += 20;
-  if (c.companyId)  s += 15;
-  if (c.title)      s += 5;
+  if (c.name)                s += 30;
+  if (c.phone || c.phoneValid) s += 30;
+  if (c.email)               s += 20;
+  if (c.companyId)           s += 15;
+  if (c.title)               s += 5;
   return Math.min(s, 100);
 }
 
@@ -1425,9 +1425,10 @@ async function showContactModal(id) {
   const co = c.companyId ? await dbGet('companies', c.companyId) : null;
 
   document.getElementById('cont-name').textContent = c.name;
+  const freshScore = calculateContactQuality(c);
   const qb = document.getElementById('cont-quality-badge');
-  qb.textContent = `${c.qualityScore||0}%`;
-  qb.className = `badge ${qualityBadgeClass(c.qualityScore||0)}`;
+  qb.textContent = `${freshScore}%`;
+  qb.className = `badge ${qualityBadgeClass(freshScore)}`;
   document.getElementById('cont-title').textContent = c.title || '-';
   document.getElementById('cont-phone-wrap').innerHTML  = phoneLink(c.phone, c.phoneNormalized);
   document.getElementById('cont-email-wrap').innerHTML  = emailLink(c.email);
@@ -1450,23 +1451,44 @@ async function showContactModal(id) {
     );
   }
 
-  // ── Populate Timeline ─────────────────────────────────
-  const tlContent  = document.getElementById('cont-timeline-content');
-  const tlBadge    = document.getElementById('cont-timeline-badge');
-  const fbActs     = fbCust && typeof fbActivities !== 'undefined' ? (fbActivities[fbCust._id] || []) : [];
-  if (fbActs.length && typeof renderTimeline === 'function') {
-    tlContent.innerHTML = renderTimeline(fbActs);
-    tlBadge.textContent = fbActs.length;
+  // ── Collect Fuarbot activities + quotes ───────────────
+  const fbActs = fbCust && typeof fbActivities !== 'undefined' ? (fbActivities[fbCust._id] || []) : [];
+  const fbQts  = fbCust && typeof fbQuotes     !== 'undefined' ? (fbQuotes[fbCust._id]     || []) : [];
+
+  // ── Populate Timeline (activities + quotes merged) ────
+  const tlContent = document.getElementById('cont-timeline-content');
+  const tlBadge   = document.getElementById('cont-timeline-badge');
+
+  // Convert quotes to timeline-compatible items
+  const _sym = (typeof SYM !== 'undefined') ? SYM : {EUR:'€',USD:'$',TRY:'₺',GBP:'£'};
+  const qtAsActs = fbQts.map(q => {
+    const cur  = _sym[q.currency] || q.currency || '€';
+    const amt  = q.totalNet != null ? Number(q.totalNet).toLocaleString('tr-TR',{minimumFractionDigits:2})+' '+cur : '';
+    const statusLabel = q.status === 'sent' ? '✓ Gönderildi' : 'Taslak';
+    return {
+      type: 'quote',
+      createdAt: q.createdAt,
+      text: [q.quoteNumber || 'Teklif', amt, statusLabel].filter(Boolean).join(' · '),
+    };
+  });
+
+  // Merge and sort newest first
+  const allTlItems = [...fbActs, ...qtAsActs].sort((a, b) =>
+    (b.createdAt || '') > (a.createdAt || '') ? 1 : -1
+  );
+
+  if (allTlItems.length && typeof renderTimeline === 'function') {
+    tlContent.innerHTML = renderTimeline(allTlItems);
+    tlBadge.textContent = allTlItems.length;
     tlBadge.style.display = '';
   } else {
     tlContent.innerHTML = '<div class="text-muted small text-center py-4"><i class="bi bi-clock-history me-2 opacity-25"></i>Fuarbot\'ta aktivite bulunamadı.</div>';
     tlBadge.style.display = 'none';
   }
 
-  // ── Populate Quotes ───────────────────────────────────
+  // ── Populate Quotes tab (full quote cards) ────────────
   const qContent = document.getElementById('cont-quotes-content');
   const qBadge   = document.getElementById('cont-quotes-badge');
-  const fbQts    = fbCust && typeof fbQuotes !== 'undefined' ? (fbQuotes[fbCust._id] || []) : [];
   if (fbQts.length && typeof renderQuoteCard === 'function') {
     qContent.innerHTML = fbQts.map(q => renderQuoteCard(q)).join('');
     qBadge.textContent = fbQts.length;
