@@ -104,6 +104,28 @@ async function fetchAllData(apiKey, projectId, silent) {
       }
     });
     fbCustomers = [...seen.values()];
+
+    // ── Filter out contacts already imported into CRM ──────
+    // Compare by name+email against IndexedDB contacts so that
+    // imported contacts stay gone even after page navigation / re-sync.
+    if (typeof dbAll === 'function') {
+      try {
+        const crmContacts = await dbAll('contacts');
+        if (crmContacts.length) {
+          const crmSet = new Set(
+            crmContacts
+              .filter(c => (c.name || '').trim() || (c.email || '').trim()) // skip blanks
+              .map(c => [(c.name||'').toLowerCase().trim(), (c.email||'').toLowerCase().trim()].join('§'))
+          );
+          fbCustomers = fbCustomers.filter(c => {
+            const key = [(c.name||'').toLowerCase().trim(), (c.email||'').toLowerCase().trim()].join('§');
+            if (!key || key === '§') return true; // can't match empty records — keep them
+            return !crmSet.has(key);
+          });
+        }
+      } catch(filterErr) { console.warn('[Fuarbot] CRM filter error:', filterErr); }
+    }
+
     fbActivities = {};
     activities.forEach(a => { const k = a.parentId||a.contactId||''; (fbActivities[k]||(fbActivities[k]=[])).push(a); });
     Object.values(fbActivities).forEach(arr => arr.sort((a,b) => (b.createdAt||'') > (a.createdAt||'') ? 1 : -1));
