@@ -113,18 +113,86 @@ let contSort = { field: 'name', asc: true };
 
 /* ===================== BAŞLANGIÇ ===================== */
 document.addEventListener('DOMContentLoaded', async () => {
-  // Menüler her koşulda çalışsın — önce event listener kur
   setupEventListeners();
   populateSelects();
 
+  // ── Firebase config bootstrap check ────────────────
+  const cfg = loadFbConfig();
+  const hasFbConfig = cfg?.apiKey && cfg?.projectId;
+
+  // ── Auth init ───────────────────────────────────────
+  let loggedIn = false;
+  if (typeof authInit === 'function') {
+    if (!hasFbConfig) {
+      // Show login overlay with Firebase config fields visible
+      authShowLogin('');
+      const fbSection = document.getElementById('auth-fb-config-section');
+      if (fbSection) fbSection.style.display = '';
+      // Wire up Firebase config save on login button press
+      const _origLogin = window.authSubmitLogin;
+      window.authSubmitLogin = async function() {
+        const ak = document.getElementById('auth-fb-apikey')?.value.trim();
+        const pid = document.getElementById('auth-fb-projid')?.value.trim();
+        if (ak && pid) {
+          localStorage.setItem('fb_api_key',    ak);
+          localStorage.setItem('fb_project_id', pid);
+          localStorage.setItem('fb_auth_domain', pid + '.firebaseapp.com');
+        }
+        await _origLogin();
+      };
+      window.authSubmitRegister = async function() {
+        const ak = document.getElementById('auth-fb-apikey')?.value.trim();
+        const pid = document.getElementById('auth-fb-projid')?.value.trim();
+        if (ak && pid) {
+          localStorage.setItem('fb_api_key',    ak);
+          localStorage.setItem('fb_project_id', pid);
+          localStorage.setItem('fb_auth_domain', pid + '.firebaseapp.com');
+        }
+        const fn = (await import('./auth.js').catch(()=>null))?.authSubmitRegister;
+        // fallback: call the real function
+        const emailEl = document.getElementById('auth-reg-email');
+        const passEl  = document.getElementById('auth-reg-password');
+        const pass2El = document.getElementById('auth-reg-password2');
+        const btnEl   = document.getElementById('auth-register-btn');
+        const errEl   = document.getElementById('auth-register-error');
+        if (!emailEl?.value || !passEl?.value) { errEl.textContent = 'E-posta ve şifre gerekli.'; return; }
+        if (passEl.value !== pass2El?.value)   { errEl.textContent = 'Şifreler eşleşmiyor.'; return; }
+        btnEl.disabled = true; btnEl.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>';
+        errEl.textContent = '';
+        try { await authRegister(emailEl.value.trim(), passEl.value); await _authOnSuccess(); }
+        catch(e) { errEl.textContent = e.message; }
+        finally  { btnEl.disabled = false; btnEl.textContent = 'Kayıt Ol'; }
+      };
+      return; // don't proceed until user logs in
+    }
+    loggedIn = await authInit();
+    if (!loggedIn) {
+      authShowLogin('Devam etmek için giriş yapın.');
+      return; // app will resume via _authOnSuccess → location.reload or inline init
+    }
+  }
+
+  // ── Normal app startup ──────────────────────────────
+  await _appStart();
+});
+
+async function _appStart() {
+  // Update user display in sidebar
+  if (typeof authEmail === 'function' && authEmail()) {
+    const el = document.getElementById('auth-user-email');
+    if (el) { el.textContent = authEmail(); el.closest('#auth-user-display').style.display = ''; }
+  }
+
   try {
     await initDB();
+    // Pull data from Firestore if local is empty (new browser)
+    if (typeof syncFromFirestore === 'function') await syncFromFirestore();
     await loadCompanies();
   } catch (err) {
     console.error('Başlangıç hatası:', err);
     toast('Veritabanı başlatılamadı: ' + err.message + ' — Tarayıcı izinlerini kontrol edin.', 'error');
   }
-});
+}
 
 /* ===================== IndexedDB ===================== */
 function initDB() {
@@ -204,6 +272,7 @@ function dbGet(store, id) {
   });
 }
 function dbAdd(store, obj) {
+  const _sync = () => { if (['companies','contacts'].includes(store) && typeof _syncSchedule === 'function') _syncSchedule(); };
   if (dbMode === 'local') {
     const dbObj = _lsRead();
     const id = (dbObj._seq && dbObj._seq[store]) ? dbObj._seq[store] : 1;
@@ -211,15 +280,17 @@ function dbAdd(store, obj) {
     const row = { ...obj, id };
     dbObj[store].push(row);
     _lsWrite(dbObj);
+    _sync();
     return Promise.resolve(id);
   }
   return new Promise((r, x) => {
     const req = db.transaction(store, 'readwrite').objectStore(store).add(obj);
     req.onerror = () => x(req.error);
-    req.onsuccess = () => r(req.result);
+    req.onsuccess = () => { _sync(); r(req.result); };
   });
 }
 function dbPut(store, obj) {
+  const _sync = () => { if (['companies','contacts'].includes(store) && typeof _syncSchedule === 'function') _syncSchedule(); };
   if (dbMode === 'local') {
     const dbObj = _lsRead();
     if (obj.id == null) return dbAdd(store, obj);
@@ -229,25 +300,28 @@ function dbPut(store, obj) {
     else arr.push({ ...obj });
     dbObj[store] = arr;
     _lsWrite(dbObj);
+    _sync();
     return Promise.resolve(obj.id);
   }
   return new Promise((r, x) => {
     const req = db.transaction(store, 'readwrite').objectStore(store).put(obj);
     req.onerror = () => x(req.error);
-    req.onsuccess = () => r(req.result);
+    req.onsuccess = () => { _sync(); r(req.result); };
   });
 }
 function dbDelete(store, id) {
+  const _sync = () => { if (['companies','contacts'].includes(store) && typeof _syncSchedule === 'function') _syncSchedule(); };
   if (dbMode === 'local') {
     const dbObj = _lsRead();
     dbObj[store] = (dbObj[store] || []).filter(x => x && x.id !== id);
     _lsWrite(dbObj);
+    _sync();
     return Promise.resolve(true);
   }
   return new Promise((r, x) => {
     const req = db.transaction(store, 'readwrite').objectStore(store).delete(id);
     req.onerror = () => x(req.error);
-    req.onsuccess = () => r(req.result);
+    req.onsuccess = () => { _sync(); r(req.result); };
   });
 }
 
@@ -269,6 +343,7 @@ function dbAddBatch(store, objects) {
       ids.push(id);
     }
     _lsWrite(dbObj);
+    if (['companies','contacts'].includes(store) && typeof _syncSchedule === 'function') _syncSchedule();
     return Promise.resolve(ids);
   }
   return new Promise((resolve, reject) => {
@@ -281,7 +356,10 @@ function dbAddBatch(store, objects) {
       req.onsuccess = () => { ids[i] = req.result; };
       req.onerror   = e  => { e.preventDefault(); }; // hatalı satırı atla, transaction devam etsin
     });
-    tx.oncomplete = () => resolve(ids);
+    tx.oncomplete = () => {
+      if (['companies','contacts'].includes(store) && typeof _syncSchedule === 'function') _syncSchedule();
+      resolve(ids);
+    };
     tx.onerror    = () => reject(tx.error);
     tx.onabort    = () => reject(new Error('Transaction iptal edildi'));
   });

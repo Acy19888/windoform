@@ -10,6 +10,82 @@
 </head>
 <body>
 
+<!-- ══════════════════════════════════════════════════════
+     AUTH OVERLAY — shown when not logged in
+════════════════════════════════════════════════════════ -->
+<div id="auth-overlay" style="display:none;position:fixed;inset:0;z-index:9999;background:linear-gradient(135deg,#1e40af 0%,#0f172a 100%);align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:16px;padding:36px 40px;width:100%;max-width:420px;box-shadow:0 25px 60px rgba(0,0,0,.4);">
+
+    <!-- Logo -->
+    <div style="text-align:center;margin-bottom:24px;">
+      <div style="display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;background:#2563eb;border-radius:14px;margin-bottom:12px;">
+        <i class="bi bi-briefcase-fill" style="font-size:24px;color:#fff;"></i>
+      </div>
+      <h4 style="margin:0;font-weight:700;color:#0f172a;">CRM Sistemi</h4>
+      <p style="margin:4px 0 0;color:#64748b;font-size:13px;">Hesabınıza giriş yapın</p>
+    </div>
+
+    <!-- Reason message -->
+    <div id="auth-reason-msg" style="font-size:12px;color:#dc2626;text-align:center;margin-bottom:8px;min-height:16px;"></div>
+
+    <!-- Firebase config (bootstrap — only shown if not configured) -->
+    <div id="auth-fb-config-section" style="display:none;margin-bottom:16px;padding:12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">
+      <p style="font-size:12px;color:#64748b;margin:0 0 8px;"><i class="bi bi-info-circle me-1"></i>İlk kez kurulum: Firebase bilgilerini girin</p>
+      <input type="text"  class="form-control form-control-sm mb-2" id="auth-fb-apikey"  placeholder="Firebase API Key">
+      <input type="text"  class="form-control form-control-sm"      id="auth-fb-projid" placeholder="Firebase Project ID (örn: myfirm-crm)">
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-tabs mb-3" style="border-bottom:2px solid #e2e8f0;">
+      <li class="nav-item">
+        <a class="nav-link active" id="auth-tab-login"    href="#" onclick="event.preventDefault();authSwitchTab('login')"    style="font-weight:600;font-size:14px;">Giriş Yap</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link"        id="auth-tab-register" href="#" onclick="event.preventDefault();authSwitchTab('register')" style="font-weight:600;font-size:14px;">Kayıt Ol</a>
+      </li>
+    </ul>
+
+    <!-- Login panel -->
+    <div id="auth-panel-login">
+      <div class="mb-3">
+        <label class="form-label" style="font-size:13px;font-weight:600;">E-posta</label>
+        <input type="email" class="form-control" id="auth-email" placeholder="ornek@firma.com" onkeydown="if(event.key==='Enter')authSubmitLogin()">
+      </div>
+      <div class="mb-3">
+        <label class="form-label" style="font-size:13px;font-weight:600;">Şifre</label>
+        <div class="input-group">
+          <input type="password" class="form-control" id="auth-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')authSubmitLogin()">
+          <button class="btn btn-outline-secondary" type="button" onclick="const i=document.getElementById('auth-password');i.type=i.type==='password'?'text':'password'"><i class="bi bi-eye"></i></button>
+        </div>
+      </div>
+      <div id="auth-login-error" style="color:#dc2626;font-size:12px;min-height:18px;margin-bottom:8px;"></div>
+      <button class="btn btn-primary w-100 fw-semibold" id="auth-login-btn" onclick="authSubmitLogin()">Giriş Yap</button>
+    </div>
+
+    <!-- Register panel -->
+    <div id="auth-panel-register" style="display:none;">
+      <div class="mb-3">
+        <label class="form-label" style="font-size:13px;font-weight:600;">E-posta</label>
+        <input type="email" class="form-control" id="auth-reg-email" placeholder="ornek@firma.com">
+      </div>
+      <div class="mb-3">
+        <label class="form-label" style="font-size:13px;font-weight:600;">Şifre</label>
+        <input type="password" class="form-control" id="auth-reg-password" placeholder="En az 6 karakter">
+      </div>
+      <div class="mb-3">
+        <label class="form-label" style="font-size:13px;font-weight:600;">Şifre Tekrar</label>
+        <input type="password" class="form-control" id="auth-reg-password2" placeholder="Şifreyi tekrar girin" onkeydown="if(event.key==='Enter')authSubmitRegister()">
+      </div>
+      <div id="auth-register-error" style="color:#dc2626;font-size:12px;min-height:18px;margin-bottom:8px;"></div>
+      <button class="btn btn-primary w-100 fw-semibold" id="auth-register-btn" onclick="authSubmitRegister()">Kayıt Ol</button>
+    </div>
+
+    <p style="font-size:11px;color:#94a3b8;text-align:center;margin-top:16px;margin-bottom:0;">
+      Verileriniz kendi Firebase projenizde saklanır.
+    </p>
+  </div>
+</div>
+
 <!-- SIDEBAR -->
 <div class="sidebar">
   <div class="logo">
@@ -53,6 +129,12 @@
   <nav>
     <a href="#" data-page="ayarlar" onclick="showPage('ayarlar');return false;"><i class="bi bi-gear-fill"></i>Ayarlar</a>
   </nav>
+  <div class="divider"></div>
+  <!-- User badge + logout -->
+  <div style="padding:8px 12px;">
+    <div id="auth-user-display" style="display:none;font-size:12px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:6px;"><i class="bi bi-person-circle me-1"></i><span id="auth-user-email"></span></div>
+    <a href="#" onclick="authShowLogoutConfirm();return false;" style="font-size:12px;color:#94a3b8;text-decoration:none;"><i class="bi bi-box-arrow-right me-1"></i>Çıkış Yap</a>
+  </div>
 </div>
 
 <main>
@@ -550,7 +632,7 @@
           </div>
         </div>
         <div class="mt-3">
-          <button class="btn btn-primary" style="background:#7c3aed;border-color:#7c3aed;" onclick="saveClaudeKey(document.getElementById('claude-api-key').value.trim());toast('✓ Claude API key kaydedildi','success')">
+          <button class="btn btn-primary" style="background:#7c3aed;border-color:#7c3aed;" onclick="saveClaudeKey(document.getElementById('claude-api-key').value.trim());toast('✓ Claude API key kaydedildi','success');if(typeof syncSettingsToFirestore==='function')syncSettingsToFirestore();">
             <i class="bi bi-floppy me-1"></i>Kaydet
           </button>
         </div>
@@ -601,7 +683,7 @@
           </div>
         </div>
         <div class="mt-3 d-flex gap-2 align-items-center flex-wrap">
-          <button class="btn btn-success" onclick="saveNetsisSettings();loadNetsisSettingsToForm()"><i class="bi bi-floppy me-1"></i>Kaydet</button>
+          <button class="btn btn-success" onclick="saveNetsisSettings();loadNetsisSettingsToForm();if(typeof syncSettingsToFirestore==='function')syncSettingsToFirestore();"><i class="bi bi-floppy me-1"></i>Kaydet</button>
           <button class="btn btn-outline-secondary" onclick="netsisPing()"><i class="bi bi-wifi me-1"></i>Bağlantı Test Et</button>
           <span id="ns-sync-status" class="ms-2" style="font-size:12px;"></span>
         </div>
@@ -1527,7 +1609,7 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-<!-- Firebase (compat SDK for vanilla JS) -->
+<script src="./assets/js/auth.js"></script>
 <script src="./assets/js/app.js?v=20260318j"></script>
 <script src="./assets/js/fuarbot2.js"></script>
 <script src="./assets/js/products.js"></script>
