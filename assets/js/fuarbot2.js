@@ -731,18 +731,33 @@ async function loadFuarUsers() {
 
 function renderFuarUsers() {
   const el = document.getElementById('fuar-users-content');
+
+  // Fuarbot verisinden henüz eklenmemiş çalışan sayısını hesapla
+  const discovered  = _discoverFuarbotEmployees();
+  const existingNames = new Set(fbUsersData.map(u => (u.name||'').toLowerCase().trim()));
+  const newOnes = discovered.filter(d => !existingNames.has(d.name.toLowerCase().trim()));
+
+  const importBtn = newOnes.length
+    ? `<button class="btn btn-sm btn-outline-success me-2" onclick="openFuarbotImport()">
+        <i class="bi bi-cloud-download-fill me-1"></i>Fuarbot'tan İçe Aktar
+        <span class="badge bg-success ms-1">${newOnes.length}</span>
+      </button>`
+    : '';
+
   const addBtn = `<button class="btn btn-sm btn-primary" onclick="openAddFuarUser()">
     <i class="bi bi-person-plus-fill me-1"></i>Çalışan Ekle</button>`;
+
+  const headerBtns = `<div class="d-flex gap-1">${importBtn}${addBtn}</div>`;
 
   if (!fbUsersData.length) {
     el.innerHTML = `
       <div class="d-flex justify-content-between align-items-center mb-3">
         <span class="text-muted small">Henüz çalışan eklenmemiş</span>
-        ${addBtn}
+        ${headerBtns}
       </div>
       <div class="alert alert-info mb-0">
         <i class="bi bi-info-circle me-2"></i>
-        <code>${FB_EMP_COL}</code> koleksiyonuna çalışan eklemek için butona tıklayın.
+        Fuarbot verilerinden çalışanları otomatik içe aktarabilir veya manuel ekleyebilirsiniz.
         <br><small class="text-muted mt-1 d-block">
           Şifreler Firebase Authentication üzerinden yönetilir —
           <a href="https://console.firebase.google.com" target="_blank">Firebase Console →</a>
@@ -757,7 +772,7 @@ function renderFuarUsers() {
         <span class="fw-semibold" style="font-size:13px;">
           <i class="bi bi-people-fill me-2 text-primary"></i>${fbUsersData.length} çalışan
         </span>
-        ${addBtn}
+        ${headerBtns}
       </div>
       <div class="table-responsive">
         <table class="table table-hover mb-0 fbd-users-table">
@@ -780,6 +795,110 @@ function renderFuarUsers() {
         sayfasını kullanın veya <i class="bi bi-key-fill"></i> butonuyla sıfırlama e-postası gönderin.
       </div>
     </div>`;
+}
+
+// Fuarbot verilerinden benzersiz çalışanları topla
+function _discoverFuarbotEmployees() {
+  const map = {};
+  // fbCustomers = array, fbActivities/fbQuotes = {contactId: [...]} nesneleri
+  const all = [
+    ...(fbCustomers || []),
+    ...Object.values(fbActivities || {}).flat(),
+    ...Object.values(fbQuotes     || {}).flat(),
+  ];
+  for (const doc of all) {
+    const raw = (doc.createdBy || '').trim();
+    if (!raw || raw === 'Fuarbot') continue;
+    if (!map[raw]) {
+      // createdBy bazen "Ad Soyad <email>" veya sadece email formatında olabilir
+      const emailMatch = raw.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
+      map[raw] = {
+        name:  emailMatch ? raw.replace(emailMatch[0], '').replace(/[<>]/g,'').trim() || raw : raw,
+        email: emailMatch ? emailMatch[0] : '',
+      };
+    }
+  }
+  return Object.values(map);
+}
+
+// İçe aktarma modalını aç
+function openFuarbotImport() {
+  const discovered    = _discoverFuarbotEmployees();
+  const existingNames = new Set(fbUsersData.map(u => (u.name||'').toLowerCase().trim()));
+  const newOnes       = discovered.filter(d => !existingNames.has(d.name.toLowerCase().trim()));
+
+  if (!newOnes.length) { toast('Tüm çalışanlar zaten eklenmiş.', 'success'); return; }
+
+  const rows = newOnes.map((d, i) => `
+    <tr>
+      <td><input type="checkbox" class="form-check-input fuar-import-chk" data-i="${i}" checked></td>
+      <td><input type="text"  class="form-control form-control-sm fuar-import-name"  data-i="${i}" value="${esc(d.name)}"  placeholder="Ad Soyad"></td>
+      <td><input type="email" class="form-control form-control-sm fuar-import-email" data-i="${i}" value="${esc(d.email)}" placeholder="email@..."></td>
+    </tr>`).join('');
+
+  document.getElementById('fuar-import-body').innerHTML = `
+    <p class="text-muted small mb-2">
+      <i class="bi bi-info-circle me-1"></i>
+      Fuarbot verilerinde tespit edilen çalışanlar. E-posta adreslerini tamamlayın, ardından içe aktarın.
+    </p>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead class="table-light"><tr><th style="width:32px;"></th><th>Ad Soyad</th><th>E-posta</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+
+  // Gizli veriyi sakla
+  document.getElementById('fuar-import-body').dataset.json = JSON.stringify(newOnes);
+  new bootstrap.Modal(document.getElementById('fuarImportModal')).show();
+}
+
+async function saveFuarbotImport() {
+  const cfg = loadFbConfig();
+  if (!cfg?.apiKey || !cfg?.projectId) return;
+
+  const checkboxes = document.querySelectorAll('.fuar-import-chk:checked');
+  if (!checkboxes.length) { toast('En az bir çalışan seçin.', 'error'); return; }
+
+  const btn = document.getElementById('fuar-import-save-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Aktarılıyor…';
+
+  const base = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/${FB_EMP_COL}`;
+  const now  = new Date().toISOString();
+  let added  = 0, errors = 0;
+
+  for (const chk of checkboxes) {
+    const i     = chk.dataset.i;
+    const name  = document.querySelector(`.fuar-import-name[data-i="${i}"]`)?.value.trim() || '';
+    const email = document.querySelector(`.fuar-import-email[data-i="${i}"]`)?.value.trim() || '';
+    if (!name) continue;
+    try {
+      const res = await fetch(`${base}?key=${cfg.apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: {
+          name:      { stringValue: name },
+          email:     { stringValue: email },
+          role:      { stringValue: 'Saha Görevlisi' },
+          createdAt: { stringValue: now },
+          updatedAt: { stringValue: now },
+        }}),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const docId = data.name?.split('/').pop() || ('emp_' + Date.now() + added);
+        fbUsersData.push({ _id: docId, name, email, role: 'Saha Görevlisi' });
+        added++;
+      } else { errors++; }
+    } catch(_) { errors++; }
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="bi bi-cloud-download-fill me-1"></i>İçe Aktar';
+  bootstrap.Modal.getInstance(document.getElementById('fuarImportModal'))?.hide();
+  toast(`✓ ${added} çalışan eklendi${errors ? `, ${errors} hata` : ''}`, added ? 'success' : 'error');
+  renderFuarUsers();
 }
 
 function renderFuarUserRow(u) {
