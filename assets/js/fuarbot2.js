@@ -705,8 +705,9 @@ function renderFuarDashboard() {
 // ══════════════════════════════════════════════════════════════
 // FUAR USERS
 // ══════════════════════════════════════════════════════════════
+// ── Kullanıcılar (fuarEmployees) ──────────────────────────
 let fbUsersData = [];
-let fbUsersCollection = 'userSettings';
+const FB_EMP_COL = 'fuarEmployees';
 
 async function loadFuarUsers() {
   const cfg = loadFbConfig();
@@ -717,18 +718,11 @@ async function loadFuarUsers() {
     </div>`;
     return;
   }
-  el.innerHTML = '<div class="text-muted p-3"><span class="spinner-border spinner-border-sm me-2"></span>Kullanıcılar yükleniyor…</div>';
-
+  el.innerHTML = '<div class="text-muted p-3"><span class="spinner-border spinner-border-sm me-2"></span>Çalışanlar yükleniyor…</div>';
   try {
-    let users = [], foundCol = '';
-    for (const col of ['userSettings', 'users', 'employees']) {
-      try {
-        const docs = await fsFetch(cfg.apiKey, cfg.projectId, col);
-        if (docs.length) { users = docs.map(d => ({ ...d, _col: col })); foundCol = col; break; }
-      } catch (_) {}
-    }
-    fbUsersData = users;
-    fbUsersCollection = foundCol || 'userSettings';
+    let docs = [];
+    try { docs = await fsFetch(cfg.apiKey, cfg.projectId, FB_EMP_COL); } catch(_) {}
+    fbUsersData = docs;
     renderFuarUsers();
   } catch (e) {
     el.innerHTML = `<div class="alert alert-danger">Hata: ${esc(e.message)}</div>`;
@@ -737,27 +731,42 @@ async function loadFuarUsers() {
 
 function renderFuarUsers() {
   const el = document.getElementById('fuar-users-content');
+  const addBtn = `<button class="btn btn-sm btn-primary" onclick="openAddFuarUser()">
+    <i class="bi bi-person-plus-fill me-1"></i>Çalışan Ekle</button>`;
+
   if (!fbUsersData.length) {
-    el.innerHTML = `<div class="alert alert-info">
-      <i class="bi bi-info-circle me-2"></i>Kullanıcı bulunamadı. Firebase projesinde <code>userSettings</code>, <code>users</code> veya <code>employees</code> koleksiyonlarından biri bulunmalıdır.
-    </div>`;
+    el.innerHTML = `
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <span class="text-muted small">Henüz çalışan eklenmemiş</span>
+        ${addBtn}
+      </div>
+      <div class="alert alert-info mb-0">
+        <i class="bi bi-info-circle me-2"></i>
+        <code>${FB_EMP_COL}</code> koleksiyonuna çalışan eklemek için butona tıklayın.
+        <br><small class="text-muted mt-1 d-block">
+          Şifreler Firebase Authentication üzerinden yönetilir —
+          <a href="https://console.firebase.google.com" target="_blank">Firebase Console →</a>
+        </small>
+      </div>`;
     return;
   }
+
   el.innerHTML = `
     <div class="card">
-      <div class="card-header d-flex align-items-center gap-2 py-2 px-3">
-        <span class="fw-semibold" style="font-size:13px;"><i class="bi bi-people-fill me-2 text-primary"></i>${fbUsersData.length} kullanıcı</span>
-        <span class="badge bg-light text-muted border" style="font-size:10px;">${fbUsersCollection}</span>
+      <div class="card-header d-flex align-items-center justify-content-between py-2 px-3">
+        <span class="fw-semibold" style="font-size:13px;">
+          <i class="bi bi-people-fill me-2 text-primary"></i>${fbUsersData.length} çalışan
+        </span>
+        ${addBtn}
       </div>
       <div class="table-responsive">
         <table class="table table-hover mb-0 fbd-users-table">
           <thead class="table-light">
             <tr>
-              <th>Ad</th>
+              <th>Ad Soyad</th>
               <th>E-posta</th>
-              <th>Şifre</th>
               <th>Rol</th>
-              <th style="width:80px;"></th>
+              <th style="width:110px;"></th>
             </tr>
           </thead>
           <tbody>
@@ -765,87 +774,147 @@ function renderFuarUsers() {
           </tbody>
         </table>
       </div>
+      <div class="card-footer text-muted small py-2 px-3">
+        <i class="bi bi-lock-fill me-1"></i>Şifre değişikliği için
+        <a href="https://console.firebase.google.com" target="_blank">Firebase Console → Authentication</a>
+        sayfasını kullanın veya <i class="bi bi-key-fill"></i> butonuyla sıfırlama e-postası gönderin.
+      </div>
     </div>`;
 }
 
 function renderFuarUserRow(u) {
-  const name     = esc(u.name || u.displayName || u.email?.split('@')[0] || u._id || '—');
-  const email    = esc(u.email || '—');
-  const hasPass  = !!(u.password || u.passwordHash);
-  const role     = esc(u.role || u.userRole || u.type || '—');
+  const name  = esc(u.name || u._id || '—');
+  const email = esc(u.email || '—');
+  const role  = esc(u.role || '—');
   return `<tr>
     <td class="fw-semibold">${name}</td>
     <td><span style="font-family:monospace;font-size:12px;">${email}</span></td>
-    <td>${hasPass
-      ? '<span class="badge bg-success-subtle text-success border border-success-subtle" style="font-family:monospace;">••••••••</span>'
-      : '<span class="text-muted small">—</span>'}</td>
     <td><span class="badge bg-light text-dark border">${role}</span></td>
     <td>
-      <button class="btn btn-sm btn-outline-primary" onclick="editFuarUser('${esc(u._id)}')">
+      <button class="btn btn-sm btn-outline-primary me-1" onclick="editFuarUser('${esc(u._id)}')" title="Düzenle">
         <i class="bi bi-pencil-fill"></i>
+      </button>
+      <button class="btn btn-sm btn-outline-warning" onclick="resetFuarUserPassword('${esc(u._id)}')" title="Şifre Sıfırla">
+        <i class="bi bi-key-fill"></i>
       </button>
     </td>
   </tr>`;
 }
 
+function openAddFuarUser() {
+  document.getElementById('fuar-edit-user-id').value    = '';
+  document.getElementById('fuar-edit-user-name').value  = '';
+  document.getElementById('fuar-edit-user-email').value = '';
+  document.getElementById('fuar-edit-user-role').value  = '';
+  document.getElementById('fuar-edit-modal-title').textContent = 'Çalışan Ekle';
+  document.getElementById('fuar-reset-pw-btn').style.display = 'none';
+  new bootstrap.Modal(document.getElementById('fuarUserEditModal')).show();
+}
+
 function editFuarUser(id) {
   const u = fbUsersData.find(x => x._id === id);
   if (!u) return;
-  document.getElementById('fuar-edit-user-id').value       = id;
-  document.getElementById('fuar-edit-user-name').value     = u.name || u.displayName || '';
-  document.getElementById('fuar-edit-user-email').value    = u.email || '';
-  document.getElementById('fuar-edit-user-password').value = '';  // never pre-fill password
-  document.getElementById('fuar-edit-user-role').value     = u.role || u.userRole || '';
-  const modal = new bootstrap.Modal(document.getElementById('fuarUserEditModal'));
-  modal.show();
+  document.getElementById('fuar-edit-user-id').value    = id;
+  document.getElementById('fuar-edit-user-name').value  = u.name || '';
+  document.getElementById('fuar-edit-user-email').value = u.email || '';
+  document.getElementById('fuar-edit-user-role').value  = u.role || '';
+  document.getElementById('fuar-edit-modal-title').textContent = 'Çalışan Düzenle';
+  document.getElementById('fuar-reset-pw-btn').style.display = '';
+  new bootstrap.Modal(document.getElementById('fuarUserEditModal')).show();
 }
 
 async function saveFuarUser() {
-  const id  = document.getElementById('fuar-edit-user-id').value;
+  const id  = document.getElementById('fuar-edit-user-id').value.trim();
   const cfg = loadFbConfig();
   if (!cfg?.apiKey || !cfg?.projectId) return;
 
-  const u = fbUsersData.find(x => x._id === id);
-  const col = u?._col || fbUsersCollection;
-
-  const updates = {};
   const nameVal  = document.getElementById('fuar-edit-user-name').value.trim();
   const emailVal = document.getElementById('fuar-edit-user-email').value.trim();
   const roleVal  = document.getElementById('fuar-edit-user-role').value.trim();
-  const pwVal    = document.getElementById('fuar-edit-user-password').value.trim();
 
-  if (nameVal)  updates.name  = nameVal;
-  if (emailVal) updates.email = emailVal;
-  if (roleVal)  { updates.role = roleVal; if (u?.userRole !== undefined) updates.userRole = roleVal; }
-  if (pwVal)    updates.password = pwVal;
+  if (!nameVal || !emailVal) { toast('Ad ve e-posta zorunludur.', 'error'); return; }
 
-  if (!Object.keys(updates).length) {
-    bootstrap.Modal.getInstance(document.getElementById('fuarUserEditModal'))?.hide();
-    return;
-  }
-
-  // Build Firestore REST PATCH
-  const fields = {};
-  for (const [k, v] of Object.entries(updates)) fields[k] = { stringValue: v };
-  const mask = Object.keys(fields).map(k => 'updateMask.fieldPaths=' + encodeURIComponent(k)).join('&');
-  const url  = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/${col}/${id}?key=${cfg.apiKey}&${mask}`;
+  const now = new Date().toISOString();
+  const fields = {
+    name:      { stringValue: nameVal },
+    email:     { stringValue: emailVal },
+    role:      { stringValue: roleVal },
+    updatedAt: { stringValue: now },
+  };
+  const base = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/${FB_EMP_COL}`;
 
   try {
-    const res = await fetch(url, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields }),
-    });
+    let res, docId = id;
+    if (!id) {
+      // Yeni belge — POST (otomatik ID)
+      fields.createdAt = { stringValue: now };
+      res = await fetch(`${base}?key=${cfg.apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields }),
+      });
+    } else {
+      // Güncelle — PATCH + updateMask
+      const mask = Object.keys(fields).map(k => 'updateMask.fieldPaths=' + encodeURIComponent(k)).join('&');
+      res = await fetch(`${base}/${id}?key=${cfg.apiKey}&${mask}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields }),
+      });
+    }
     if (!res.ok) {
       const e = await res.json().catch(() => ({}));
       throw new Error(e.error?.message || 'HTTP ' + res.status);
     }
-    // Update local cache
-    const idx = fbUsersData.findIndex(x => x._id === id);
-    if (idx >= 0) Object.assign(fbUsersData[idx], updates);
+    const data = await res.json();
+    if (!id) docId = data.name?.split('/').pop() || ('emp_' + Date.now());
+
+    const emp = { _id: docId, name: nameVal, email: emailVal, role: roleVal };
+    if (!id) {
+      fbUsersData.push(emp);
+    } else {
+      const idx = fbUsersData.findIndex(x => x._id === id);
+      if (idx >= 0) Object.assign(fbUsersData[idx], emp);
+    }
     bootstrap.Modal.getInstance(document.getElementById('fuarUserEditModal'))?.hide();
-    toast('✓ Kullanıcı güncellendi', 'success');
+    toast(id ? '✓ Çalışan güncellendi' : '✓ Çalışan eklendi', 'success');
     renderFuarUsers();
+  } catch (e) {
+    toast('Hata: ' + e.message, 'error');
+  }
+}
+
+// Şifre sıfırlama — satır butonundan
+async function resetFuarUserPassword(id) {
+  const u = fbUsersData.find(x => x._id === id);
+  if (!u?.email) { toast('E-posta adresi bulunamadı.', 'error'); return; }
+  await _sendPasswordReset(u.email);
+}
+
+// Şifre sıfırlama — modal içindeki butondan
+async function resetFuarUserPasswordFromModal() {
+  const email = document.getElementById('fuar-edit-user-email').value.trim();
+  if (!email) { toast('Önce e-posta adresini girin.', 'error'); return; }
+  await _sendPasswordReset(email);
+}
+
+async function _sendPasswordReset(email) {
+  const cfg = loadFbConfig();
+  if (!cfg?.apiKey) return;
+  try {
+    const res = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${cfg.apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestType: 'PASSWORD_RESET', email }),
+      }
+    );
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error(e.error?.message || 'HTTP ' + res.status);
+    }
+    toast(`✓ Şifre sıfırlama e-postası ${email} adresine gönderildi`, 'success');
   } catch (e) {
     toast('Hata: ' + e.message, 'error');
   }
