@@ -33,6 +33,8 @@
     </a>
     <a href="#" data-page="fuar-dashboard" onclick="showPage('fuar-dashboard');return false;"><i class="bi bi-speedometer2"></i>Fuar Dashboard</a>
     <a href="#" data-page="fuar-users"     onclick="showPage('fuar-users');return false;"><i class="bi bi-people-fill"></i>Kullan&#x131;c&#x131;lar</a>
+    <a href="#" data-page="teklifler"      onclick="showPage('teklifler');return false;"><i class="bi bi-file-earmark-text-fill"></i>Teklifler</a>
+    <a href="#" data-page="fatura"         onclick="showPage('fatura');return false;"><i class="bi bi-receipt"></i>Fatura</a>
     <a href="#" data-page="import"     onclick="showPage('import');return false;"><i class="bi bi-upload"></i>Excel Aktar</a>
     <a href="#" data-page="reports"    onclick="showPage('reports');return false;"><i class="bi bi-bar-chart"></i>Raporlar</a>
     <a href="#" data-page="duplicates" onclick="showPage('duplicates');return false;"><i class="bi bi-copy"></i>Tekrar Kay&#x131;tlar</a>
@@ -583,6 +585,74 @@
   <div class="page-content">
     <div id="fuar-users-content">
       <div class="text-muted p-3">Yükleniyor…</div>
+    </div>
+  </div>
+</div>
+
+<!-- TEKLIFLER PAGE -->
+<div id="teklifler" class="page">
+  <div class="page-topbar">
+    <div class="page-topbar-left">
+      <h1><i class="bi bi-file-earmark-text-fill me-2" style="color:#0d6efd;"></i>Teklifler</h1>
+    </div>
+    <div class="page-topbar-right">
+      <button class="btn btn-sm btn-outline-secondary" onclick="loadTeklifler()" title="Yenile"><i class="bi bi-arrow-clockwise"></i></button>
+    </div>
+  </div>
+  <div class="page-content">
+    <!-- Filter bar -->
+    <div class="fbd-filter-bar mb-3" id="tk-filter-bar">
+      <button class="fbd-filter-btn active" onclick="tkSetFilter('all')">Tümü</button>
+      <button class="fbd-filter-btn" onclick="tkSetFilter('today')">Bugün</button>
+      <button class="fbd-filter-btn" onclick="tkSetFilter('week')">Bu Hafta</button>
+      <button class="fbd-filter-btn" onclick="tkSetFilter('month')">Bu Ay</button>
+      <button class="fbd-filter-btn" onclick="tkSetFilter('year')">Bu Yıl</button>
+      <button class="fbd-filter-btn" onclick="tkSetFilter('custom')">Özel</button>
+      <div id="tk-custom-range" style="display:none;gap:6px;" class="d-flex align-items-center ms-2">
+        <input type="date" id="tk-date-from" class="form-control form-control-sm" style="width:140px;" onchange="tkCustomChange()">
+        <span class="text-muted small">–</span>
+        <input type="date" id="tk-date-to" class="form-control form-control-sm" style="width:140px;" onchange="tkCustomChange()">
+      </div>
+    </div>
+    <!-- Search -->
+    <div class="input-group mb-3" style="max-width:420px;">
+      <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+      <input type="text" class="form-control" id="tk-search" placeholder="Müşteri, teklif no veya ürün ara…" oninput="tkSearch(this.value)">
+    </div>
+    <!-- Table -->
+    <div id="teklifler-content">
+      <div class="text-muted p-3">Yükleniyor…</div>
+    </div>
+  </div>
+</div>
+
+<!-- FATURA PAGE -->
+<div id="fatura" class="page">
+  <div class="page-topbar">
+    <div class="page-topbar-left">
+      <h1><i class="bi bi-receipt me-2" style="color:#0d6efd;"></i>Fatura</h1>
+    </div>
+    <div class="page-topbar-right">
+      <span class="badge bg-warning text-dark me-2" style="font-size:11px;">Provisional — Netsis entegrasyonu planlanmaktadır</span>
+    </div>
+  </div>
+  <div class="page-content">
+    <div id="fatura-content">
+      <div class="text-muted p-3">Teklifler sayfasından bir teklifi seçerek fatura oluşturun.</div>
+    </div>
+  </div>
+</div>
+
+<!-- TEKLIF DETAIL MODAL -->
+<div class="modal fade" id="teklifDetailModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-file-earmark-text me-2"></i><span id="tk-modal-title">Teklif Detayı</span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="tk-modal-body"></div>
+      <div class="modal-footer" id="tk-modal-footer"></div>
     </div>
   </div>
 </div>

@@ -1085,3 +1085,485 @@ function togglePassVis(inputId, btn) {
   const icon = btn.querySelector('i');
   if (icon) { icon.className = isPass ? 'bi bi-eye-slash' : 'bi bi-eye'; }
 }
+
+// ══════════════════════════════════════════════════════════════
+// TEKLIFLER
+// ══════════════════════════════════════════════════════════════
+let tkAllQuotes   = [];
+let tkFilterDate  = 'all';
+let tkFilterFrom  = '';
+let tkFilterTo    = '';
+let tkSearchQ     = '';
+
+async function loadTeklifler() {
+  const cfg = loadFbConfig();
+  const el  = document.getElementById('teklifler-content');
+  if (!cfg?.apiKey || !cfg?.projectId) {
+    el.innerHTML = `<div class="alert alert-warning"><i class="bi bi-exclamation-triangle me-2"></i>Önce <a href="#" onclick="showPage('fuarbot');return false;">Fuarbot Sync</a> sayfasında bağlantı kurun.</div>`;
+    return;
+  }
+  el.innerHTML = '<div class="text-muted p-3"><span class="spinner-border spinner-border-sm me-2"></span>Teklifler yükleniyor…</div>';
+  try {
+    // Use already-loaded fbQuotes if available, otherwise fetch fresh
+    let flat = Object.values(fbQuotes || {}).flat();
+    if (!flat.length) {
+      flat = await fsFetch(cfg.apiKey, cfg.projectId, 'crm_quotes');
+    }
+    // Sort newest first
+    tkAllQuotes = flat.sort((a, b) => (b.createdAt || '') > (a.createdAt || '') ? 1 : -1);
+    renderTeklifler();
+  } catch (e) {
+    el.innerHTML = `<div class="alert alert-danger">Hata: ${esc(e.message)}</div>`;
+  }
+}
+
+function tkSetFilter(f) {
+  tkFilterDate = f;
+  document.querySelectorAll('#tk-filter-bar .fbd-filter-btn').forEach(b => b.classList.remove('active'));
+  const btns = document.querySelectorAll('#tk-filter-bar .fbd-filter-btn');
+  const idx  = ['all','today','week','month','year','custom'].indexOf(f);
+  if (btns[idx]) btns[idx].classList.add('active');
+  const cr = document.getElementById('tk-custom-range');
+  if (cr) cr.style.display = f === 'custom' ? 'flex' : 'none';
+  if (f !== 'custom') renderTeklifler();
+}
+
+function tkCustomChange() {
+  tkFilterFrom = document.getElementById('tk-date-from')?.value || '';
+  tkFilterTo   = document.getElementById('tk-date-to')?.value   || '';
+  renderTeklifler();
+}
+
+function tkSearch(q) {
+  tkSearchQ = q.toLowerCase().trim();
+  renderTeklifler();
+}
+
+function tkGetDateRange() {
+  const now   = new Date();
+  const yy    = now.getFullYear(), mm = now.getMonth(), dd = now.getDate();
+  if (tkFilterDate === 'today')  return { from: new Date(yy, mm, dd), to: new Date(yy, mm, dd, 23, 59, 59) };
+  if (tkFilterDate === 'week')   { const d = new Date(now); d.setDate(dd - d.getDay() + 1); d.setHours(0,0,0,0); return { from: d, to: new Date(yy, mm, dd, 23, 59, 59) }; }
+  if (tkFilterDate === 'month')  return { from: new Date(yy, mm, 1), to: new Date(yy, mm, dd, 23, 59, 59) };
+  if (tkFilterDate === 'year')   return { from: new Date(yy, 0, 1), to: new Date(yy, mm, dd, 23, 59, 59) };
+  if (tkFilterDate === 'custom') return { from: tkFilterFrom ? new Date(tkFilterFrom) : null, to: tkFilterTo ? new Date(tkFilterTo + 'T23:59:59') : null };
+  return { from: null, to: null };
+}
+
+function renderTeklifler() {
+  const el = document.getElementById('teklifler-content');
+  const { from, to } = tkGetDateRange();
+
+  let filtered = tkAllQuotes.filter(q => {
+    // Date filter
+    if (from || to) {
+      const d = q.createdAt ? new Date(q.createdAt) : null;
+      if (!d) return false;
+      if (from && d < from) return false;
+      if (to   && d > to)   return false;
+    }
+    // Search filter
+    if (tkSearchQ) {
+      const haystack = [q.quoteNumber, q.contactName, q.contactCompany, q.product, q.createdBy]
+        .join(' ').toLowerCase();
+      if (!haystack.includes(tkSearchQ)) return false;
+    }
+    return true;
+  });
+
+  if (!tkAllQuotes.length) {
+    el.innerHTML = `<div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>Teklif bulunamadı. Fuarbot uygulamasından teklif oluşturun veya <button class="btn btn-sm btn-outline-primary ms-2" onclick="loadTeklifler()">Yenile</button></div>`;
+    return;
+  }
+  if (!filtered.length) {
+    el.innerHTML = `<div class="text-muted p-3 text-center"><i class="bi bi-search me-2"></i>Filtre kriterlerine uyan teklif bulunamadı.</div>`;
+    return;
+  }
+
+  const totalRev = filtered.reduce((s, q) => s + Number(q.totalNet || 0), 0);
+  const currSym  = q => ({ EUR: '€', USD: '$', TRY: '₺' }[q.currency] || q.currency || '€');
+
+  el.innerHTML = `
+    <div class="d-flex gap-3 mb-3 flex-wrap">
+      <div class="fbd-kpi-card fbd-kpi-blue" style="flex:1;min-width:140px;padding:12px 16px;">
+        <div class="fbd-kpi-val">${filtered.length}</div>
+        <div class="fbd-kpi-lbl">Teklif</div>
+      </div>
+      <div class="fbd-kpi-card fbd-kpi-green" style="flex:1;min-width:140px;padding:12px 16px;">
+        <div class="fbd-kpi-val">${totalRev.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</div>
+        <div class="fbd-kpi-lbl">Toplam Tutar</div>
+      </div>
+      <div class="fbd-kpi-card fbd-kpi-amber" style="flex:1;min-width:140px;padding:12px 16px;">
+        <div class="fbd-kpi-val">${filtered.filter(q => (q.status||'') === 'sent').length}</div>
+        <div class="fbd-kpi-lbl">Gönderildi</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0" style="font-size:13px;">
+          <thead class="table-light">
+            <tr>
+              <th>Teklif No</th>
+              <th>Müşteri</th>
+              <th>Ürün</th>
+              <th>Tarih</th>
+              <th>Tutar</th>
+              <th>Durum</th>
+              <th style="width:160px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filtered.map(q => tkRenderRow(q)).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function tkRenderRow(q) {
+  const date    = q.createdAt ? new Date(q.createdAt).toLocaleDateString('tr-TR') : '—';
+  const num     = esc(q.quoteNumber || q._id?.slice(0,8) || '—');
+  const cust    = esc(q.contactName || q.contactCompany || '—');
+  const prod    = esc(q.product || (q.lines?.[0]?.product) || '—');
+  const sym     = { EUR: '€', USD: '$', TRY: '₺' }[q.currency] || '€';
+  const total   = Number(q.totalNet || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const status  = q.status === 'sent'
+    ? '<span class="badge bg-success-subtle text-success border border-success-subtle">Gönderildi</span>'
+    : '<span class="badge bg-secondary-subtle text-secondary border">Taslak</span>';
+  const pdfBtn  = q.pdfUrl
+    ? `<a href="${esc(q.pdfUrl)}" target="_blank" class="btn btn-sm btn-outline-danger me-1" title="PDF İndir"><i class="bi bi-file-earmark-pdf"></i></a>`
+    : `<button class="btn btn-sm btn-outline-danger me-1" title="PDF Yazdır" onclick="tkPrintQuote('${esc(q._id)}')"><i class="bi bi-printer"></i></button>`;
+  return `<tr>
+    <td class="fw-semibold" style="font-family:monospace;">${num}</td>
+    <td>${cust}</td>
+    <td class="text-truncate" style="max-width:160px;" title="${prod}">${prod}</td>
+    <td>${date}</td>
+    <td class="fw-semibold">${total} ${sym}</td>
+    <td>${status}</td>
+    <td>
+      <button class="btn btn-sm btn-outline-primary me-1" onclick="tkViewDetail('${esc(q._id)}')" title="Detay"><i class="bi bi-eye-fill"></i></button>
+      ${pdfBtn}
+      <button class="btn btn-sm btn-outline-secondary me-1" onclick="tkEmailQuote('${esc(q._id)}')" title="E-posta"><i class="bi bi-envelope-fill"></i></button>
+      <button class="btn btn-sm btn-outline-success" onclick="tkToFatura('${esc(q._id)}')" title="Fatura Oluştur"><i class="bi bi-receipt"></i></button>
+    </td>
+  </tr>`;
+}
+
+function tkFindQuote(id) {
+  return tkAllQuotes.find(q => q._id === id);
+}
+
+function tkViewDetail(id) {
+  const q = tkFindQuote(id);
+  if (!q) return;
+  const sym  = { EUR: '€', USD: '$', TRY: '₺' }[q.currency] || '€';
+  const date = q.createdAt ? new Date(q.createdAt).toLocaleDateString('tr-TR', { day:'2-digit', month:'long', year:'numeric' }) : '—';
+  const sentDate = q.sentAt ? new Date(q.sentAt).toLocaleDateString('tr-TR') : null;
+  const linesHtml = (q.lines || []).length
+    ? `<table class="table table-sm mb-0" style="font-size:12px;">
+        <thead class="table-light"><tr><th>Ürün</th><th>Açıklama</th><th>Miktar</th><th>Birim</th><th>Fiyat</th><th>Toplam</th></tr></thead>
+        <tbody>${(q.lines || []).map(l => {
+          const rowTotal = (parseFloat(l.qty) || 0) * (parseFloat(l.unitPrice) || 0);
+          return `<tr>
+            <td class="fw-semibold">${esc(l.product || '')}</td>
+            <td class="text-muted">${esc(l.description || '')}</td>
+            <td>${esc(String(l.qty || ''))}</td>
+            <td>${esc(l.unit || 'Stk.')}</td>
+            <td>${Number(l.unitPrice || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })} ${sym}</td>
+            <td class="fw-semibold">${rowTotal.toLocaleString('de-DE', { minimumFractionDigits: 2 })} ${sym}</td>
+          </tr>`;
+        }).join('')}</tbody>
+        <tfoot class="table-light">
+          <tr><td colspan="5" class="text-end fw-bold">Toplam</td>
+          <td class="fw-bold">${Number(q.totalNet||0).toLocaleString('de-DE',{minimumFractionDigits:2})} ${sym}</td></tr>
+        </tfoot>
+      </table>`
+    : `<p class="text-muted small">Kalem bilgisi yok.</p>`;
+
+  document.getElementById('tk-modal-title').textContent = `Teklif ${q.quoteNumber || q._id?.slice(0,8) || ''}`;
+  document.getElementById('tk-modal-body').innerHTML = `
+    <div class="row g-3 mb-3">
+      <div class="col-md-6">
+        <div class="card h-100 border-0 bg-light p-3">
+          <div class="fw-semibold mb-2 text-muted small text-uppercase">Müşteri</div>
+          <div class="fw-bold">${esc(q.contactName || '—')}</div>
+          ${q.contactCompany ? `<div class="text-muted small">${esc(q.contactCompany)}</div>` : ''}
+          ${q.contactEmail   ? `<div><a href="mailto:${esc(q.contactEmail)}">${esc(q.contactEmail)}</a></div>` : ''}
+          ${q.contactPhone   ? `<div class="text-muted small">${esc(q.contactPhone)}</div>` : ''}
+          ${q.contactAddress ? `<div class="text-muted small">${esc(q.contactAddress)}</div>` : ''}
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card h-100 border-0 bg-light p-3">
+          <div class="fw-semibold mb-2 text-muted small text-uppercase">Teklif Bilgileri</div>
+          <div><span class="text-muted small">Tarih:</span> <strong>${date}</strong></div>
+          ${sentDate ? `<div><span class="text-muted small">Gönderildi:</span> <strong>${sentDate}</strong></div>` : ''}
+          <div><span class="text-muted small">Oluşturan:</span> <strong>${esc(q.createdBy || '—')}</strong></div>
+          <div><span class="text-muted small">Durum:</span> ${q.status === 'sent'
+            ? '<span class="badge bg-success">Gönderildi</span>'
+            : '<span class="badge bg-secondary">Taslak</span>'}</div>
+          <div class="mt-2"><span class="text-muted small">Toplam:</span> <span class="fw-bold fs-5">${Number(q.totalNet||0).toLocaleString('de-DE',{minimumFractionDigits:2})} ${sym}</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="card border-0">
+      <div class="card-header bg-light py-2 fw-semibold small text-uppercase">Kalemler</div>
+      ${linesHtml}
+    </div>`;
+  document.getElementById('tk-modal-footer').innerHTML = `
+    ${q.pdfUrl
+      ? `<a href="${esc(q.pdfUrl)}" target="_blank" class="btn btn-danger btn-sm"><i class="bi bi-file-earmark-pdf me-1"></i>PDF İndir</a>`
+      : `<button class="btn btn-danger btn-sm" onclick="tkPrintQuote('${esc(q._id)}')"><i class="bi bi-printer me-1"></i>Yazdır / PDF</button>`}
+    <button class="btn btn-outline-secondary btn-sm" onclick="tkEmailQuote('${esc(q._id)}')"><i class="bi bi-envelope me-1"></i>E-posta</button>
+    <button class="btn btn-success btn-sm" onclick="tkToFatura('${esc(q._id)}');bootstrap.Modal.getInstance(document.getElementById('teklifDetailModal'))?.hide()"><i class="bi bi-receipt me-1"></i>Fatura Oluştur</button>
+    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Kapat</button>`;
+  new bootstrap.Modal(document.getElementById('teklifDetailModal')).show();
+}
+
+function tkEmailQuote(id) {
+  const q = tkFindQuote(id);
+  if (!q) return;
+  const sym   = { EUR: '€', USD: '$', TRY: '₺' }[q.currency] || '€';
+  const total = Number(q.totalNet || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 });
+  const subj  = encodeURIComponent(`Teklif ${q.quoteNumber || ''} – ${q.contactCompany || q.contactName || ''}`);
+  const body  = encodeURIComponent(
+    `Sayın ${q.contactName || 'Müşteri'},\n\nTeklif No: ${q.quoteNumber || '—'}\nToplam: ${total} ${sym}\n\nEk bilgi için lütfen iletişime geçin.\n\nSaygılarımızla,\nWindoform`
+  );
+  const to = q.contactEmail ? encodeURIComponent(q.contactEmail) : '';
+  window.open(`mailto:${to}?subject=${subj}&body=${body}`, '_blank');
+}
+
+function tkPrintQuote(id) {
+  const q = tkFindQuote(id);
+  if (!q) return;
+  const sym = { EUR: '€', USD: '$', TRY: '₺' }[q.currency] || '€';
+  const linesHtml = (q.lines || []).map(l => {
+    const t = (parseFloat(l.qty) || 0) * (parseFloat(l.unitPrice) || 0);
+    return `<tr><td>${esc(l.product||'')}</td><td>${esc(l.description||'')}</td><td>${esc(String(l.qty||''))}</td><td>${esc(l.unit||'Stk.')}</td><td style="text-align:right">${Number(l.unitPrice||0).toLocaleString('de-DE',{minimumFractionDigits:2})} ${sym}</td><td style="text-align:right;font-weight:bold">${t.toLocaleString('de-DE',{minimumFractionDigits:2})} ${sym}</td></tr>`;
+  }).join('');
+  const date = q.createdAt ? new Date(q.createdAt).toLocaleDateString('tr-TR') : '—';
+  const w = window.open('', '_blank');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Teklif ${esc(q.quoteNumber||'')}</title>
+  <style>body{font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a;padding:40px}h1{font-size:22px;margin-bottom:4px}
+  .header{display:flex;justify-content:space-between;margin-bottom:32px}.meta{font-size:12px;color:#666}
+  .customer{background:#f8f9fa;padding:16px;border-radius:6px;margin-bottom:24px}
+  table{width:100%;border-collapse:collapse;margin-top:8px}th{background:#f1f3f5;padding:8px;text-align:left;font-size:11px;text-transform:uppercase}
+  td{padding:8px;border-bottom:1px solid #e9ecef}.total-row td{font-weight:bold;font-size:15px;border-top:2px solid #333}
+  @media print{body{padding:20px}button{display:none}}</style></head><body>
+  <div class="header"><div><h1>TEKLİF</h1><div class="meta">No: <strong>${esc(q.quoteNumber||q._id?.slice(0,8)||'')}</strong> &nbsp;|&nbsp; Tarih: <strong>${date}</strong></div></div>
+  <div style="text-align:right"><div style="font-size:18px;font-weight:800;color:#1a56db">WINDOFORM</div></div></div>
+  <div class="customer"><strong>${esc(q.contactName||'')}</strong>${q.contactCompany?`<br>${esc(q.contactCompany)}`:''}${q.contactEmail?`<br>${esc(q.contactEmail)}`:''}${q.contactPhone?`<br>${esc(q.contactPhone)}`:''}${q.contactAddress?`<br>${esc(q.contactAddress)}`:''}</div>
+  <table><thead><tr><th>Ürün</th><th>Açıklama</th><th>Miktar</th><th>Birim</th><th style="text-align:right">Birim Fiyat</th><th style="text-align:right">Toplam</th></tr></thead>
+  <tbody>${linesHtml}</tbody>
+  <tfoot><tr class="total-row"><td colspan="5" style="text-align:right">TOPLAM</td><td style="text-align:right">${Number(q.totalNet||0).toLocaleString('de-DE',{minimumFractionDigits:2})} ${sym}</td></tr></tfoot>
+  </table><br><button onclick="window.print()">🖨️ Yazdır / PDF Olarak Kaydet</button></body></html>`);
+  w.document.close();
+}
+
+function tkToFatura(id) {
+  const q = tkFindQuote(id);
+  if (!q) return;
+  showPage('fatura');
+  loadFatura(q);
+}
+
+// ══════════════════════════════════════════════════════════════
+// FATURA (PROVISIONAL)
+// ══════════════════════════════════════════════════════════════
+let ftCurrentQuote = null;
+
+function loadFatura(quote) {
+  const el = document.getElementById('fatura-content');
+  if (!el) return;
+  if (quote) { ftCurrentQuote = quote; }
+  if (!ftCurrentQuote) {
+    el.innerHTML = `<div class="alert alert-info">
+      <i class="bi bi-info-circle me-2"></i>
+      Fatura oluşturmak için önce <a href="#" onclick="showPage('teklifler');return false;"><strong>Teklifler</strong></a> sayfasından bir teklif seçin ve <i class="bi bi-receipt"></i> butonuna tıklayın.
+    </div>`;
+    return;
+  }
+  renderFatura();
+}
+
+function renderFatura() {
+  const el = document.getElementById('fatura-content');
+  const q  = ftCurrentQuote;
+  const sym = { EUR: '€', USD: '$', TRY: '₺' }[q.currency] || '€';
+  const today = new Date().toISOString().slice(0, 10);
+  const autoFaturaNo = 'F-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-4);
+
+  const linesRows = (q.lines || []).map((l, i) => {
+    const rowTotal = (parseFloat(l.qty) || 0) * (parseFloat(l.unitPrice) || 0);
+    return `<tr>
+      <td><input type="text" class="form-control form-control-sm ft-line-prod" data-i="${i}" value="${esc(l.product||'')}" placeholder="Ürün"></td>
+      <td><input type="text" class="form-control form-control-sm ft-line-desc" data-i="${i}" value="${esc(l.description||'')}" placeholder="Açıklama"></td>
+      <td><input type="number" class="form-control form-control-sm ft-line-qty" data-i="${i}" value="${l.qty||1}" style="width:70px;" oninput="ftRecalc()"></td>
+      <td><input type="text" class="form-control form-control-sm ft-line-unit" data-i="${i}" value="${esc(l.unit||'Stk.')}" style="width:65px;"></td>
+      <td><input type="number" class="form-control form-control-sm ft-line-price" data-i="${i}" value="${Number(l.unitPrice||0).toFixed(2)}" style="width:100px;" oninput="ftRecalc()"></td>
+      <td class="fw-semibold ft-line-total" style="min-width:90px;">${rowTotal.toLocaleString('de-DE',{minimumFractionDigits:2})} ${sym}</td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+      <div>
+        <span class="badge bg-warning text-dark me-2">Provisional</span>
+        <span class="text-muted small">Teklif: <strong>${esc(q.quoteNumber||'—')}</strong></span>
+      </div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-danger" onclick="ftPrint()"><i class="bi bi-printer me-1"></i>Yazdır / PDF</button>
+        <button class="btn btn-sm btn-secondary" disabled title="Netsis entegrasyonu planlanıyor"><i class="bi bi-cloud-arrow-up me-1"></i>Netsis'e Aktar (Yakında)</button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="ftCurrentQuote=null;loadFatura()"><i class="bi bi-x-lg"></i></button>
+      </div>
+    </div>
+
+    <div class="card" id="fatura-document">
+      <div class="card-body p-4">
+        <!-- Header -->
+        <div class="d-flex justify-content-between align-items-start mb-4">
+          <div>
+            <h2 class="fw-bold mb-0" style="color:#1a56db;letter-spacing:-0.5px;">WINDOFORM</h2>
+            <div class="text-muted small">windoform.de</div>
+          </div>
+          <div class="text-end">
+            <h3 class="fw-bold mb-1">FATURA</h3>
+            <div class="row g-2" style="max-width:260px;">
+              <div class="col-5 text-muted small text-end">Fatura No:</div>
+              <div class="col-7"><input type="text" class="form-control form-control-sm" id="ft-no" value="${esc(autoFaturaNo)}"></div>
+              <div class="col-5 text-muted small text-end">Tarih:</div>
+              <div class="col-7"><input type="date" class="form-control form-control-sm" id="ft-date" value="${today}"></div>
+              <div class="col-5 text-muted small text-end">Vade:</div>
+              <div class="col-7"><input type="date" class="form-control form-control-sm" id="ft-due"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Customer -->
+        <div class="row g-3 mb-4">
+          <div class="col-md-6">
+            <div class="bg-light rounded p-3">
+              <div class="text-muted small fw-semibold text-uppercase mb-2">Fatura Kesilecek</div>
+              <input type="text" class="form-control form-control-sm mb-1" id="ft-cust-name" value="${esc(q.contactName||'')}">
+              <input type="text" class="form-control form-control-sm mb-1" id="ft-cust-company" value="${esc(q.contactCompany||'')}">
+              <input type="email" class="form-control form-control-sm mb-1" id="ft-cust-email" value="${esc(q.contactEmail||'')}">
+              <input type="tel" class="form-control form-control-sm mb-1" id="ft-cust-phone" value="${esc(q.contactPhone||'')}">
+              <textarea class="form-control form-control-sm" id="ft-cust-addr" rows="2" placeholder="Adres">${esc(q.contactAddress||'')}</textarea>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="bg-light rounded p-3 h-100">
+              <div class="text-muted small fw-semibold text-uppercase mb-2">Notlar</div>
+              <textarea class="form-control form-control-sm" id="ft-notes" rows="5" placeholder="Ödeme koşulları, notlar…">Teklif No: ${esc(q.quoteNumber||'')} referanslıdır.</textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lines -->
+        <div class="table-responsive mb-3">
+          <table class="table table-sm" id="ft-lines-table">
+            <thead class="table-light">
+              <tr><th>Ürün</th><th>Açıklama</th><th>Miktar</th><th>Birim</th><th>Birim Fiyat</th><th>Toplam</th></tr>
+            </thead>
+            <tbody id="ft-lines-tbody">${linesRows}</tbody>
+          </table>
+        </div>
+        <div class="d-flex justify-content-between align-items-center">
+          <button class="btn btn-sm btn-outline-secondary" onclick="ftAddLine()"><i class="bi bi-plus me-1"></i>Kalem Ekle</button>
+          <div class="text-end">
+            <div class="text-muted small">Net Toplam</div>
+            <div class="fw-bold fs-4" id="ft-grand-total">${Number(q.totalNet||0).toLocaleString('de-DE',{minimumFractionDigits:2})} ${sym}</div>
+            <div class="text-muted small" id="ft-currency-label">${q.currency || 'EUR'}</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function ftRecalc() {
+  const sym = { EUR: '€', USD: '$', TRY: '₺' }[ftCurrentQuote?.currency] || '€';
+  let grand = 0;
+  document.querySelectorAll('#ft-lines-tbody tr').forEach((row, i) => {
+    const qty   = parseFloat(row.querySelector('.ft-line-qty')?.value  || 0) || 0;
+    const price = parseFloat(row.querySelector('.ft-line-price')?.value || 0) || 0;
+    const t     = qty * price;
+    grand += t;
+    const tc = row.querySelector('.ft-line-total');
+    if (tc) tc.textContent = t.toLocaleString('de-DE', { minimumFractionDigits: 2 }) + ' ' + sym;
+  });
+  const tot = document.getElementById('ft-grand-total');
+  if (tot) tot.textContent = grand.toLocaleString('de-DE', { minimumFractionDigits: 2 }) + ' ' + sym;
+}
+
+function ftAddLine() {
+  const tbody = document.getElementById('ft-lines-tbody');
+  if (!tbody) return;
+  const i = tbody.querySelectorAll('tr').length;
+  const sym = { EUR: '€', USD: '$', TRY: '₺' }[ftCurrentQuote?.currency] || '€';
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="text" class="form-control form-control-sm ft-line-prod" data-i="${i}" value="" placeholder="Ürün"></td>
+    <td><input type="text" class="form-control form-control-sm ft-line-desc" data-i="${i}" value="" placeholder="Açıklama"></td>
+    <td><input type="number" class="form-control form-control-sm ft-line-qty" data-i="${i}" value="1" style="width:70px;" oninput="ftRecalc()"></td>
+    <td><input type="text" class="form-control form-control-sm ft-line-unit" data-i="${i}" value="Stk." style="width:65px;"></td>
+    <td><input type="number" class="form-control form-control-sm ft-line-price" data-i="${i}" value="0.00" style="width:100px;" oninput="ftRecalc()"></td>
+    <td class="fw-semibold ft-line-total">0,00 ${sym}</td>`;
+  tbody.appendChild(tr);
+}
+
+function ftPrint() {
+  const q    = ftCurrentQuote || {};
+  const sym  = { EUR: '€', USD: '$', TRY: '₺' }[q.currency] || '€';
+  const no   = document.getElementById('ft-no')?.value || '—';
+  const date = document.getElementById('ft-date')?.value || '—';
+  const due  = document.getElementById('ft-due')?.value || '';
+  const cName    = document.getElementById('ft-cust-name')?.value || '';
+  const cCompany = document.getElementById('ft-cust-company')?.value || '';
+  const cEmail   = document.getElementById('ft-cust-email')?.value || '';
+  const cPhone   = document.getElementById('ft-cust-phone')?.value || '';
+  const cAddr    = document.getElementById('ft-cust-addr')?.value || '';
+  const notes    = document.getElementById('ft-notes')?.value || '';
+
+  let linesHtml = '', grand = 0;
+  document.querySelectorAll('#ft-lines-tbody tr').forEach(row => {
+    const prod  = row.querySelector('.ft-line-prod')?.value || '';
+    const desc  = row.querySelector('.ft-line-desc')?.value || '';
+    const qty   = parseFloat(row.querySelector('.ft-line-qty')?.value  || 0);
+    const unit  = row.querySelector('.ft-line-unit')?.value || 'Stk.';
+    const price = parseFloat(row.querySelector('.ft-line-price')?.value || 0);
+    const t     = qty * price;
+    grand += t;
+    linesHtml += `<tr><td>${esc(prod)}</td><td>${esc(desc)}</td><td>${qty}</td><td>${esc(unit)}</td><td style="text-align:right">${price.toLocaleString('de-DE',{minimumFractionDigits:2})} ${sym}</td><td style="text-align:right;font-weight:bold">${t.toLocaleString('de-DE',{minimumFractionDigits:2})} ${sym}</td></tr>`;
+  });
+
+  const w = window.open('', '_blank');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Fatura ${esc(no)}</title>
+  <style>body{font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a;padding:40px;max-width:800px;margin:0 auto}
+  .header{display:flex;justify-content:space-between;margin-bottom:32px}.meta table{font-size:12px;border-collapse:collapse}
+  .meta td{padding:3px 8px}.meta td:first-child{color:#666;text-align:right}
+  .customer{background:#f8f9fa;padding:16px;border-radius:6px;margin-bottom:24px;font-size:13px}
+  table.lines{width:100%;border-collapse:collapse;margin-top:8px}
+  table.lines th{background:#f1f3f5;padding:8px;text-align:left;font-size:11px;text-transform:uppercase}
+  table.lines td{padding:8px;border-bottom:1px solid #e9ecef}
+  .total-row td{font-weight:bold;font-size:16px;border-top:2px solid #1a56db;padding-top:12px}
+  .notes{margin-top:24px;font-size:12px;color:#666;border-top:1px solid #eee;padding-top:12px}
+  .badge{background:#fef3c7;color:#92400e;padding:3px 8px;border-radius:4px;font-size:10px}
+  @media print{body{padding:20px}button{display:none}}</style></head><body>
+  <div style="text-align:center;margin-bottom:4px;font-size:10px;color:#999;" class="badge">Provisional — Netsis entegrasyonu planlanmaktadır</div>
+  <div class="header">
+    <div><div style="font-size:22px;font-weight:800;color:#1a56db;margin-bottom:4px">WINDOFORM</div><div style="font-size:11px;color:#666">windoform.de</div></div>
+    <div style="text-align:right"><h2 style="margin:0 0 8px">FATURA</h2>
+    <table class="meta"><tr><td>Fatura No:</td><td><strong>${esc(no)}</strong></td></tr>
+    <tr><td>Tarih:</td><td><strong>${esc(date)}</strong></td></tr>
+    ${due ? `<tr><td>Vade:</td><td><strong>${esc(due)}</strong></td></tr>` : ''}
+    </table></div>
+  </div>
+  <div class="customer"><strong>${esc(cName)}</strong>${cCompany?`<br>${esc(cCompany)}`:''}${cEmail?`<br>${esc(cEmail)}`:''}${cPhone?`<br>${esc(cPhone)}`:''}${cAddr?`<br><br>${esc(cAddr).replace(/\n/g,'<br>')}`:''}</div>
+  <table class="lines"><thead><tr><th>Ürün</th><th>Açıklama</th><th>Miktar</th><th>Birim</th><th style="text-align:right">Birim Fiyat</th><th style="text-align:right">Toplam</th></tr></thead>
+  <tbody>${linesHtml}</tbody>
+  <tfoot><tr class="total-row"><td colspan="5" style="text-align:right">NET TOPLAM</td><td style="text-align:right">${grand.toLocaleString('de-DE',{minimumFractionDigits:2})} ${sym}</td></tr></tfoot></table>
+  ${notes ? `<div class="notes">${esc(notes).replace(/\n/g,'<br>')}</div>` : ''}
+  <br><button onclick="window.print()" style="background:#1a56db;color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:13px;">🖨️ Yazdır / PDF Olarak Kaydet</button>
+  </body></html>`);
+  w.document.close();
+}
