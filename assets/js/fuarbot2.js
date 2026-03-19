@@ -466,9 +466,10 @@ function showQuotePreview(qId) {
     : `<span style="background:#e5e7eb;color:#555;padding:3px 10px;border-radius:20px;font-size:11px;">Taslak</span>`;
 
   // ── Use the real PDF when available, fall back to HTML template ──
-  const hasPdf = !!q.pdfBase64;
+  const pdfSrc = q.pdfUrl || (q.pdfBase64 ? `data:application/pdf;base64,${q.pdfBase64}` : null);
+  const hasPdf = !!pdfSrc;
   const contentHtml = hasPdf
-    ? `<iframe src="data:application/pdf;base64,${q.pdfBase64}" class="fb-preview-iframe" title="${esc(q.quoteNumber||'Teklif')}"></iframe>`
+    ? `<iframe src="${pdfSrc}" class="fb-preview-iframe" title="${esc(q.quoteNumber||'Teklif')}"></iframe>`
     : `<div class="fb-preview-paper">
         <div class="fb-pp-header">
           <div><div class="fb-pp-company">WINDOFORM</div><div class="fb-pp-company-sub">Professional Window Solutions</div></div>
@@ -507,7 +508,7 @@ function showQuotePreview(qId) {
       </div>`;
 
   const actionBtn = hasPdf
-    ? `<a href="data:application/pdf;base64,${q.pdfBase64}" download="${esc(q.quoteNumber||'teklif')}.pdf" class="btn btn-success btn-sm"><i class="bi bi-download me-1"></i>PDF İndir</a>`
+    ? `<a href="${pdfSrc}" download="${esc(q.quoteNumber||'teklif')}.pdf" class="btn btn-success btn-sm" target="_blank"><i class="bi bi-download me-1"></i>PDF İndir</a>`
     : `<button onclick="window.print()" class="btn btn-primary btn-sm"><i class="bi bi-printer me-1"></i>Yazdır / PDF</button>`;
 
   document.body.insertAdjacentHTML('beforeend', `
