@@ -1,0 +1,18 @@
+{
+  "mssql": {
+    "server":                 "192.168.1.10",
+    "database":               "NETSIS_URETIM",
+    "user":                   "windoform_reader",
+    "password":               "SIFRENI_BURAYA_YAZ",
+    "port":                   1433,
+    "encrypt":                false,
+    "trustServerCertificate": true,
+
+    "query": ""
+  },
+
+  "firebase": {
+    "projectId": "FIREBASE_PROJECT_ID",
+    "apiKey":    "FIREBASE_API_KEY"
+  }
+}

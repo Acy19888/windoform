@@ -1,0 +1,14 @@
+{
+  "name": "windoform-sync",
+  "version": "1.0.0",
+  "description": "MSSQL → Firestore üretim sync servisi",
+  "main": "sync-production.js",
+  "scripts": {
+    "sync": "node sync-production.js",
+    "install-deps": "npm install mssql node-fetch@2"
+  },
+  "dependencies": {
+    "mssql": "^10.0.4",
+    "node-fetch": "^2.7.0"
+  }
+}
