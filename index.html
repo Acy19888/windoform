@@ -35,6 +35,8 @@
     <a href="#" data-page="fuar-users"     onclick="showPage('fuar-users');return false;"><i class="bi bi-people-fill"></i>Kullan&#x131;c&#x131;lar</a>
     <a href="#" data-page="teklifler"      onclick="showPage('teklifler');return false;"><i class="bi bi-file-earmark-text-fill"></i>Teklifler</a>
     <a href="#" data-page="fatura"         onclick="showPage('fatura');return false;"><i class="bi bi-receipt"></i>Fatura</a>
+    <a href="#" data-page="urunler"        onclick="showPage('urunler');return false;"><i class="bi bi-box-seam-fill"></i>Ürünler</a>
+    <a href="#" data-page="uretim"         onclick="showPage('uretim');return false;"><i class="bi bi-gear-fill"></i>Üretim</a>
     <a href="#" data-page="import"     onclick="showPage('import');return false;"><i class="bi bi-upload"></i>Excel Aktar</a>
     <a href="#" data-page="reports"    onclick="showPage('reports');return false;"><i class="bi bi-bar-chart"></i>Raporlar</a>
     <a href="#" data-page="duplicates" onclick="showPage('duplicates');return false;"><i class="bi bi-copy"></i>Tekrar Kay&#x131;tlar</a>
@@ -589,6 +591,186 @@
   </div>
 </div>
 
+<!-- URUNLER PAGE -->
+<div id="urunler" class="page">
+  <div class="page-topbar">
+    <div class="page-topbar-left">
+      <h1><i class="bi bi-box-seam-fill me-2" style="color:#7c3aed;"></i>Ürünler</h1>
+    </div>
+    <div class="page-topbar-right">
+      <button class="btn btn-sm btn-outline-success me-2" onclick="openCsvImport()"><i class="bi bi-filetype-csv me-1"></i>CSV İçe Aktar</button>
+      <button class="btn btn-sm btn-primary me-2" onclick="openAddProduct()"><i class="bi bi-plus-lg me-1"></i>Ürün Ekle</button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="loadProducts()" title="Yenile"><i class="bi bi-arrow-clockwise"></i></button>
+    </div>
+  </div>
+  <div class="page-content">
+    <div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
+      <div class="input-group" style="max-width:320px;">
+        <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+        <input type="text" class="form-control" id="pr-search" placeholder="SKU veya ürün adı ara…" oninput="prSearch(this.value)">
+      </div>
+      <select class="form-select form-select-sm" id="pr-cat-filter" style="max-width:180px;" onchange="prSetCategory(this.value)">
+        <option value="">Tüm Kategoriler</option>
+      </select>
+    </div>
+    <div id="urunler-content"><div class="text-muted p-3">Yükleniyor…</div></div>
+  </div>
+</div>
+
+<!-- URETIM PAGE -->
+<div id="uretim" class="page">
+  <div class="page-topbar">
+    <div class="page-topbar-left">
+      <h1><i class="bi bi-gear-fill me-2" style="color:#059669;"></i>Üretim</h1>
+    </div>
+    <div class="page-topbar-right">
+      <button class="btn btn-sm btn-success me-2" onclick="openAddProduction()"><i class="bi bi-plus-lg me-1"></i>Üretim Gir</button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="loadUretim()" title="Yenile"><i class="bi bi-arrow-clockwise"></i></button>
+    </div>
+  </div>
+  <div class="page-content">
+    <div class="fbd-filter-bar mb-3" id="ur-filter-bar">
+      <button class="fbd-filter-btn active" onclick="urSetFilter('today')">Bugün</button>
+      <button class="fbd-filter-btn" onclick="urSetFilter('week')">Bu Hafta</button>
+      <button class="fbd-filter-btn" onclick="urSetFilter('month')">Bu Ay</button>
+      <button class="fbd-filter-btn" onclick="urSetFilter('all')">Tümü</button>
+    </div>
+    <div id="uretim-content"><div class="text-muted p-3">Yükleniyor…</div></div>
+  </div>
+</div>
+
+<!-- PRODUCT EDIT MODAL -->
+<div class="modal fade" id="productEditModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-box-seam me-2"></i><span id="pr-modal-title">Ürün Ekle</span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="pr-edit-id">
+        <div class="row g-3">
+          <div class="col-6">
+            <label class="form-label fw-semibold">SKU / Artikelnummer <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="pr-edit-sku" placeholder="WIN-001">
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold">Kategorie</label>
+            <input type="text" class="form-control" id="pr-edit-category" placeholder="Rollo, Jalousie…" list="pr-cat-list">
+            <datalist id="pr-cat-list"></datalist>
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">Modell / Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="pr-edit-name" placeholder="Rollo Standard 80cm">
+          </div>
+          <div class="col-4">
+            <label class="form-label">VK-Preis (€)</label>
+            <input type="number" class="form-control" id="pr-edit-price" placeholder="0.00" step="0.01" min="0">
+          </div>
+          <div class="col-4">
+            <label class="form-label">EK-Preis (€)</label>
+            <input type="number" class="form-control" id="pr-edit-cost" placeholder="0.00" step="0.01" min="0">
+          </div>
+          <div class="col-4">
+            <label class="form-label">Einheit</label>
+            <input type="text" class="form-control" id="pr-edit-unit" placeholder="Stk." list="pr-unit-list">
+            <datalist id="pr-unit-list"><option value="Stk."><option value="m²"><option value="lfd. m"><option value="Paar"></datalist>
+          </div>
+          <div class="col-6">
+            <label class="form-label">Lagerbestand</label>
+            <input type="number" class="form-control" id="pr-edit-stock" placeholder="0" min="0">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Min. Bestand (Alarm)</label>
+            <input type="number" class="form-control" id="pr-edit-minstock" placeholder="5" min="0">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary btn-sm" onclick="saveProduct()"><i class="bi bi-check-lg me-1"></i>Kaydet</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CSV IMPORT MODAL -->
+<div class="modal fade" id="csvImportModal" tabindex="-1">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-filetype-csv me-2 text-success"></i>CSV İçe Aktar</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="csv-step-upload">
+          <p class="text-muted small mb-2">CSV dosyası seçin. Desteklenen ayırıcı: <code>,</code> veya <code>;</code><br>
+          Beklenen sütunlar: <code>sku, name, category, priceNet, costPrice, stock, unit, minStock</code><br>
+          Sütun adları büyük/küçük harf duyarsızdır — farklı adlar da eşleştirilebilir.</p>
+          <input type="file" class="form-control mb-3" id="csv-file-input" accept=".csv,.txt" onchange="handleCsvFile(this)">
+        </div>
+        <div id="csv-step-preview" style="display:none;">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span id="csv-preview-info" class="text-muted small"></span>
+            <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('csv-step-preview').style.display='none';document.getElementById('csv-step-upload').style.display='';">← Geri</button>
+          </div>
+          <!-- Column mapping -->
+          <div id="csv-mapping" class="mb-3 p-3 bg-light rounded" style="font-size:12px;"></div>
+          <!-- Preview table -->
+          <div class="table-responsive" style="max-height:300px;overflow-y:auto;">
+            <table class="table table-sm table-hover mb-0" id="csv-preview-table"></table>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" id="csv-modal-footer" style="display:none;">
+        <button class="btn btn-success btn-sm" id="csv-import-btn" onclick="importCsvProducts()">
+          <i class="bi bi-cloud-download-fill me-1"></i>İçe Aktar
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PRODUCTION ENTRY MODAL -->
+<div class="modal fade" id="productionModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-gear me-2 text-success"></i>Üretim Gir</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="ur-edit-id">
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label fw-semibold">Tarih <span class="text-danger">*</span></label>
+            <input type="date" class="form-control" id="ur-edit-date">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">Ürün <span class="text-danger">*</span></label>
+            <select class="form-select" id="ur-edit-product">
+              <option value="">Ürün seçin…</option>
+            </select>
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold">Üretilen Adet <span class="text-danger">*</span></label>
+            <input type="number" class="form-control" id="ur-edit-qty" placeholder="0" min="1">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Notlar</label>
+            <input type="text" class="form-control" id="ur-edit-notes" placeholder="İsteğe bağlı">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-success btn-sm" onclick="saveProduction()"><i class="bi bi-check-lg me-1"></i>Kaydet + Stoğa Ekle</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- TEKLIFLER PAGE -->
 <div id="teklifler" class="page">
   <div class="page-topbar">
@@ -1048,5 +1230,6 @@
 <!-- Firebase (compat SDK for vanilla JS) -->
 <script src="./assets/js/app.js?v=20260318j"></script>
 <script src="./assets/js/fuarbot2.js"></script>
+<script src="./assets/js/products.js"></script>
 </body>
 </html>

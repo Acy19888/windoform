@@ -679,6 +679,8 @@ function showPage(name) {
   else if (name === 'fuar-users')     loadFuarUsers();
   else if (name === 'teklifler')      loadTeklifler();
   else if (name === 'fatura')         loadFatura();
+  else if (name === 'urunler')        loadProducts();
+  else if (name === 'uretim')         loadUretim();
 }
 
 function setupEventListeners() {
