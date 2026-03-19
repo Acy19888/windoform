@@ -766,7 +766,7 @@ function renderFuarUsers() {
               <th>Ad Soyad</th>
               <th>E-posta</th>
               <th>Rol</th>
-              <th style="width:110px;"></th>
+              <th style="width:140px;"></th>
             </tr>
           </thead>
           <tbody>
@@ -794,8 +794,11 @@ function renderFuarUserRow(u) {
       <button class="btn btn-sm btn-outline-primary me-1" onclick="editFuarUser('${esc(u._id)}')" title="Düzenle">
         <i class="bi bi-pencil-fill"></i>
       </button>
-      <button class="btn btn-sm btn-outline-warning" onclick="resetFuarUserPassword('${esc(u._id)}')" title="Şifre Sıfırla">
+      <button class="btn btn-sm btn-outline-warning me-1" onclick="resetFuarUserPassword('${esc(u._id)}')" title="Şifre Sıfırlama E-postası">
         <i class="bi bi-key-fill"></i>
+      </button>
+      <button class="btn btn-sm btn-outline-danger" onclick="deleteFuarUser('${esc(u._id)}')" title="Sil">
+        <i class="bi bi-trash-fill"></i>
       </button>
     </td>
   </tr>`;
@@ -910,13 +913,45 @@ async function _sendPasswordReset(email) {
         body: JSON.stringify({ requestType: 'PASSWORD_RESET', email }),
       }
     );
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const code = data?.error?.message || 'HTTP ' + res.status;
+      // EMAIL_NOT_FOUND = bu e-posta Firebase Auth'da kayıtlı değil
+      if (code.includes('EMAIL_NOT_FOUND') || code.includes('INVALID_EMAIL')) {
+        toast(`⚠️ ${email} Firebase Authentication'da kayıtlı değil. Önce Firebase Console → Authentication → Users'dan ekleyin.`, 'error');
+      } else {
+        toast('Hata: ' + code, 'error');
+      }
+      return;
+    }
+    // Başarılı — spam uyarısı ile birlikte göster
+    toast(`✓ Sıfırlama e-postası ${email} adresine gönderildi — gelmezse spam/junk klasörünü kontrol edin.`, 'success');
+  } catch (e) {
+    toast('Ağ hatası: ' + e.message, 'error');
+  }
+}
+
+// Çalışan sil
+async function deleteFuarUser(id) {
+  const u = fbUsersData.find(x => x._id === id);
+  if (!u) return;
+  const name = u.name || u.email || id;
+  if (!confirm(`"${name}" adlı çalışanı silmek istediğinize emin misiniz?`)) return;
+
+  const cfg = loadFbConfig();
+  if (!cfg?.apiKey || !cfg?.projectId) return;
+  const url = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/${FB_EMP_COL}/${id}?key=${cfg.apiKey}`;
+  try {
+    const res = await fetch(url, { method: 'DELETE' });
     if (!res.ok) {
       const e = await res.json().catch(() => ({}));
       throw new Error(e.error?.message || 'HTTP ' + res.status);
     }
-    toast(`✓ Şifre sıfırlama e-postası ${email} adresine gönderildi`, 'success');
+    fbUsersData = fbUsersData.filter(x => x._id !== id);
+    toast(`✓ "${name}" silindi`, 'success');
+    renderFuarUsers();
   } catch (e) {
-    toast('Hata: ' + e.message, 'error');
+    toast('Silme hatası: ' + e.message, 'error');
   }
 }
 
