@@ -435,10 +435,16 @@ function _chatLocalIntent(rawText) {
     if (!quotes.length) return { text: '⚠️ Teklif verisi henüz yüklenmemiş.' };
     const recent = quotes.slice(0, Math.min(n, 10));
     const lines = recent.map(q => {
-      const d = q.createdAt ? q.createdAt.slice(0,10) : '?';
-      const c = [q.contactName, q.contactCompany].filter(Boolean).join(' / ') || '—';
+      const d   = q.createdAt ? q.createdAt.slice(0,10) : '?';
+      const c   = [q.contactName, q.contactCompany].filter(Boolean).join(' / ') || '—';
       const sym = {EUR:'€',USD:'$',TRY:'₺'}[q.currency]||'€';
-      return `**${q.quoteNumber||q._id?.slice(0,8)||'?'}** — ${c} — ${Number(q.totalNet||0).toLocaleString('de-DE',{minimumFractionDigits:2})}${sym} (${d})`;
+      const fmt = v => Number(v||0).toLocaleString('de-DE',{minimumFractionDigits:2});
+      // Show first product + unit price if available
+      const firstLine = (q.lines||[]).find(l => l.product);
+      const prodStr = firstLine
+        ? ` · ${firstLine.product} @ ${fmt(firstLine.unitPrice)}${sym}`
+        : (q.product ? ` · ${q.product}` : '');
+      return `**${q.quoteNumber||q._id?.slice(0,8)||'?'}** — ${c}${prodStr} — **${fmt(q.totalNet)}${sym}** (${d})`;
     });
     return { text: `📄 **Son ${recent.length} Teklif:**\n\n${lines.join('\n')}` };
   }
@@ -460,15 +466,36 @@ function _chatLocalIntent(rawText) {
         if (hits.length) {
           const q   = hits[0];
           const sym = {EUR:'€',USD:'$',TRY:'₺'}[q.currency]||'€';
+          const fmt = n => Number(n||0).toLocaleString('de-DE',{minimumFractionDigits:2});
           const d   = q.createdAt ? new Date(q.createdAt).toLocaleDateString('tr-TR') : '?';
-          const linesTxt = (q.lines||[]).map(l =>
-            `  - ${l.product||'?'}: ${l.qty||0} × ${Number(l.unitPrice||0).toFixed(2)}${sym} = **${((l.qty||0)*(l.unitPrice||0)).toLocaleString('de-DE',{minimumFractionDigits:2})}${sym}**`
-          ).join('\n');
-          let resp = `📄 **${q.quoteNumber||'?'}** — ${[q.contactName,q.contactCompany].filter(Boolean).join(' / ')||'?'}\n`;
-          resp    += `Tarih: ${d} | Durum: ${q.status==='sent'?'✅ Gönderildi':'📝 Taslak'}\n`;
-          resp    += `Toplam: **${Number(q.totalNet||0).toLocaleString('de-DE',{minimumFractionDigits:2})} ${sym}**`;
-          if (linesTxt) resp += `\n\nKalemler:\n${linesTxt}`;
-          if (hits.length > 1) resp += `\n\n_+${hits.length-1} daha teklif bulundu_`;
+
+          // Build line items — use q.lines if available, else fall back to top-level fields
+          let linesTxt = '';
+          const linesArr = (q.lines||[]).filter(l => l.product || l.qty);
+          if (linesArr.length) {
+            linesTxt = linesArr.map(l => {
+              const rowTotal = (parseFloat(l.qty)||0) * (parseFloat(l.unitPrice)||0);
+              const descPart = l.description ? ` _(${l.description})_` : '';
+              return `  - **${l.product||'?'}**${descPart}: ${l.qty||0} ${l.unit||'Stk.'} × **${fmt(l.unitPrice)} ${sym}** = ${fmt(rowTotal)} ${sym}`;
+            }).join('\n');
+          } else if (q.product) {
+            // Single-product quote from fuarbot (no lines breakdown)
+            linesTxt = `  - **${q.product}**: Toplam ${fmt(q.totalNet)} ${sym}` +
+              (q.qty ? ` (${q.qty} ${q.unit||'Stk.'})` : '');
+          }
+
+          // VAT + gross
+          const vatRate  = q.vatRate != null ? q.vatRate : 19;
+          const vatAmt   = Number(q.totalNet||0) * (vatRate/100);
+          const gross    = Number(q.totalNet||0) + vatAmt;
+
+          let resp = `📄 **${q.quoteNumber||q._id?.slice(0,8)||'?'}**\n`;
+          resp    += `👤 ${[q.contactName,q.contactCompany].filter(Boolean).join(' / ')||'?'}\n`;
+          resp    += `📅 ${d} | ${q.status==='sent'?'✅ Gönderildi':'📝 Taslak'}\n\n`;
+          if (linesTxt) resp += `**Kalemler:**\n${linesTxt}\n\n`;
+          resp    += `**Net:** ${fmt(q.totalNet)} ${sym}`;
+          if (vatRate) resp += ` | **KDV (${vatRate}%):** ${fmt(vatAmt)} ${sym} | **Brüt:** ${fmt(gross)} ${sym}`;
+          if (hits.length > 1) resp += `\n\n_Bu müşteri için +${hits.length-1} daha teklif var_`;
           return { text: resp };
         }
         return { text: `❌ "${words.join(' ')}" için teklif bulunamadı.` };
@@ -624,10 +651,21 @@ function _buildContext() {
   if (quotes.length) {
     lines.push('\n=== TEKLİFLER (son 80) ===');
     quotes.slice(0,80).forEach(q => {
-      const d = q.createdAt ? q.createdAt.slice(0,10) : '?';
-      const c = [q.contactName,q.contactCompany].filter(Boolean).join('/');
-      const p = q.product || q.lines?.[0]?.product || '?';
-      lines.push(`${q.quoteNumber||'?'} | ${c} | ${p} | ${q.totalNet||0}${q.currency||'EUR'} | ${d} | ${q.status||'draft'}`);
+      const d   = q.createdAt ? q.createdAt.slice(0,10) : '?';
+      const c   = [q.contactName,q.contactCompany].filter(Boolean).join('/');
+      const sym = q.currency || 'EUR';
+      const linesArr = (q.lines||[]).filter(l => l.product || l.qty);
+      if (linesArr.length) {
+        // Multi-line quote — show header + each kalem with unit price
+        lines.push(`${q.quoteNumber||'?'} | ${c} | Net:${q.totalNet||0}${sym} | ${d} | ${q.status||'draft'}`);
+        linesArr.forEach(l => {
+          lines.push(`  -> ${l.product||'?'} | ${l.qty||0} ${l.unit||'Stk.'} | Birim:${Number(l.unitPrice||0).toFixed(2)}${sym} | Toplam:${((parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0)).toFixed(2)}${sym}`);
+        });
+      } else {
+        // Single-product quote
+        const p = q.product || '?';
+        lines.push(`${q.quoteNumber||'?'} | ${c} | ${p} | Net:${q.totalNet||0}${sym}${q.qty?` | Miktar:${q.qty}`:''} | ${d} | ${q.status||'draft'}`);
+      }
     });
   }
 
