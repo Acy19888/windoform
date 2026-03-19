@@ -23,6 +23,12 @@ function showFbConfig() {
     const s = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
     s('fb-api-key', cfg.apiKey); s('fb-project-id', cfg.projectId); s('fb-auth-domain', cfg.authDomain);
   }
+  // Load Gemini key
+  try {
+    const gk = JSON.parse(localStorage.getItem('windoform_cfg') || '{}').geminiKey || '';
+    const el = document.getElementById('gemini-api-key');
+    if (el) el.value = gk;
+  } catch { /* ignore */ }
 }
 
 function connectFuarbot() {
