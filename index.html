@@ -1100,8 +1100,15 @@
             </select>
           </div>
           <div class="col-md-2">
+            <label class="form-label form-label-sm text-muted">Pazar</label>
+            <select class="form-select form-select-sm" id="tk-edit-market" onchange="_tkMarketChange()">
+              <option value="domestic">Yurtiçi</option>
+              <option value="export">Yurtdışı</option>
+            </select>
+          </div>
+          <div class="col-md-2">
             <label class="form-label form-label-sm text-muted">KDV %</label>
-            <input type="number" class="form-control form-control-sm" id="tk-edit-vat" value="19" min="0" max="100" oninput="tkModalRecalc()">
+            <input type="number" class="form-control form-control-sm" id="tk-edit-vat" value="20" min="0" max="100" oninput="tkModalRecalc()">
           </div>
           <div class="col-md-2">
             <label class="form-label form-label-sm text-muted">Durum</label>

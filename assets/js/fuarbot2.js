@@ -1512,7 +1512,10 @@ function tkPrintQuote(id) {
   <div class="customer"><strong>${esc(q.contactName||'')}</strong>${q.contactCompany?`<br>${esc(q.contactCompany)}`:''}${q.contactEmail?`<br>${esc(q.contactEmail)}`:''}${q.contactPhone?`<br>${esc(q.contactPhone)}`:''}${q.contactAddress?`<br>${esc(q.contactAddress)}`:''}</div>
   <table><thead><tr><th>Ürün</th><th>Açıklama</th><th>Miktar</th><th>Birim</th><th style="text-align:right">Birim Fiyat</th><th style="text-align:right">Toplam</th></tr></thead>
   <tbody>${linesHtml}</tbody>
-  <tfoot><tr class="total-row"><td colspan="5" style="text-align:right">TOPLAM</td><td style="text-align:right">${Number(q.totalNet||0).toLocaleString('de-DE',{minimumFractionDigits:2})} ${sym}</td></tr></tfoot>
+  <tfoot>
+  ${q.vatRate > 0 ? `<tr><td colspan="5" style="text-align:right;font-size:12px;color:#555">Ara Toplam</td><td style="text-align:right;font-size:12px">${Number(q.totalNet||0).toLocaleString('de-DE',{minimumFractionDigits:2})} ${sym}</td></tr>
+  <tr><td colspan="5" style="text-align:right;font-size:12px;color:#555">KDV (${q.vatRate}%)</td><td style="text-align:right;font-size:12px">${Number(q.vatAmount||0).toLocaleString('de-DE',{minimumFractionDigits:2})} ${sym}</td></tr>` : `<tr><td colspan="5" style="text-align:right;font-size:12px;color:#0a7a4b;font-style:italic">KDV Muaf (Yurtdışı İhracat)</td><td style="text-align:right;font-size:12px;color:#0a7a4b">%0</td></tr>`}
+  <tr class="total-row"><td colspan="5" style="text-align:right">GENEL TOPLAM</td><td style="text-align:right">${Number(q.vatRate > 0 ? (q.totalGross||q.totalNet||0) : (q.totalNet||0)).toLocaleString('de-DE',{minimumFractionDigits:2})} ${sym}</td></tr></tfoot>
   </table><br><button onclick="window.print()">🖨️ Yazdır / PDF Olarak Kaydet</button></body></html>`);
   w.document.close();
 }
@@ -1539,6 +1542,14 @@ function _tkAutoQuoteNum() {
 // ── Teklif formu: Firmalar datalist + otomatik doldur ────────
 let _tkAllCompanies  = [];
 let _tkAllContacts   = [];
+
+function _tkMarketChange() {
+  const market = document.getElementById('tk-edit-market')?.value;
+  const vatEl  = document.getElementById('tk-edit-vat');
+  if (!vatEl) return;
+  vatEl.value = market === 'export' ? '0' : '20';
+  tkModalRecalc();
+}
 
 async function _tkPopulateDataLists() {
   try {
@@ -1604,8 +1615,9 @@ function tkNewQuote() {
   document.getElementById('tk-edit-num').value   = _tkAutoQuoteNum();
   document.getElementById('tk-edit-date').value  = new Date().toISOString().slice(0,10);
   document.getElementById('tk-edit-currency').value = 'EUR';
-  document.getElementById('tk-edit-vat').value   = '19';
-  document.getElementById('tk-edit-status').value = 'draft';
+  document.getElementById('tk-edit-market').value   = 'domestic';
+  document.getElementById('tk-edit-vat').value      = '20';
+  document.getElementById('tk-edit-status').value   = 'draft';
   document.getElementById('tk-edit-cname').value    = '';
   document.getElementById('tk-edit-ccompany').value = '';
   document.getElementById('tk-edit-cemail').value   = '';
@@ -1627,7 +1639,8 @@ function tkEditQuote(id) {
   document.getElementById('tk-edit-num').value      = q.quoteNumber  || '';
   document.getElementById('tk-edit-date').value     = q.createdAt ? q.createdAt.slice(0,10) : new Date().toISOString().slice(0,10);
   document.getElementById('tk-edit-currency').value = q.currency     || 'EUR';
-  document.getElementById('tk-edit-vat').value      = q.vatRate      != null ? String(q.vatRate) : '19';
+  document.getElementById('tk-edit-market').value   = q.market       || (q.vatRate === 0 ? 'export' : 'domestic');
+  document.getElementById('tk-edit-vat').value      = q.vatRate      != null ? String(q.vatRate) : '20';
   document.getElementById('tk-edit-status').value   = q.status       || 'draft';
   document.getElementById('tk-edit-cname').value    = q.contactName    || '';
   document.getElementById('tk-edit-ccompany').value = q.contactCompany || '';
@@ -1696,7 +1709,8 @@ async function tkSaveQuote() {
   const quoteNumber   = document.getElementById('tk-edit-num').value.trim()       || _tkAutoQuoteNum();
   const dateVal       = document.getElementById('tk-edit-date').value             || new Date().toISOString().slice(0,10);
   const currency      = document.getElementById('tk-edit-currency').value         || 'EUR';
-  const vatRate       = parseFloat(document.getElementById('tk-edit-vat').value   || 19);
+  const market        = document.getElementById('tk-edit-market').value           || 'domestic';
+  const vatRate       = parseFloat(document.getElementById('tk-edit-vat').value   || 20);
   const status        = document.getElementById('tk-edit-status').value           || 'draft';
   const contactName   = document.getElementById('tk-edit-cname').value.trim();
   const contactCompany= document.getElementById('tk-edit-ccompany').value.trim();
@@ -1752,6 +1766,7 @@ async function tkSaveQuote() {
     createdAt:       toStr(createdAt),
     updatedAt:       toStr(now),
     currency:        toStr(currency),
+    market:          toStr(market),
     vatRate:         toNum(vatRate),
     status:          toStr(status),
     contactName:     toStr(contactName),
