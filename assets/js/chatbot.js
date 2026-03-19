@@ -6,6 +6,22 @@
 const CHAT_CLAUDE_URL   = 'https://api.anthropic.com/v1/messages';
 const CHAT_CLAUDE_MODEL = 'claude-haiku-4-5-20251001'; // fast + affordable
 
+const WINDOFORM_ABOUT = `
+WINDOFORM® Şirketi Hakkında:
+Sanayi ve üretim alanında kökü 1963 yılına dayanan WINDOFORM®, Çetmen sanayi sitesi içerisinde
+9000m² kapalı alanda PVC ve alüminyum profiller için kapı ve pencere kolları ve aksesuarları üretmektedir.
+Şirket 57 yıllık sanayicilik tecrübesiyle 1993'ten beri WINDOFORM® markasıyla zamak, plastik ve
+alüminyum robotlu enjeksiyon presler ile kapı-pencere kollarını ve aksesuarlarını tamamen kendi
+bünyesinde üretmektedir.
+AR-GE çalışmalarına öncelikli önem veren şirket, ürünlerini hem tasarım hem de işlevsellik olarak
+geliştirmiş ve dünyanın önde gelen markaları ile yarışır hale gelmiştir. WINDOFORM® kendi alanında
+Türkiye'nin önde gelen aksesuar üreticilerinden olup Avrupa'da ve dünyada rakipleriyle model
+çeşitliliği, fiyat ve hizmet açısından rekabet halindedir.
+Yönetim kurulu başkanı: Aydın Yüksel.
+Satış organizasyonu: Türkiye'de İzmir, İstanbul ve Gaziantep.
+Ürün kategorileri: Kapı kolları, pencere kolları, zamak/plastik/alüminyum aksesuarlar, PVC & alüminyum profil aksesuarları.
+`.trim();
+
 let _chatOpen    = false;
 let _chatHistory = []; // { role:'user'|'model', text:string, action?:{type,params} }
 let _chatTyping  = false;

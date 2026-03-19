@@ -33,6 +33,7 @@
     </a>
     <a href="#" data-page="fuar-dashboard" onclick="showPage('fuar-dashboard');return false;"><i class="bi bi-speedometer2"></i>Fuar Dashboard</a>
     <a href="#" data-page="fuar-users"     onclick="showPage('fuar-users');return false;"><i class="bi bi-people-fill"></i>Kullan&#x131;c&#x131;lar</a>
+    <a href="#" data-page="leads"         onclick="showPage('leads');return false;"><i class="bi bi-funnel-fill"></i>Leads &amp; Pipeline</a>
     <a href="#" data-page="teklifler"      onclick="showPage('teklifler');return false;"><i class="bi bi-file-earmark-text-fill"></i>Teklifler</a>
     <a href="#" data-page="fatura"         onclick="showPage('fatura');return false;"><i class="bi bi-receipt"></i>Fatura</a>
     <a href="#" data-page="urunler"        onclick="showPage('urunler');return false;"><i class="bi bi-box-seam-fill"></i>Ürünler</a>
@@ -782,6 +783,21 @@
   </div>
 </div>
 
+<!-- LEADS + PIPELINE PAGE -->
+<div id="leads" class="page">
+  <div class="page-topbar">
+    <div class="page-topbar-left">
+      <h1><i class="bi bi-funnel-fill me-2" style="color:#2563eb;"></i>Leads &amp; Pipeline</h1>
+    </div>
+    <div class="page-topbar-right">
+      <button class="btn btn-sm btn-primary" onclick="ldNew()"><i class="bi bi-plus-lg me-1"></i>Yeni Lead</button>
+    </div>
+  </div>
+  <div class="page-content">
+    <div id="leads-content"><div class="text-muted p-3"><i class="bi bi-hourglass-split me-2"></i>Yükleniyor…</div></div>
+  </div>
+</div>
+
 <!-- TEKLIFLER PAGE -->
 <div id="teklifler" class="page">
   <div class="page-topbar">
@@ -1347,6 +1363,143 @@
 <script src="./assets/js/fuarbot2.js"></script>
 <script src="./assets/js/products.js"></script>
 <script src="./assets/js/chatbot.js"></script>
+<script src="./assets/js/leads.js"></script>
 <script>document.addEventListener('DOMContentLoaded', () => { initChatbot(); });</script>
+
+<!-- ══════════════════════════════════════════
+     LEAD EDIT / CREATE MODAL
+══════════════════════════════════════════ -->
+<div class="modal fade" id="leadEditModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="ld-modal-title">Yeni Lead</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="ld-f-id">
+        <div class="row g-3">
+          <!-- Contact info -->
+          <div class="col-md-6">
+            <label class="form-label form-label-sm fw-semibold">Ad</label>
+            <input type="text" class="form-control form-control-sm" id="ld-f-fname" placeholder="Ad" oninput="_ldConfPreview()">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label form-label-sm fw-semibold">Soyad</label>
+            <input type="text" class="form-control form-control-sm" id="ld-f-lname" placeholder="Soyad" oninput="_ldConfPreview()">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label form-label-sm fw-semibold">Firma</label>
+            <input type="text" class="form-control form-control-sm" id="ld-f-company" placeholder="Firma adı" oninput="_ldConfPreview()">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label form-label-sm fw-semibold">E-posta</label>
+            <input type="email" class="form-control form-control-sm" id="ld-f-email" placeholder="ornek@firma.com" oninput="_ldConfPreview()">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label form-label-sm fw-semibold">Telefon</label>
+            <input type="text" class="form-control form-control-sm" id="ld-f-phone" placeholder="+90 555 000 0000" oninput="_ldConfPreview()">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label form-label-sm fw-semibold">Website</label>
+            <input type="text" class="form-control form-control-sm" id="ld-f-website" placeholder="https://firma.com">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label form-label-sm fw-semibold">Ülke</label>
+            <input type="text" class="form-control form-control-sm" id="ld-f-country" placeholder="Türkiye" oninput="_ldConfPreview()">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label form-label-sm fw-semibold">Şehir</label>
+            <input type="text" class="form-control form-control-sm" id="ld-f-city" placeholder="İstanbul" oninput="_ldConfPreview()">
+          </div>
+          <!-- Pipeline -->
+          <div class="col-12"><hr class="my-1"><div class="fw-semibold small text-muted text-uppercase">Pipeline</div></div>
+          <div class="col-md-4">
+            <label class="form-label form-label-sm fw-semibold">Aşama</label>
+            <select class="form-select form-select-sm" id="ld-f-stage">
+              <option value="new">Yeni</option>
+              <option value="qualified">Nitelikli</option>
+              <option value="proposal">Teklif</option>
+              <option value="negotiation">Müzakere</option>
+              <option value="won">Kazanıldı</option>
+              <option value="lost">Kaybedildi</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label form-label-sm fw-semibold">Kaynak</label>
+            <select class="form-select form-select-sm" id="ld-f-source" onchange="_ldConfPreview()">
+              <option value="manual">Manuel</option>
+              <option value="fuarbot">Fuarbot</option>
+              <option value="web_form">Web Form</option>
+              <option value="csv_import">CSV Import</option>
+              <option value="email">E-posta</option>
+              <option value="api">API</option>
+              <option value="web_research">Web Araştırma</option>
+              <option value="unknown">Bilinmiyor</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label form-label-sm fw-semibold">Atanan</label>
+            <input type="text" class="form-control form-control-sm" id="ld-f-assigned" placeholder="Sorumlu kişi">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label form-label-sm fw-semibold">Beklenen Değer</label>
+            <input type="number" class="form-control form-control-sm" id="ld-f-value" placeholder="0" min="0">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label form-label-sm fw-semibold">Para Birimi</label>
+            <select class="form-select form-select-sm" id="ld-f-currency">
+              <option value="EUR">EUR</option>
+              <option value="USD">USD</option>
+              <option value="TRY">TRY</option>
+              <option value="GBP">GBP</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label form-label-sm fw-semibold">Tahmini Kapanış</label>
+            <input type="date" class="form-control form-control-sm" id="ld-f-close-date">
+          </div>
+          <!-- Extra -->
+          <div class="col-12"><hr class="my-1"><div class="fw-semibold small text-muted text-uppercase">Detaylar</div></div>
+          <div class="col-md-6">
+            <label class="form-label form-label-sm fw-semibold">Ürün İlgisi</label>
+            <input type="text" class="form-control form-control-sm" id="ld-f-product" placeholder="Ürün veya kategori">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label form-label-sm fw-semibold">Sektör</label>
+            <input type="text" class="form-control form-control-sm" id="ld-f-sector" placeholder="İnşaat, Konut…">
+          </div>
+          <div class="col-12">
+            <label class="form-label form-label-sm fw-semibold">Notlar</label>
+            <textarea class="form-control form-control-sm" id="ld-f-notes" rows="3" placeholder="Notlar…" oninput="_ldConfPreview()"></textarea>
+          </div>
+        </div>
+        <!-- Live confidence preview -->
+        <div class="mt-3 p-2 rounded" style="background:#f8fafc;" id="ld-conf-preview"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+        <button type="button" class="btn btn-primary btn-sm" onclick="ldSave()"><i class="bi bi-floppy me-1"></i>Kaydet</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     LEAD DETAIL MODAL
+══════════════════════════════════════════ -->
+<div class="modal fade" id="leadDetailModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="ld-detail-title">Lead Detayı</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="ld-detail-body"></div>
+      <div class="modal-footer d-flex gap-2 flex-wrap" id="ld-detail-footer"></div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
