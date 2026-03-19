@@ -126,11 +126,16 @@ async function fetchAllData(apiKey, projectId, silent) {
   }
 }
 
+function fbManualRefresh() {
+  const cfg = loadFbConfig();
+  if (cfg?.apiKey && cfg?.projectId) fetchAllData(cfg.apiKey, cfg.projectId, false);
+}
+
 function startFuarbotSync(apiKey, projectId) {
   setFbStatus('Bağlanıyor…', 'warning');
   if (fbPollInterval) clearInterval(fbPollInterval);
   fetchAllData(apiKey, projectId, false);
-  fbPollInterval = setInterval(() => fetchAllData(apiKey, projectId, true), 30000);
+  fbPollInterval = setInterval(() => fetchAllData(apiKey, projectId, true), 3 * 60 * 1000); // 3 min
 }
 
 // ── Main tab switching ────────────────────────────────────
