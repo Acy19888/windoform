@@ -188,6 +188,8 @@ async function _appStart() {
     // Pull data from Firestore if local is empty (new browser)
     if (typeof syncFromFirestore === 'function') await syncFromFirestore();
     await loadCompanies();
+    // Start Fuarbot background sync so activities/quotes are always fresh
+    if (typeof fbBackgroundSync === 'function') setTimeout(fbBackgroundSync, 1500);
   } catch (err) {
     console.error('Başlangıç hatası:', err);
     toast('Veritabanı başlatılamadı: ' + err.message + ' — Tarayıcı izinlerini kontrol edin.', 'error');
@@ -1518,7 +1520,7 @@ async function showContactModal(id) {
   // Reset to Info tab
   contSwitchTab('info');
 
-  // ── Find matching Fuarbot data by email or name ───────
+  // ── Find matching Fuarbot customer by email or name ──
   const email   = (c.email || '').toLowerCase().trim();
   const nameLow = (c.name  || '').toLowerCase().trim();
   let fbCust = null;
@@ -1528,52 +1530,64 @@ async function showContactModal(id) {
       (nameLow && (x.name||'').toLowerCase().trim() === nameLow)
     );
   }
-
-  // ── Collect Fuarbot activities + quotes ───────────────
-  const fbActs = fbCust && typeof fbActivities !== 'undefined' ? (fbActivities[fbCust._id] || []) : [];
-  const fbQts  = fbCust && typeof fbQuotes     !== 'undefined' ? (fbQuotes[fbCust._id]     || []) : [];
-
-  // ── Populate Timeline (activities + quotes merged) ────
-  const tlContent = document.getElementById('cont-timeline-content');
-  const tlBadge   = document.getElementById('cont-timeline-badge');
-
-  // Convert quotes to timeline-compatible items
-  const _sym = (typeof SYM !== 'undefined') ? SYM : {EUR:'€',USD:'$',TRY:'₺',GBP:'£'};
-  const qtAsActs = fbQts.map(q => {
-    const cur  = _sym[q.currency] || q.currency || '€';
-    const amt  = q.totalNet != null ? Number(q.totalNet).toLocaleString('tr-TR',{minimumFractionDigits:2})+' '+cur : '';
-    const statusLabel = q.status === 'sent' ? '✓ Gönderildi' : 'Taslak';
-    return {
-      type: 'quote',
-      createdAt: q.createdAt,
-      text: [q.quoteNumber || 'Teklif', amt, statusLabel].filter(Boolean).join(' · '),
-    };
-  });
-
-  // Merge and sort newest first
-  const allTlItems = [...fbActs, ...qtAsActs].sort((a, b) =>
-    (b.createdAt || '') > (a.createdAt || '') ? 1 : -1
-  );
-
-  if (allTlItems.length && typeof renderTimeline === 'function') {
-    tlContent.innerHTML = renderTimeline(allTlItems);
-    tlBadge.textContent = allTlItems.length;
-    tlBadge.style.display = '';
-  } else {
-    tlContent.innerHTML = '<div class="text-muted small text-center py-4"><i class="bi bi-clock-history me-2 opacity-25"></i>Fuarbot\'ta aktivite bulunamadı.</div>';
-    tlBadge.style.display = 'none';
+  // Also search ALL raw crm_customers (including imported ones) for a match
+  // so the timeline works even after a contact has been imported to CRM.
+  if (!fbCust && typeof fbAllCustomersRaw !== 'undefined' && fbAllCustomersRaw.length) {
+    fbCust = fbAllCustomersRaw.find(x =>
+      (email && (x.email||'').toLowerCase().trim() === email) ||
+      (nameLow && (x.name||'').toLowerCase().trim() === nameLow)
+    );
   }
 
-  // ── Populate Quotes tab (full quote cards) ────────────
-  const qContent = document.getElementById('cont-quotes-content');
-  const qBadge   = document.getElementById('cont-quotes-badge');
-  if (fbQts.length && typeof renderQuoteCard === 'function') {
-    qContent.innerHTML = fbQts.map(q => renderQuoteCard(q)).join('');
-    qBadge.textContent = fbQts.length;
-    qBadge.style.display = '';
-  } else {
-    qContent.innerHTML = '<div class="text-muted small text-center py-4"><i class="bi bi-file-earmark-text me-2 opacity-25"></i>Fuarbot\'ta teklif bulunamadı.</div>';
-    qBadge.style.display = 'none';
+  // ── Timeline/Quotes placeholder shown immediately ─────
+  const tlContent = document.getElementById('cont-timeline-content');
+  const tlBadge   = document.getElementById('cont-timeline-badge');
+  const qContent  = document.getElementById('cont-quotes-content');
+  const qBadge    = document.getElementById('cont-quotes-badge');
+  tlContent.innerHTML = '<div class="text-muted small text-center py-4"><i class="bi bi-hourglass-split me-2 opacity-25"></i>Yükleniyor…</div>';
+
+  // ── Helper: render timeline + quotes from current memory ─
+  const _renderFbPanels = () => {
+    const fbActs = fbCust && typeof fbActivities !== 'undefined' ? (fbActivities[fbCust._id] || []) : [];
+    const fbQts  = fbCust && typeof fbQuotes     !== 'undefined' ? (fbQuotes[fbCust._id]     || []) : [];
+
+    // Convert quotes to timeline items
+    const _sym = (typeof SYM !== 'undefined') ? SYM : {EUR:'€',USD:'$',TRY:'₺',GBP:'£'};
+    const qtAsActs = fbQts.map(q => {
+      const cur  = _sym[q.currency] || q.currency || '€';
+      const amt  = q.totalNet != null ? Number(q.totalNet).toLocaleString('tr-TR',{minimumFractionDigits:2})+' '+cur : '';
+      const statusLabel = q.status === 'sent' ? '✓ Gönderildi' : 'Taslak';
+      return { type:'quote', createdAt:q.createdAt, text:[q.quoteNumber||'Teklif',amt,statusLabel].filter(Boolean).join(' · ') };
+    });
+    const allTlItems = [...fbActs, ...qtAsActs].sort((a,b) => (b.createdAt||'') > (a.createdAt||'') ? 1 : -1);
+
+    if (allTlItems.length && typeof renderTimeline === 'function') {
+      tlContent.innerHTML = renderTimeline(allTlItems);
+      tlBadge.textContent = allTlItems.length;
+      tlBadge.style.display = '';
+    } else {
+      tlContent.innerHTML = '<div class="text-muted small text-center py-4"><i class="bi bi-clock-history me-2 opacity-25"></i>Fuarbot\'ta aktivite bulunamadı.</div>';
+      tlBadge.style.display = 'none';
+    }
+    if (fbQts.length && typeof renderQuoteCard === 'function') {
+      qContent.innerHTML = fbQts.map(q => renderQuoteCard(q)).join('');
+      qBadge.textContent = fbQts.length;
+      qBadge.style.display = '';
+    } else {
+      qContent.innerHTML = '<div class="text-muted small text-center py-4"><i class="bi bi-file-earmark-text me-2 opacity-25"></i>Fuarbot\'ta teklif bulunamadı.</div>';
+      qBadge.style.display = 'none';
+    }
+  };
+
+  // ── Render with cached data first (instant) ───────────
+  _renderFbPanels();
+
+  // ── Then fetch fresh data from Firestore for this contact
+  if (fbCust?._id && typeof fbFetchContactData === 'function') {
+    fbFetchContactData(fbCust._id).then(() => {
+      // Only update if this modal is still open for the same contact
+      if (currentModalContactId === id) _renderFbPanels();
+    }).catch(() => {});
   }
 
   new bootstrap.Modal(document.getElementById('contModal')).show();

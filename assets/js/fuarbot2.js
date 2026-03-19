@@ -3,9 +3,10 @@
 
 const FB_CFG_KEY = 'crm_fuarbot_firebase_config';
 let fbPollInterval = null;
-let fbCustomers    = [];
-let fbActivities   = {};
-let fbQuotes       = {};
+let fbCustomers        = [];
+let fbAllCustomersRaw  = [];  // all crm_customers incl. already-imported (for timeline lookup)
+let fbActivities       = {};
+let fbQuotes           = {};
 let fbSelectedId   = null;
 let fbMainTabActive = 'contacts'; // 'contacts' | 'quotes'
 
@@ -103,7 +104,8 @@ async function fetchAllData(apiKey, projectId, silent) {
         if (score(c) > score(prev)) seen.set(key, c);
       }
     });
-    fbCustomers = [...seen.values()];
+    fbAllCustomersRaw = [...seen.values()];  // keep full list for timeline lookup
+    fbCustomers       = [...seen.values()]; // will be filtered below
 
     // ── Filter out contacts already imported into CRM ──────
     // Compare by name+email against IndexedDB contacts so that
@@ -162,7 +164,63 @@ function startFuarbotSync(apiKey, projectId) {
   setFbStatus('Bağlanıyor…', 'warning');
   if (fbPollInterval) clearInterval(fbPollInterval);
   fetchAllData(apiKey, projectId, false);
-  fbPollInterval = setInterval(() => fetchAllData(apiKey, projectId, true), 12 * 60 * 60 * 1000); // 12h
+  fbPollInterval = setInterval(() => fetchAllData(apiKey, projectId, true), 3 * 60 * 1000); // 3 min
+}
+
+// ── Targeted fetch: fresh activities + quotes for ONE contact ──
+// Called when a contact modal opens so timeline is always up-to-date.
+async function fbFetchContactData(fbId) {
+  const cfg = loadFbConfig();
+  if (!cfg?.apiKey || !cfg?.projectId || !fbId) return;
+  try {
+    const base = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents:runQuery?key=${cfg.apiKey}`;
+
+    const runQ = async (col, field, val) => {
+      const body = {
+        structuredQuery: {
+          from: [{ collectionId: col }],
+          where: {
+            fieldFilter: {
+              field: { fieldPath: field },
+              op:    'EQUAL',
+              value: { stringValue: val },
+            },
+          },
+          orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'DESCENDING' }],
+          limit: 300,
+        },
+      };
+      const res  = await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!res.ok) return [];
+      const rows = await res.json();
+      return rows.filter(r => r.document).map(r => fsDoc(r.document));
+    };
+
+    // Activities: some Fuarbot versions store parentId, others contactId
+    const [actsA, actsB, quotes] = await Promise.all([
+      runQ('crm_activities', 'contactId', fbId),
+      runQ('crm_activities', 'parentId',  fbId),
+      runQ('crm_quotes',     'contactId', fbId),
+    ]);
+
+    // Merge & deduplicate activities
+    const actsMap = new Map();
+    [...actsA, ...actsB].forEach(a => actsMap.set(a._id, a));
+    const acts = [...actsMap.values()].sort((a, b) => (b.createdAt||'') > (a.createdAt||'') ? 1 : -1);
+
+    // Update in-memory caches
+    fbActivities[fbId] = acts;
+    fbQuotes[fbId]     = quotes.sort((a, b) => (b.createdAt||'') > (a.createdAt||'') ? 1 : -1);
+  } catch(e) {
+    console.warn('[Fuarbot] fbFetchContactData failed:', e);
+  }
+}
+
+// ── Silent background sync (called from app startup) ──────
+function fbBackgroundSync() {
+  const cfg = loadFbConfig();
+  if (!cfg?.apiKey || !cfg?.projectId) return;
+  if (!fbPollInterval) startFuarbotSync(cfg.apiKey, cfg.projectId);
 }
 
 // ── Main tab switching ────────────────────────────────────
