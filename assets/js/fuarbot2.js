@@ -1264,6 +1264,37 @@ async function loadTeklifler() {
     if (!flat.length) {
       flat = await fsFetch(cfg.apiKey, cfg.projectId, 'crm_quotes');
     }
+    // Enrich Fuarbot quotes: contactId → contactName/contactCompany if missing
+    // (old migrated quotes only have contactId, no name fields)
+    const _enrichQuotes = (custList) => {
+      flat.forEach(q => {
+        if (q.contactId && !(q.contactName||'').trim() && !(q.contactCompany||'').trim()) {
+          const c = custList.find(x => x._id === q.contactId);
+          if (c) {
+            q.contactName    = c.name    || '';
+            q.contactCompany = c.company || c.companyName || '';
+            q.contactEmail   = q.contactEmail || c.email || '';
+            q.contactPhone   = q.contactPhone || c.phone || '';
+          }
+        }
+      });
+    };
+
+    // Try in-memory cache first (fast path)
+    _enrichQuotes([...(fbAllCustomersRaw||[]), ...(fbCustomers||[])]);
+
+    // Any still missing? Fetch crm_customers from Firestore
+    const stillMissing = flat.some(q => q.contactId && !(q.contactName||'').trim());
+    if (stillMissing) {
+      try {
+        const fetched = await fsFetch(cfg.apiKey, cfg.projectId, 'crm_customers');
+        if (fetched.length) {
+          fetched.forEach(c => { if (!fbAllCustomersRaw.find(x=>x._id===c._id)) fbAllCustomersRaw.push(c); });
+          _enrichQuotes(fetched);
+        }
+      } catch(e) { /* best effort */ }
+    }
+
     // Sort newest first
     tkAllQuotes = flat.sort((a, b) => (b.createdAt || '') > (a.createdAt || '') ? 1 : -1);
     renderTeklifler();
