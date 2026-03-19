@@ -778,6 +778,7 @@
       <h1><i class="bi bi-file-earmark-text-fill me-2" style="color:#0d6efd;"></i>Teklifler</h1>
     </div>
     <div class="page-topbar-right">
+      <button class="btn btn-sm btn-primary me-2" onclick="tkNewQuote()"><i class="bi bi-plus-lg me-1"></i>Yeni Teklif</button>
       <button class="btn btn-sm btn-outline-secondary" onclick="loadTeklifler()" title="Yenile"><i class="bi bi-arrow-clockwise"></i></button>
     </div>
   </div>
@@ -815,7 +816,8 @@
       <h1><i class="bi bi-receipt me-2" style="color:#0d6efd;"></i>Fatura</h1>
     </div>
     <div class="page-topbar-right">
-      <span class="badge bg-warning text-dark me-2" style="font-size:11px;">Provisional — Netsis entegrasyonu planlanmaktadır</span>
+      <button class="btn btn-sm btn-primary me-2" onclick="ftNewInvoice()"><i class="bi bi-plus-lg me-1"></i>Yeni Fatura</button>
+      <span class="badge bg-warning text-dark" style="font-size:11px;">Provisional — Netsis entegrasyonu planlanmaktadır</span>
     </div>
   </div>
   <div class="page-content">
@@ -835,6 +837,108 @@
       </div>
       <div class="modal-body" id="tk-modal-body"></div>
       <div class="modal-footer" id="tk-modal-footer"></div>
+    </div>
+  </div>
+</div>
+
+<!-- TEKLIF EDIT MODAL -->
+<div class="modal fade" id="teklifEditModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-file-earmark-plus me-2"></i><span id="tk-edit-title">Yeni Teklif</span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <!-- Header info -->
+        <div class="row g-2 mb-3">
+          <div class="col-md-3">
+            <label class="form-label form-label-sm text-muted">Teklif No</label>
+            <input type="text" class="form-control form-control-sm" id="tk-edit-num" placeholder="Otomatik">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label form-label-sm text-muted">Tarih</label>
+            <input type="date" class="form-control form-control-sm" id="tk-edit-date">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label form-label-sm text-muted">Döviz</label>
+            <select class="form-select form-select-sm" id="tk-edit-currency">
+              <option value="EUR">EUR €</option>
+              <option value="USD">USD $</option>
+              <option value="TRY">TRY ₺</option>
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label form-label-sm text-muted">KDV %</label>
+            <input type="number" class="form-control form-control-sm" id="tk-edit-vat" value="19" min="0" max="100" oninput="tkModalRecalc()">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label form-label-sm text-muted">Durum</label>
+            <select class="form-select form-select-sm" id="tk-edit-status">
+              <option value="draft">Taslak</option>
+              <option value="sent">Gönderildi</option>
+            </select>
+          </div>
+        </div>
+        <!-- Customer -->
+        <div class="card bg-light border-0 mb-3 p-3">
+          <div class="fw-semibold small text-muted text-uppercase mb-2"><i class="bi bi-person me-1"></i>Müşteri</div>
+          <div class="row g-2">
+            <div class="col-md-4"><input type="text" class="form-control form-control-sm" id="tk-edit-cname" placeholder="Ad Soyad"></div>
+            <div class="col-md-4"><input type="text" class="form-control form-control-sm" id="tk-edit-ccompany" placeholder="Firma Adı"></div>
+            <div class="col-md-4"><input type="email" class="form-control form-control-sm" id="tk-edit-cemail" placeholder="E-posta"></div>
+            <div class="col-md-4"><input type="tel" class="form-control form-control-sm" id="tk-edit-cphone" placeholder="Telefon"></div>
+            <div class="col-md-8"><input type="text" class="form-control form-control-sm" id="tk-edit-caddr" placeholder="Adres"></div>
+          </div>
+        </div>
+        <!-- Lines -->
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="fw-semibold small text-muted text-uppercase"><i class="bi bi-list-ul me-1"></i>Kalemler</div>
+          <button class="btn btn-sm btn-outline-primary" onclick="tkAddModalLine()"><i class="bi bi-plus me-1"></i>Kalem Ekle</button>
+        </div>
+        <div class="table-responsive mb-3">
+          <table class="table table-sm align-middle" id="tk-edit-lines-table">
+            <thead class="table-light">
+              <tr>
+                <th style="min-width:170px;">Ürün / SKU</th>
+                <th style="min-width:150px;">Açıklama</th>
+                <th style="width:80px;">Miktar</th>
+                <th style="width:75px;">Birim</th>
+                <th style="width:120px;">Birim Fiyat</th>
+                <th style="width:110px;" class="text-end">Toplam</th>
+                <th style="width:38px;"></th>
+              </tr>
+            </thead>
+            <tbody id="tk-edit-lines"></tbody>
+          </table>
+        </div>
+        <!-- Totals -->
+        <div class="d-flex justify-content-end mb-3">
+          <div style="min-width:270px;" class="border rounded p-3 bg-light">
+            <div class="d-flex justify-content-between small mb-1">
+              <span class="text-muted">Ara Toplam</span>
+              <span id="tk-edit-subtotal" class="fw-semibold">0,00</span>
+            </div>
+            <div class="d-flex justify-content-between small mb-1">
+              <span class="text-muted">KDV (<span id="tk-edit-vatpct">19</span>%)</span>
+              <span id="tk-edit-vatamt">0,00</span>
+            </div>
+            <div class="d-flex justify-content-between fw-bold border-top pt-2 mt-1">
+              <span>Genel Toplam</span>
+              <span id="tk-edit-total" class="text-primary fs-6">0,00</span>
+            </div>
+          </div>
+        </div>
+        <!-- Notes -->
+        <div>
+          <label class="form-label form-label-sm text-muted"><i class="bi bi-chat-left-text me-1"></i>Notlar</label>
+          <textarea class="form-control form-control-sm" id="tk-edit-notes" rows="2" placeholder="Ödeme koşulları, teslimat süresi…"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary btn-sm" onclick="tkSaveQuote()"><i class="bi bi-floppy me-1"></i>Kaydet</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+      </div>
     </div>
   </div>
 </div>

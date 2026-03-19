@@ -1172,7 +1172,7 @@ function renderTeklifler() {
   });
 
   if (!tkAllQuotes.length) {
-    el.innerHTML = `<div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>Teklif bulunamadı. Fuarbot uygulamasından teklif oluşturun veya <button class="btn btn-sm btn-outline-primary ms-2" onclick="loadTeklifler()">Yenile</button></div>`;
+    el.innerHTML = `<div class="alert alert-info d-flex align-items-center gap-3"><i class="bi bi-info-circle fs-5"></i><div>Henüz teklif yok. <strong>Yeni Teklif</strong> butonu ile ilk teklifinizi oluşturun veya Fuarbot'tan teklifler yüklensin.</div><button class="btn btn-sm btn-primary ms-auto" onclick="tkNewQuote()"><i class="bi bi-plus me-1"></i>Yeni Teklif</button><button class="btn btn-sm btn-outline-secondary" onclick="loadTeklifler()"><i class="bi bi-arrow-clockwise"></i></button></div>`;
     return;
   }
   if (!filtered.length) {
@@ -1209,7 +1209,7 @@ function renderTeklifler() {
               <th>Tarih</th>
               <th>Tutar</th>
               <th>Durum</th>
-              <th style="width:160px;"></th>
+              <th style="width:230px;"></th>
             </tr>
           </thead>
           <tbody>
@@ -1244,7 +1244,9 @@ function tkRenderRow(q) {
       <button class="btn btn-sm btn-outline-primary me-1" onclick="tkViewDetail('${esc(q._id)}')" title="Detay"><i class="bi bi-eye-fill"></i></button>
       ${pdfBtn}
       <button class="btn btn-sm btn-outline-secondary me-1" onclick="tkEmailQuote('${esc(q._id)}')" title="E-posta"><i class="bi bi-envelope-fill"></i></button>
-      <button class="btn btn-sm btn-outline-success" onclick="tkToFatura('${esc(q._id)}')" title="Fatura Oluştur"><i class="bi bi-receipt"></i></button>
+      <button class="btn btn-sm btn-outline-success me-1" onclick="tkToFatura('${esc(q._id)}')" title="Fatura Oluştur"><i class="bi bi-receipt"></i></button>
+      <button class="btn btn-sm btn-outline-warning me-1" onclick="tkEditQuote('${esc(q._id)}')" title="Düzenle"><i class="bi bi-pencil-fill"></i></button>
+      <button class="btn btn-sm btn-outline-danger" onclick="tkDeleteQuote('${esc(q._id)}')" title="Sil"><i class="bi bi-trash-fill"></i></button>
     </td>
   </tr>`;
 }
@@ -1367,10 +1369,266 @@ function tkToFatura(id) {
   loadFatura(q);
 }
 
+// ── Teklif create / edit ──────────────────────────────────────
+let tkEditingId = null; // null = new quote
+
+function _tkAutoQuoteNum() {
+  const d = new Date();
+  const yy = d.getFullYear();
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const dd = String(d.getDate()).padStart(2,'0');
+  const rnd = String(Math.floor(Math.random()*900)+100);
+  return `TKL-${yy}${mm}${dd}-${rnd}`;
+}
+
+function tkNewQuote() {
+  tkEditingId = null;
+  document.getElementById('tk-edit-title').textContent = 'Yeni Teklif';
+  document.getElementById('tk-edit-num').value   = _tkAutoQuoteNum();
+  document.getElementById('tk-edit-date').value  = new Date().toISOString().slice(0,10);
+  document.getElementById('tk-edit-currency').value = 'EUR';
+  document.getElementById('tk-edit-vat').value   = '19';
+  document.getElementById('tk-edit-status').value = 'draft';
+  document.getElementById('tk-edit-cname').value    = '';
+  document.getElementById('tk-edit-ccompany').value = '';
+  document.getElementById('tk-edit-cemail').value   = '';
+  document.getElementById('tk-edit-cphone').value   = '';
+  document.getElementById('tk-edit-caddr').value    = '';
+  document.getElementById('tk-edit-notes').value    = '';
+  document.getElementById('tk-edit-lines').innerHTML = '';
+  tkAddModalLine();   // start with one blank line
+  tkModalRecalc();
+  new bootstrap.Modal(document.getElementById('teklifEditModal')).show();
+}
+
+function tkEditQuote(id) {
+  const q = tkFindQuote(id);
+  if (!q) return;
+  tkEditingId = id;
+  document.getElementById('tk-edit-title').textContent = `Teklif Düzenle — ${q.quoteNumber || id.slice(0,8)}`;
+  document.getElementById('tk-edit-num').value      = q.quoteNumber  || '';
+  document.getElementById('tk-edit-date').value     = q.createdAt ? q.createdAt.slice(0,10) : new Date().toISOString().slice(0,10);
+  document.getElementById('tk-edit-currency').value = q.currency     || 'EUR';
+  document.getElementById('tk-edit-vat').value      = q.vatRate      != null ? String(q.vatRate) : '19';
+  document.getElementById('tk-edit-status').value   = q.status       || 'draft';
+  document.getElementById('tk-edit-cname').value    = q.contactName    || '';
+  document.getElementById('tk-edit-ccompany').value = q.contactCompany || '';
+  document.getElementById('tk-edit-cemail').value   = q.contactEmail   || '';
+  document.getElementById('tk-edit-cphone').value   = q.contactPhone   || '';
+  document.getElementById('tk-edit-caddr').value    = q.contactAddress || '';
+  document.getElementById('tk-edit-notes').value    = q.notes          || '';
+  const tbody = document.getElementById('tk-edit-lines');
+  tbody.innerHTML = '';
+  const lines = q.lines && q.lines.length ? q.lines : [];
+  if (lines.length) { lines.forEach(l => tkAddModalLine(l)); }
+  else              { tkAddModalLine(); }
+  tkModalRecalc();
+  new bootstrap.Modal(document.getElementById('teklifEditModal')).show();
+}
+
+function tkAddModalLine(line) {
+  const tbody = document.getElementById('tk-edit-lines');
+  const i = tbody.querySelectorAll('tr').length;
+  const sym = { EUR: '€', USD: '$', TRY: '₺' }[document.getElementById('tk-edit-currency')?.value] || '€';
+  const row = document.createElement('tr');
+  row.dataset.lineIdx = i;
+  row.innerHTML = `
+    <td><input type="text" class="form-control form-control-sm tk-l-prod" value="${esc(line?.product||'')}" oninput="tkModalRecalc()"></td>
+    <td><input type="text" class="form-control form-control-sm tk-l-desc" value="${esc(line?.description||'')}"></td>
+    <td><input type="number" class="form-control form-control-sm tk-l-qty" value="${line?.qty ?? 1}" min="0" oninput="tkModalRecalc()"></td>
+    <td><input type="text" class="form-control form-control-sm tk-l-unit" value="${esc(line?.unit||'Stk.')}"></td>
+    <td><input type="number" class="form-control form-control-sm tk-l-price" value="${Number(line?.unitPrice||0).toFixed(2)}" min="0" step="0.01" oninput="tkModalRecalc()"></td>
+    <td class="text-end fw-semibold tk-l-total small">0,00 ${sym}</td>
+    <td><button class="btn btn-sm btn-link text-danger p-0" onclick="tkRemoveModalLine(this)" title="Kaldır"><i class="bi bi-x-lg"></i></button></td>`;
+  tbody.appendChild(row);
+  tkModalRecalc();
+}
+
+function tkRemoveModalLine(btn) {
+  btn.closest('tr').remove();
+  tkModalRecalc();
+}
+
+function tkModalRecalc() {
+  const vatPct = parseFloat(document.getElementById('tk-edit-vat')?.value || 19);
+  const sym    = { EUR: '€', USD: '$', TRY: '₺' }[document.getElementById('tk-edit-currency')?.value] || '€';
+  const fmt    = n => n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  let subtotal = 0;
+  document.querySelectorAll('#tk-edit-lines tr').forEach(row => {
+    const qty   = parseFloat(row.querySelector('.tk-l-qty')?.value   || 0);
+    const price = parseFloat(row.querySelector('.tk-l-price')?.value || 0);
+    const lineTotal = qty * price;
+    subtotal += lineTotal;
+    const td = row.querySelector('.tk-l-total');
+    if (td) td.textContent = `${fmt(lineTotal)} ${sym}`;
+  });
+  const vatAmt = subtotal * (vatPct / 100);
+  const total  = subtotal + vatAmt;
+  if (document.getElementById('tk-edit-subtotal')) document.getElementById('tk-edit-subtotal').textContent = `${fmt(subtotal)} ${sym}`;
+  if (document.getElementById('tk-edit-vatpct'))   document.getElementById('tk-edit-vatpct').textContent  = vatPct;
+  if (document.getElementById('tk-edit-vatamt'))   document.getElementById('tk-edit-vatamt').textContent  = `${fmt(vatAmt)} ${sym}`;
+  if (document.getElementById('tk-edit-total'))    document.getElementById('tk-edit-total').textContent   = `${fmt(total)} ${sym}`;
+}
+
+async function tkSaveQuote() {
+  const cfg = loadFbConfig();
+  if (!cfg?.apiKey || !cfg?.projectId) { toast('Firebase yapılandırması eksik.', 'error'); return; }
+
+  // Collect values
+  const quoteNumber   = document.getElementById('tk-edit-num').value.trim()       || _tkAutoQuoteNum();
+  const dateVal       = document.getElementById('tk-edit-date').value             || new Date().toISOString().slice(0,10);
+  const currency      = document.getElementById('tk-edit-currency').value         || 'EUR';
+  const vatRate       = parseFloat(document.getElementById('tk-edit-vat').value   || 19);
+  const status        = document.getElementById('tk-edit-status').value           || 'draft';
+  const contactName   = document.getElementById('tk-edit-cname').value.trim();
+  const contactCompany= document.getElementById('tk-edit-ccompany').value.trim();
+  const contactEmail  = document.getElementById('tk-edit-cemail').value.trim();
+  const contactPhone  = document.getElementById('tk-edit-cphone').value.trim();
+  const contactAddress= document.getElementById('tk-edit-caddr').value.trim();
+  const notes         = document.getElementById('tk-edit-notes').value.trim();
+
+  // Collect lines
+  const lines = [];
+  let subtotal = 0;
+  document.querySelectorAll('#tk-edit-lines tr').forEach(row => {
+    const product     = row.querySelector('.tk-l-prod')?.value.trim()  || '';
+    const description = row.querySelector('.tk-l-desc')?.value.trim()  || '';
+    const qty         = parseFloat(row.querySelector('.tk-l-qty')?.value   || 0);
+    const unit        = row.querySelector('.tk-l-unit')?.value.trim() || 'Stk.';
+    const unitPrice   = parseFloat(row.querySelector('.tk-l-price')?.value || 0);
+    const total       = qty * unitPrice;
+    subtotal += total;
+    if (product || qty) lines.push({ product, description, qty, unit, unitPrice, total });
+  });
+  const vatAmt   = subtotal * (vatRate / 100);
+  const totalNet = subtotal;       // net before VAT (matches existing field name)
+  const totalGross = subtotal + vatAmt;
+
+  const now = new Date().toISOString();
+  const createdAt = tkEditingId
+    ? (tkFindQuote(tkEditingId)?.createdAt || now)
+    : now;
+
+  // Build Firestore fields
+  const toStr = v => ({ stringValue: String(v ?? '') });
+  const toNum = v => ({ doubleValue: Number(v  ?? 0) });
+  const toArr = arr => ({
+    arrayValue: {
+      values: arr.map(l => ({
+        mapValue: {
+          fields: {
+            product:     toStr(l.product),
+            description: toStr(l.description),
+            qty:         toNum(l.qty),
+            unit:        toStr(l.unit),
+            unitPrice:   toNum(l.unitPrice),
+            total:       toNum(l.total),
+          }
+        }
+      }))
+    }
+  });
+
+  const fields = {
+    quoteNumber:     toStr(quoteNumber),
+    createdAt:       toStr(createdAt),
+    updatedAt:       toStr(now),
+    currency:        toStr(currency),
+    vatRate:         toNum(vatRate),
+    status:          toStr(status),
+    contactName:     toStr(contactName),
+    contactCompany:  toStr(contactCompany),
+    contactEmail:    toStr(contactEmail),
+    contactPhone:    toStr(contactPhone),
+    contactAddress:  toStr(contactAddress),
+    notes:           toStr(notes),
+    product:         toStr(lines[0]?.product || ''),
+    lines:           toArr(lines),
+    totalNet:        toNum(totalNet),
+    totalGross:      toNum(totalGross),
+    vatAmount:       toNum(vatAmt),
+    source:          toStr('manual'),
+    createdBy:       tkEditingId
+      ? toStr(tkFindQuote(tkEditingId)?.createdBy || 'manual')
+      : toStr(window._currentUserName || 'manual'),
+  };
+
+  const base = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/crm_quotes`;
+
+  try {
+    let docId;
+    if (tkEditingId) {
+      // PATCH existing
+      const res = await fetch(`${base}/${tkEditingId}?key=${cfg.apiKey}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields }),
+      });
+      if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error?.message||'HTTP '+res.status); }
+      docId = tkEditingId;
+      // Update local list
+      const idx = tkAllQuotes.findIndex(q => q._id === tkEditingId);
+      if (idx >= 0) tkAllQuotes[idx] = { _id: docId, quoteNumber, createdAt, updatedAt: now, currency, vatRate, status, contactName, contactCompany, contactEmail, contactPhone, contactAddress, notes, product: lines[0]?.product||'', lines, totalNet, totalGross, vatAmount: vatAmt, source: 'manual' };
+      toast(`✓ Teklif güncellendi: ${quoteNumber}`, 'success');
+    } else {
+      // POST new
+      const res = await fetch(`${base}?key=${cfg.apiKey}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields }),
+      });
+      if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error?.message||'HTTP '+res.status); }
+      const data = await res.json();
+      docId = data.name?.split('/').pop() || ('tk_'+Date.now());
+      const newQ = { _id: docId, quoteNumber, createdAt, updatedAt: now, currency, vatRate, status, contactName, contactCompany, contactEmail, contactPhone, contactAddress, notes, product: lines[0]?.product||'', lines, totalNet, totalGross, vatAmount: vatAmt, source: 'manual' };
+      tkAllQuotes.unshift(newQ);
+      toast(`✓ Teklif oluşturuldu: ${quoteNumber}`, 'success');
+    }
+    bootstrap.Modal.getInstance(document.getElementById('teklifEditModal'))?.hide();
+    renderTeklifler();
+  } catch(e) { toast('Hata: ' + e.message, 'error'); }
+}
+
+async function tkDeleteQuote(id) {
+  const q = tkFindQuote(id);
+  const num = q?.quoteNumber || id.slice(0,8);
+  if (!confirm(`"${num}" numaralı teklifi silmek istediğinize emin misiniz?`)) return;
+  const cfg = loadFbConfig();
+  if (!cfg?.apiKey || !cfg?.projectId) return;
+  try {
+    const res = await fetch(
+      `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/crm_quotes/${id}?key=${cfg.apiKey}`,
+      { method: 'DELETE' }
+    );
+    if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error?.message||'HTTP '+res.status); }
+    tkAllQuotes = tkAllQuotes.filter(x => x._id !== id);
+    toast(`✓ Teklif silindi: ${num}`, 'success');
+    renderTeklifler();
+  } catch(e) { toast('Hata: ' + e.message, 'error'); }
+}
+
 // ══════════════════════════════════════════════════════════════
 // FATURA (PROVISIONAL)
 // ══════════════════════════════════════════════════════════════
 let ftCurrentQuote = null;
+
+function ftNewInvoice() {
+  // Create a blank quote stub and render an empty invoice
+  const today = new Date().toISOString().slice(0,10);
+  const rnd   = String(Math.floor(Math.random()*900)+100);
+  const num   = `FAT-${today.replace(/-/g,'')}-${rnd}`;
+  ftCurrentQuote = {
+    _id: null,
+    quoteNumber: num,
+    contactName: '', contactCompany: '', contactEmail: '',
+    contactPhone: '', contactAddress: '',
+    currency: 'EUR', vatRate: 19,
+    lines: [{ product: '', description: '', qty: 1, unit: 'Stk.', unitPrice: 0 }],
+    totalNet: 0,
+    notes: '',
+    createdAt: today,
+    _isManual: true,
+  };
+  renderFatura();
+}
 
 function loadFatura(quote) {
   const el = document.getElementById('fatura-content');
