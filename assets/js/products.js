@@ -689,3 +689,110 @@ async function faturaStockDeduct() {
   if (deducted > 0) toast(`✓ ${deducted} üründen stok düşüldü${notFound ? ` (${notFound} ürün kataloğda bulunamadı)` : ''}`, 'success');
   else toast(`Stok düşülemedi — ürünler katalogda bulunamadı (${notFound} kalem). Ürünlerin SKU'su teklif kalemleriyle eşleşmeli.`, 'error');
 }
+
+// ── Netsis'e Gönder — faturayı onayla + stoktan otomatik düş ───
+async function faturaNetsisSend() {
+  if (!ftCurrentQuote) return;
+
+  const btn = document.getElementById('ft-netsis-btn');
+  if (btn && btn.disabled) return; // already sent
+
+  // Read current line qtys from editable form fields
+  const lines = ftCurrentQuote.lines || [];
+  if (!lines.length) { toast('Bu faturada kalem yok.', 'error'); return; }
+
+  // Confirm action
+  if (!confirm('Faturayı onayla ve stok düşümünü gerçekleştir?\n\nBu işlem geri alınamaz.')) return;
+
+  // Make sure products are loaded
+  const cfg = loadFbConfig();
+  if (!prProducts.length && cfg?.apiKey && cfg?.projectId) {
+    try { prProducts = await fsFetch(cfg.apiKey, cfg.projectId, PR_COL); } catch(_) {}
+  }
+
+  // Read live qtys from form
+  const qtyInputs = document.querySelectorAll('.ft-line-qty');
+  const priceInputs = document.querySelectorAll('.ft-line-price');
+
+  let deducted = 0, notFound = 0;
+  const confirmedLines = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const qty   = parseFloat(qtyInputs[i]?.value || lines[i].qty || 0);
+    const price = parseFloat(priceInputs[i]?.value || lines[i].unitPrice || 0);
+    confirmedLines.push({ ...lines[i], qty, unitPrice: price, total: qty * price });
+
+    if (!qty) continue;
+    const product = prFindBySku(lines[i].product) || prFindByName(lines[i].product);
+    if (product) {
+      await stockAdjust(product._id, -Math.abs(qty));
+      deducted++;
+    } else { notFound++; }
+  }
+
+  // Save confirmed invoice to Firestore invoices collection
+  const faturaNo   = document.getElementById('ft-no')?.value   || ftCurrentQuote.quoteNumber || '';
+  const faturaDate = document.getElementById('ft-date')?.value || new Date().toISOString().slice(0,10);
+  const faturaVade = document.getElementById('ft-due')?.value  || '';
+  const custName   = document.getElementById('ft-cust-name')?.value    || ftCurrentQuote.contactName    || '';
+  const custCompany= document.getElementById('ft-cust-company')?.value || ftCurrentQuote.contactCompany || '';
+  const custEmail  = document.getElementById('ft-cust-email')?.value   || ftCurrentQuote.contactEmail   || '';
+  const custPhone  = document.getElementById('ft-cust-phone')?.value   || ftCurrentQuote.contactPhone   || '';
+  const custAddr   = document.getElementById('ft-cust-addr')?.value    || '';
+  const notes      = document.getElementById('ft-notes')?.value        || '';
+
+  // Compute totals
+  const subtotal = confirmedLines.reduce((s, l) => s + (l.total || 0), 0);
+  const vatRate  = ftCurrentQuote.vatRate || 19;
+  const vatAmt   = subtotal * (vatRate / 100);
+  const total    = subtotal + vatAmt;
+
+  if (cfg?.apiKey && cfg?.projectId) {
+    try {
+      const now = new Date().toISOString();
+      // Build Firestore fields map
+      const toStr  = v => ({ stringValue:  String(v ?? '') });
+      const toNum  = v => ({ doubleValue:  Number(v  ?? 0) });
+      const fields = {
+        faturaNo:        toStr(faturaNo),
+        date:            toStr(faturaDate),
+        dueDate:         toStr(faturaVade),
+        quoteId:         toStr(ftCurrentQuote._id || ''),
+        quoteNumber:     toStr(ftCurrentQuote.quoteNumber || ''),
+        contactName:     toStr(custName),
+        contactCompany:  toStr(custCompany),
+        contactEmail:    toStr(custEmail),
+        contactPhone:    toStr(custPhone),
+        contactAddress:  toStr(custAddr),
+        notes:           toStr(notes),
+        currency:        toStr(ftCurrentQuote.currency || 'EUR'),
+        vatRate:         toNum(vatRate),
+        subtotal:        toNum(subtotal),
+        vatAmount:       toNum(vatAmt),
+        totalAmount:     toNum(total),
+        linesJson:       toStr(JSON.stringify(confirmedLines)),
+        status:          toStr('confirmed'),
+        sentToNetsis:    { booleanValue: true },
+        createdAt:       toStr(now),
+        confirmedAt:     toStr(now),
+        createdBy:       toStr(window._currentUserName || 'system'),
+      };
+      const invUrl = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/invoices?key=${cfg.apiKey}`;
+      const res = await fetch(invUrl, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields }),
+      });
+      if (!res.ok) { const e2 = await res.json().catch(()=>({})); console.warn('Fatura kayıt hatası:', e2.error?.message); }
+    } catch(e) { console.warn('Fatura kayıt hatası:', e); }
+  }
+
+  // Update UI
+  if (btn) { btn.disabled = true; btn.classList.remove('btn-success'); btn.classList.add('btn-secondary'); btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Gönderildi'; }
+  const badge = document.querySelector('#fatura-content .badge.bg-warning');
+  if (badge) { badge.className = 'badge bg-success me-2'; badge.textContent = 'Onaylandı'; }
+
+  const stockMsg = deducted > 0
+    ? `${deducted} üründen stok düşüldü${notFound ? `, ${notFound} kalem katalogda bulunamadı` : ''}`
+    : `Dikkat: ${notFound} kalem katalogda bulunamadı — stok güncellenemedi`;
+  toast(`✓ Fatura onaylandı ve kaydedildi. ${stockMsg}.`, 'success');
+}

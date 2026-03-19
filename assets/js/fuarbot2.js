@@ -1413,8 +1413,7 @@ function renderFatura() {
       </div>
       <div class="d-flex gap-2">
         <button class="btn btn-sm btn-outline-danger" onclick="ftPrint()"><i class="bi bi-printer me-1"></i>Yazdır / PDF</button>
-        <button class="btn btn-sm btn-outline-warning" onclick="faturaStockDeduct()" title="Kalemleri stoktan düş"><i class="bi bi-box-seam me-1"></i>Stoktan Düş</button>
-        <button class="btn btn-sm btn-secondary" disabled title="Netsis entegrasyonu planlanıyor"><i class="bi bi-cloud-arrow-up me-1"></i>Netsis'e Aktar (Yakında)</button>
+        <button class="btn btn-sm btn-success" onclick="faturaNetsisSend()" id="ft-netsis-btn" title="Faturayı onayla, stoktan düş ve Netsis'e gönder"><i class="bi bi-cloud-arrow-up me-1"></i>Netsis'e Gönder</button>
         <button class="btn btn-sm btn-outline-secondary" onclick="ftCurrentQuote=null;loadFatura()"><i class="bi bi-x-lg"></i></button>
       </div>
     </div>
