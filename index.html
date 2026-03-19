@@ -31,6 +31,8 @@
       <i class="bi bi-arrow-repeat"></i>Fuarbot Sync
       <span id="fuarbot-badge" class="badge bg-danger" style="display:none;position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:10px;padding:2px 5px;">0</span>
     </a>
+    <a href="#" data-page="fuar-dashboard" onclick="showPage('fuar-dashboard');return false;"><i class="bi bi-speedometer2"></i>Fuar Dashboard</a>
+    <a href="#" data-page="fuar-users"     onclick="showPage('fuar-users');return false;"><i class="bi bi-people-fill"></i>Kullan&#x131;c&#x131;lar</a>
     <a href="#" data-page="import"     onclick="showPage('import');return false;"><i class="bi bi-upload"></i>Excel Aktar</a>
     <a href="#" data-page="reports"    onclick="showPage('reports');return false;"><i class="bi bi-bar-chart"></i>Raporlar</a>
     <a href="#" data-page="duplicates" onclick="showPage('duplicates');return false;"><i class="bi bi-copy"></i>Tekrar Kay&#x131;tlar</a>
@@ -473,6 +475,159 @@
     </div>
   </div>
 </div>
+
+<!-- FUAR DASHBOARD -->
+<div id="fuar-dashboard" class="page">
+  <div class="page-topbar">
+    <div class="page-topbar-left">
+      <h1><i class="bi bi-speedometer2 me-2" style="color:#3b82f6;"></i>Fuar Dashboard</h1>
+    </div>
+    <div class="page-topbar-right d-flex gap-2 align-items-center">
+      <button class="btn btn-sm btn-outline-secondary" onclick="renderFuarDashboard()" title="Yenile"><i class="bi bi-arrow-clockwise"></i></button>
+    </div>
+  </div>
+  <div class="page-content">
+
+    <!-- Date filter bar -->
+    <div class="fbd-filter-bar mb-4">
+      <div class="fbd-filter-btns">
+        <button class="fbd-filter-btn active" id="fb-dash-btn-today"  onclick="fbDashSetFilter('today')">Bugün</button>
+        <button class="fbd-filter-btn"         id="fb-dash-btn-week"   onclick="fbDashSetFilter('week')">Bu Hafta</button>
+        <button class="fbd-filter-btn"         id="fb-dash-btn-month"  onclick="fbDashSetFilter('month')">Bu Ay</button>
+        <button class="fbd-filter-btn"         id="fb-dash-btn-year"   onclick="fbDashSetFilter('year')">Bu Yıl</button>
+        <button class="fbd-filter-btn"         id="fb-dash-btn-all"    onclick="fbDashSetFilter('all')">Tümü</button>
+        <button class="fbd-filter-btn"         id="fb-dash-btn-custom" onclick="fbDashSetFilter('custom')">Özel</button>
+      </div>
+      <div id="fb-dash-custom-range" style="display:none;" class="fbd-custom-range">
+        <input type="date" id="fb-dash-from" class="form-control form-control-sm" onchange="fbDashCustomChange()">
+        <span class="text-muted">—</span>
+        <input type="date" id="fb-dash-to" class="form-control form-control-sm" onchange="fbDashCustomChange()">
+      </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="fbd-kpi-row mb-4">
+      <div class="fbd-kpi-card fbd-kpi-blue">
+        <div class="fbd-kpi-icon"><i class="bi bi-camera-fill"></i></div>
+        <div class="fbd-kpi-body">
+          <div class="fbd-kpi-val" id="fuar-dash-kpi-scanned">—</div>
+          <div class="fbd-kpi-lbl">Taranan Kart</div>
+        </div>
+      </div>
+      <div class="fbd-kpi-card fbd-kpi-amber">
+        <div class="fbd-kpi-icon"><i class="bi bi-file-earmark-text-fill"></i></div>
+        <div class="fbd-kpi-body">
+          <div class="fbd-kpi-val" id="fuar-dash-kpi-quotes">—</div>
+          <div class="fbd-kpi-lbl">Oluşturulan Teklif</div>
+        </div>
+      </div>
+      <div class="fbd-kpi-card fbd-kpi-green">
+        <div class="fbd-kpi-icon"><i class="bi bi-currency-euro"></i></div>
+        <div class="fbd-kpi-body">
+          <div class="fbd-kpi-val" id="fuar-dash-kpi-revenue" style="font-size:18px;">—</div>
+          <div class="fbd-kpi-lbl">Potansiyel Gelir</div>
+        </div>
+      </div>
+      <div class="fbd-kpi-card fbd-kpi-purple">
+        <div class="fbd-kpi-icon"><i class="bi bi-envelope-fill"></i></div>
+        <div class="fbd-kpi-body">
+          <div class="fbd-kpi-val" id="fuar-dash-kpi-emails">—</div>
+          <div class="fbd-kpi-lbl">Gönderilen E-posta</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- No data warning (shown when fuarbot not connected) -->
+    <div id="fuar-dash-nodata" class="alert alert-warning" style="display:none;">
+      <i class="bi bi-exclamation-triangle me-2"></i>
+      Fuarbot henüz bağlı değil. <a href="#" onclick="showPage('fuarbot');return false;">Fuarbot Sync</a> sayfasında bağlantıyı kurun.
+    </div>
+
+    <!-- Per-employee breakdown -->
+    <div class="card" id="fuar-dash-emp-card">
+      <div class="card-header d-flex align-items-center justify-content-between py-2 px-3">
+        <span class="fw-semibold" style="font-size:13px;"><i class="bi bi-person-lines-fill me-2 text-primary"></i>Çalışan Bazlı Özet</span>
+        <span class="text-muted" style="font-size:11px;" id="fuar-dash-period-label"></span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover mb-0 fbd-emp-table">
+          <thead class="table-light">
+            <tr>
+              <th>Çalışan</th>
+              <th class="text-center">Taranan Kart</th>
+              <th class="text-center">Teklif</th>
+              <th class="text-end">Potansiyel Gelir</th>
+              <th class="text-center">E-posta</th>
+            </tr>
+          </thead>
+          <tbody id="fuar-dash-emp-tbody">
+            <tr><td colspan="5" class="text-center text-muted py-4">Veriler yükleniyor…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- FUAR USERS -->
+<div id="fuar-users" class="page">
+  <div class="page-topbar">
+    <div class="page-topbar-left">
+      <h1><i class="bi bi-people-fill me-2" style="color:#7c3aed;"></i>Kullanıcılar</h1>
+    </div>
+    <div class="page-topbar-right">
+      <button class="btn btn-sm btn-outline-secondary" onclick="loadFuarUsers()" title="Yenile"><i class="bi bi-arrow-clockwise"></i></button>
+    </div>
+  </div>
+  <div class="page-content">
+    <div id="fuar-users-content">
+      <div class="text-muted p-3">Yükleniyor…</div>
+    </div>
+  </div>
+</div>
+
+<!-- FUAR USER EDIT MODAL -->
+<div class="modal fade" id="fuarUserEditModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-person-fill-gear me-2"></i>Kullanıcı Düzenle</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="fuar-edit-user-id">
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label fw-semibold">Ad Soyad</label>
+            <input type="text" class="form-control" id="fuar-edit-user-name" placeholder="Ad Soyad">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">E-posta</label>
+            <input type="email" class="form-control" id="fuar-edit-user-email" placeholder="kullanici@example.com">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">Şifre</label>
+            <div class="input-group">
+              <input type="password" class="form-control" id="fuar-edit-user-password" placeholder="Değiştirmek için yeni şifre girin">
+              <button class="btn btn-outline-secondary" type="button" onclick="togglePassVis('fuar-edit-user-password', this)"><i class="bi bi-eye"></i></button>
+            </div>
+            <div class="form-text">Boş bırakırsanız şifre değiştirilmez.</div>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Rol</label>
+            <input type="text" class="form-control" id="fuar-edit-user-role" placeholder="admin / user">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary btn-sm" onclick="saveFuarUser()"><i class="bi bi-check-lg me-1"></i>Kaydet</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 
 </main>
 

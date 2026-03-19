@@ -547,3 +547,315 @@ function loadFuarbotPage() {
     }
   } else { showFbConfig(); }
 }
+
+// ══════════════════════════════════════════════════════════════
+// FUAR DASHBOARD
+// ══════════════════════════════════════════════════════════════
+let fbDashDateFilter = 'month'; // 'today'|'week'|'month'|'year'|'all'|'custom'
+let fbDashDateFrom = '', fbDashDateTo = '';
+
+function loadFuarDashboard() {
+  const cfg = loadFbConfig();
+  if (!cfg?.apiKey) {
+    document.getElementById('fuar-dash-nodata').style.display = '';
+    document.getElementById('fuar-dash-emp-card').style.display = 'none';
+    ['scanned','quotes','revenue','emails'].forEach(k => {
+      const el = document.getElementById('fuar-dash-kpi-' + k); if (el) el.textContent = '—';
+    });
+    return;
+  }
+  document.getElementById('fuar-dash-nodata').style.display = 'none';
+  document.getElementById('fuar-dash-emp-card').style.display = '';
+  // Set active button state
+  ['today','week','month','year','all','custom'].forEach(f => {
+    document.getElementById('fb-dash-btn-'+f)?.classList.toggle('active', f===fbDashDateFilter);
+  });
+  document.getElementById('fb-dash-custom-range').style.display = fbDashDateFilter==='custom' ? '' : 'none';
+  renderFuarDashboard();
+}
+
+function fbDashSetFilter(filter) {
+  fbDashDateFilter = filter;
+  ['today','week','month','year','all','custom'].forEach(f => {
+    document.getElementById('fb-dash-btn-'+f)?.classList.toggle('active', f===filter);
+  });
+  document.getElementById('fb-dash-custom-range').style.display = filter==='custom' ? '' : 'none';
+  if (filter !== 'custom') renderFuarDashboard();
+}
+
+function fbDashCustomChange() {
+  fbDashDateFrom = document.getElementById('fb-dash-from')?.value || '';
+  fbDashDateTo   = document.getElementById('fb-dash-to')?.value   || '';
+  if (fbDashDateFrom || fbDashDateTo) renderFuarDashboard();
+}
+
+function getFuarDateRange() {
+  const now = new Date();
+  let from, to = new Date(); to.setHours(23, 59, 59, 999);
+  switch (fbDashDateFilter) {
+    case 'today':
+      from = new Date(); from.setHours(0, 0, 0, 0); break;
+    case 'week':
+      from = new Date(); from.setDate(from.getDate() - ((from.getDay() + 6) % 7)); from.setHours(0,0,0,0); break;
+    case 'month':
+      from = new Date(now.getFullYear(), now.getMonth(), 1); break;
+    case 'year':
+      from = new Date(now.getFullYear(), 0, 1); break;
+    case 'custom':
+      from = fbDashDateFrom ? new Date(fbDashDateFrom + 'T00:00:00') : new Date(2020, 0, 1);
+      to   = fbDashDateTo   ? new Date(fbDashDateTo   + 'T23:59:59') : to; break;
+    default: // 'all'
+      from = new Date(2020, 0, 1); break;
+  }
+  return { from, to };
+}
+
+function fuarInRange(dateStr, from, to) {
+  if (!dateStr) return false;
+  const d = new Date(dateStr);
+  return d >= from && d <= to;
+}
+
+function renderFuarDashboard() {
+  const { from, to } = getFuarDateRange();
+
+  // ── Period label ────────────────────────────────────────────
+  const fmtD = d => d.toLocaleDateString('tr-TR', { day:'2-digit', month:'2-digit', year:'numeric' });
+  const lblMap = {
+    today:'Bugün', week:'Bu Hafta', month:'Bu Ay', year:'Bu Yıl', all:'Tüm Zamanlar',
+    custom: (fbDashDateFrom||'—') + ' – ' + (fbDashDateTo||'—')
+  };
+  const lbl = document.getElementById('fuar-dash-period-label');
+  if (lbl) lbl.textContent = lblMap[fbDashDateFilter] || '';
+
+  // ── Filter data by date ──────────────────────────────────────
+  const customers   = fbCustomers.filter(c => fuarInRange(c.createdAt, from, to));
+  const allQuotes   = Object.values(fbQuotes).flat().filter(q => fuarInRange(q.createdAt, from, to));
+  const allActivities = Object.values(fbActivities).flat().filter(a => fuarInRange(a.createdAt, from, to));
+
+  // ── Totals ───────────────────────────────────────────────────
+  const totalScanned = customers.length;
+  const totalQuotes  = allQuotes.length;
+  const totalRevenue = allQuotes.reduce((s, q) => s + Number(q.totalNet || 0), 0);
+  const totalEmails  = allActivities.filter(a => a.type === 'email').length;
+
+  const setKpi = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  setKpi('fuar-dash-kpi-scanned', totalScanned);
+  setKpi('fuar-dash-kpi-quotes',  totalQuotes);
+  setKpi('fuar-dash-kpi-revenue', totalRevenue.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) + ' €');
+  setKpi('fuar-dash-kpi-emails',  totalEmails);
+
+  // ── Per-employee breakdown ───────────────────────────────────
+  const employees = {};
+  const addEmp = name => {
+    const k = name || 'Bilinmiyor';
+    if (!employees[k]) employees[k] = { scanned: 0, quotes: 0, revenue: 0, emails: 0 };
+    return k;
+  };
+
+  customers.forEach(c => {
+    const k = addEmp(c.createdBy);
+    employees[k].scanned++;
+  });
+
+  allQuotes.forEach(q => {
+    // Use quote's own createdBy; fall back to the contact's createdBy
+    const by = q.createdBy || fbCustomers.find(c => c._id === q.contactId)?.createdBy || null;
+    const k  = addEmp(by);
+    employees[k].quotes++;
+    employees[k].revenue += Number(q.totalNet || 0);
+  });
+
+  allActivities.filter(a => a.type === 'email').forEach(a => {
+    const k = addEmp(a.createdBy);
+    employees[k].emails++;
+  });
+
+  const empRows = Object.entries(employees)
+    .sort((a, b) => (b[1].scanned + b[1].quotes) - (a[1].scanned + a[1].quotes));
+
+  const tbody = document.getElementById('fuar-dash-emp-tbody');
+  if (!tbody) return;
+
+  if (!empRows.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-5">Bu dönemde kayıt bulunamadı</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = empRows.map(([name, s], i) => {
+    const rank = i === 0 ? ' 🥇' : i === 1 ? ' 🥈' : i === 2 ? ' 🥉' : '';
+    return `<tr>
+      <td><span class="fbd-emp-name">${esc(name)}${rank}</span></td>
+      <td class="text-center">
+        <span class="fbd-badge fbd-badge-blue">${s.scanned}</span>
+      </td>
+      <td class="text-center">
+        <span class="fbd-badge fbd-badge-amber">${s.quotes}</span>
+      </td>
+      <td class="text-end fw-semibold" style="color:#059669;">
+        ${s.revenue.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} €
+      </td>
+      <td class="text-center">
+        <span class="fbd-badge fbd-badge-purple">${s.emails}</span>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════════
+// FUAR USERS
+// ══════════════════════════════════════════════════════════════
+let fbUsersData = [];
+let fbUsersCollection = 'userSettings';
+
+async function loadFuarUsers() {
+  const cfg = loadFbConfig();
+  const el  = document.getElementById('fuar-users-content');
+  if (!cfg?.apiKey || !cfg?.projectId) {
+    el.innerHTML = `<div class="alert alert-warning">
+      <i class="bi bi-exclamation-triangle me-2"></i>Önce <a href="#" onclick="showPage('fuarbot');return false;">Fuarbot Sync</a> sayfasında Firebase bağlantısını kurun.
+    </div>`;
+    return;
+  }
+  el.innerHTML = '<div class="text-muted p-3"><span class="spinner-border spinner-border-sm me-2"></span>Kullanıcılar yükleniyor…</div>';
+
+  try {
+    let users = [], foundCol = '';
+    for (const col of ['userSettings', 'users', 'employees']) {
+      try {
+        const docs = await fsFetch(cfg.apiKey, cfg.projectId, col);
+        if (docs.length) { users = docs.map(d => ({ ...d, _col: col })); foundCol = col; break; }
+      } catch (_) {}
+    }
+    fbUsersData = users;
+    fbUsersCollection = foundCol || 'userSettings';
+    renderFuarUsers();
+  } catch (e) {
+    el.innerHTML = `<div class="alert alert-danger">Hata: ${esc(e.message)}</div>`;
+  }
+}
+
+function renderFuarUsers() {
+  const el = document.getElementById('fuar-users-content');
+  if (!fbUsersData.length) {
+    el.innerHTML = `<div class="alert alert-info">
+      <i class="bi bi-info-circle me-2"></i>Kullanıcı bulunamadı. Firebase projesinde <code>userSettings</code>, <code>users</code> veya <code>employees</code> koleksiyonlarından biri bulunmalıdır.
+    </div>`;
+    return;
+  }
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-header d-flex align-items-center gap-2 py-2 px-3">
+        <span class="fw-semibold" style="font-size:13px;"><i class="bi bi-people-fill me-2 text-primary"></i>${fbUsersData.length} kullanıcı</span>
+        <span class="badge bg-light text-muted border" style="font-size:10px;">${fbUsersCollection}</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover mb-0 fbd-users-table">
+          <thead class="table-light">
+            <tr>
+              <th>Ad</th>
+              <th>E-posta</th>
+              <th>Şifre</th>
+              <th>Rol</th>
+              <th style="width:80px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${fbUsersData.map(u => renderFuarUserRow(u)).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function renderFuarUserRow(u) {
+  const name     = esc(u.name || u.displayName || u.email?.split('@')[0] || u._id || '—');
+  const email    = esc(u.email || '—');
+  const hasPass  = !!(u.password || u.passwordHash);
+  const role     = esc(u.role || u.userRole || u.type || '—');
+  return `<tr>
+    <td class="fw-semibold">${name}</td>
+    <td><span style="font-family:monospace;font-size:12px;">${email}</span></td>
+    <td>${hasPass
+      ? '<span class="badge bg-success-subtle text-success border border-success-subtle" style="font-family:monospace;">••••••••</span>'
+      : '<span class="text-muted small">—</span>'}</td>
+    <td><span class="badge bg-light text-dark border">${role}</span></td>
+    <td>
+      <button class="btn btn-sm btn-outline-primary" onclick="editFuarUser('${esc(u._id)}')">
+        <i class="bi bi-pencil-fill"></i>
+      </button>
+    </td>
+  </tr>`;
+}
+
+function editFuarUser(id) {
+  const u = fbUsersData.find(x => x._id === id);
+  if (!u) return;
+  document.getElementById('fuar-edit-user-id').value       = id;
+  document.getElementById('fuar-edit-user-name').value     = u.name || u.displayName || '';
+  document.getElementById('fuar-edit-user-email').value    = u.email || '';
+  document.getElementById('fuar-edit-user-password').value = '';  // never pre-fill password
+  document.getElementById('fuar-edit-user-role').value     = u.role || u.userRole || '';
+  const modal = new bootstrap.Modal(document.getElementById('fuarUserEditModal'));
+  modal.show();
+}
+
+async function saveFuarUser() {
+  const id  = document.getElementById('fuar-edit-user-id').value;
+  const cfg = loadFbConfig();
+  if (!cfg?.apiKey || !cfg?.projectId) return;
+
+  const u = fbUsersData.find(x => x._id === id);
+  const col = u?._col || fbUsersCollection;
+
+  const updates = {};
+  const nameVal  = document.getElementById('fuar-edit-user-name').value.trim();
+  const emailVal = document.getElementById('fuar-edit-user-email').value.trim();
+  const roleVal  = document.getElementById('fuar-edit-user-role').value.trim();
+  const pwVal    = document.getElementById('fuar-edit-user-password').value.trim();
+
+  if (nameVal)  updates.name  = nameVal;
+  if (emailVal) updates.email = emailVal;
+  if (roleVal)  { updates.role = roleVal; if (u?.userRole !== undefined) updates.userRole = roleVal; }
+  if (pwVal)    updates.password = pwVal;
+
+  if (!Object.keys(updates).length) {
+    bootstrap.Modal.getInstance(document.getElementById('fuarUserEditModal'))?.hide();
+    return;
+  }
+
+  // Build Firestore REST PATCH
+  const fields = {};
+  for (const [k, v] of Object.entries(updates)) fields[k] = { stringValue: v };
+  const mask = Object.keys(fields).map(k => 'updateMask.fieldPaths=' + encodeURIComponent(k)).join('&');
+  const url  = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/${col}/${id}?key=${cfg.apiKey}&${mask}`;
+
+  try {
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields }),
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error(e.error?.message || 'HTTP ' + res.status);
+    }
+    // Update local cache
+    const idx = fbUsersData.findIndex(x => x._id === id);
+    if (idx >= 0) Object.assign(fbUsersData[idx], updates);
+    bootstrap.Modal.getInstance(document.getElementById('fuarUserEditModal'))?.hide();
+    toast('✓ Kullanıcı güncellendi', 'success');
+    renderFuarUsers();
+  } catch (e) {
+    toast('Hata: ' + e.message, 'error');
+  }
+}
+
+function togglePassVis(inputId, btn) {
+  const inp = document.getElementById(inputId);
+  if (!inp) return;
+  const isPass = inp.type === 'password';
+  inp.type = isPass ? 'text' : 'password';
+  const icon = btn.querySelector('i');
+  if (icon) { icon.className = isPass ? 'bi bi-eye-slash' : 'bi bi-eye'; }
+}

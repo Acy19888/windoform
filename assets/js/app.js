@@ -674,7 +674,9 @@ function showPage(name) {
   else if (name === 'import')     loadImportHistory().catch(console.error);
   else if (name === 'reports')    loadReports().catch(console.error);
   else if (name === 'duplicates') loadDuplicates().catch(console.error);
-  else if (name === 'fuarbot')    loadFuarbotPage();
+  else if (name === 'fuarbot')        loadFuarbotPage();
+  else if (name === 'fuar-dashboard') loadFuarDashboard();
+  else if (name === 'fuar-users')     loadFuarUsers();
 }
 
 function setupEventListeners() {
