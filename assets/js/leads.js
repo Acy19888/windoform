@@ -22,11 +22,12 @@ const LD_SOURCE_SCORES = {
   email: 60, api: 70, web_research: 45, unknown: 20,
 };
 
-let leadsData     = [];
-let ldView        = 'kanban';   // 'kanban' | 'table'
-let ldStageFilter = 'all';
-let ldSearchQ     = '';
-let ldDragId      = null;
+let leadsData       = [];
+let ldView          = 'kanban';   // 'kanban' | 'table'
+let ldStageFilter   = 'all';
+let ldSearchQ       = '';
+let ldDragId        = null;
+let _ldAllCompanies = [];   // Companies from IndexedDB (for autocomplete + import)
 
 // ── Load ──────────────────────────────────────────────────
 async function loadLeads() {
@@ -39,7 +40,10 @@ async function loadLeads() {
     return;
   }
   try {
-    leadsData = await fsFetch(cfg.apiKey, cfg.projectId, LD_COL);
+    [leadsData, _ldAllCompanies] = await Promise.all([
+      fsFetch(cfg.apiKey, cfg.projectId, LD_COL),
+      (typeof dbGetAll === 'function' ? dbGetAll('companies') : Promise.resolve([])).catch(() => []),
+    ]);
     leadsData.sort((a, b) => (b.createdAt || '') > (a.createdAt || '') ? 1 : -1);
     renderLeads();
   } catch(e) {
@@ -431,7 +435,8 @@ function _ldOpenModal(lead) {
   f('ld-f-notes').value        = lead?.notes           || '';
   f('ld-f-id').value           = lead?._id             || '';
 
-  // Show live confidence preview
+  // Populate company autocomplete + show live confidence preview
+  _ldPopulateCompanyDatalist();
   _ldConfPreview();
 
   new bootstrap.Modal(document.getElementById('leadEditModal')).show();
@@ -587,3 +592,159 @@ async function ldConvertToContact(id) {
   `;
   document.head.appendChild(s);
 })();
+
+// ═══════════════════════════════════════════════════════════
+// FIRMALAR AUTOCOMPLETE + IMPORT — company integration
+// ═══════════════════════════════════════════════════════════
+
+// ── Populate datalist from IndexedDB companies ────────────
+function _ldPopulateCompanyDatalist() {
+  const dl = document.getElementById('ld-company-list');
+  if (!dl) return;
+  dl.innerHTML = _ldAllCompanies
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'tr'))
+    .map(c => `<option value="${(c.name || '').replace(/"/g, '&quot;')}"></option>`)
+    .join('');
+}
+
+// ── Auto-fill form fields when a company is picked ────────
+function _ldCompanyPick() {
+  const val = (document.getElementById('ld-f-company')?.value || '').trim().toLowerCase();
+  const match = _ldAllCompanies.find(c => (c.name || '').toLowerCase() === val);
+  if (!match) return;
+  const f = id => document.getElementById(id);
+  // Only fill empty fields — don't overwrite what the user already typed
+  if (match.city    && !f('ld-f-city').value)    f('ld-f-city').value    = match.city;
+  if (match.website && !f('ld-f-website').value)  f('ld-f-website').value = match.website;
+  if (match.sector  && !f('ld-f-sector').value)   f('ld-f-sector').value  = match.sector;
+  if (match.email   && !f('ld-f-email').value)    f('ld-f-email').value   = match.email;
+  if (match.phone   && !f('ld-f-phone').value)    f('ld-f-phone').value   = match.phone;
+  _ldConfPreview();
+}
+
+// ── Firmalardan Aktar — open import modal ─────────────────
+async function ldImportFromFirmalar() {
+  // Re-fetch companies in case they changed since page load
+  if (typeof dbGetAll === 'function') {
+    _ldAllCompanies = await dbGetAll('companies').catch(() => _ldAllCompanies);
+  }
+  if (!_ldAllCompanies.length) {
+    alert('Firmalar veritabanında henüz şirket bulunamadı.');
+    return;
+  }
+
+  // Build existing lead company names to highlight duplicates
+  const existingNames = new Set(leadsData.map(l => (l.company || '').toLowerCase().trim()));
+
+  const listEl = document.getElementById('ld-import-list');
+  listEl.innerHTML = _ldAllCompanies
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'tr'))
+    .map(c => {
+      const isDup = existingNames.has((c.name || '').toLowerCase().trim());
+      const dupBadge = isDup ? '<span class="badge bg-warning text-dark ms-2" style="font-size:10px;">Zaten var</span>' : '';
+      const sectorTxt = c.sector ? `<small class="text-muted ms-2">${c.sector}</small>` : '';
+      const cityTxt   = c.city   ? `<small class="text-muted ms-1">· ${c.city}</small>` : '';
+      return `<div class="form-check py-1 border-bottom">
+        <input class="form-check-input ld-import-chk" type="checkbox" value="${c.id}" id="ldic-${c.id}" ${isDup ? '' : 'checked'}>
+        <label class="form-check-label" for="ldic-${c.id}" style="cursor:pointer;font-size:13px;">
+          <span class="fw-semibold">${(c.name || '').replace(/</g,'&lt;')}</span>${dupBadge}${sectorTxt}${cityTxt}
+        </label>
+      </div>`;
+    }).join('');
+
+  // Update count on checkbox change
+  listEl.addEventListener('change', _ldImportUpdateCount);
+  _ldImportUpdateCount();
+
+  new bootstrap.Modal(document.getElementById('ldImportModal')).show();
+}
+
+function _ldImportUpdateCount() {
+  const checked = document.querySelectorAll('.ld-import-chk:checked').length;
+  const el = document.getElementById('ld-import-count');
+  if (el) el.textContent = `${checked} seçili`;
+}
+
+function _ldImportFilter() {
+  const q = (document.getElementById('ld-import-search')?.value || '').toLowerCase();
+  document.querySelectorAll('#ld-import-list .form-check').forEach(row => {
+    const txt = row.textContent.toLowerCase();
+    row.style.display = txt.includes(q) ? '' : 'none';
+  });
+}
+
+function _ldImportSelectAll() {
+  document.querySelectorAll('#ld-import-list .ld-import-chk').forEach(cb => {
+    if (cb.closest('.form-check').style.display !== 'none') cb.checked = true;
+  });
+  _ldImportUpdateCount();
+}
+
+function _ldImportSelectNone() {
+  document.querySelectorAll('#ld-import-list .ld-import-chk').forEach(cb => cb.checked = false);
+  _ldImportUpdateCount();
+}
+
+// ── Actually import selected companies as leads ───────────
+async function ldDoImport() {
+  const stage     = document.getElementById('ld-import-stage')?.value || 'new';
+  const checked   = [...document.querySelectorAll('.ld-import-chk:checked')].map(cb => Number(cb.value));
+  if (!checked.length) { alert('Lütfen en az bir firma seçin.'); return; }
+
+  const cfg = loadFbConfig();
+  if (!cfg?.apiKey || !cfg?.projectId) { alert('Firebase bağlantısı eksik.'); return; }
+
+  const btn = document.querySelector('#ldImportModal .btn-primary');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Aktarılıyor…'; }
+
+  let ok = 0, skip = 0;
+  const existingNames = new Set(leadsData.map(l => (l.company || '').toLowerCase().trim()));
+
+  for (const id of checked) {
+    const c = _ldAllCompanies.find(x => x.id === id);
+    if (!c) continue;
+
+    const now = new Date().toISOString();
+    const rec = {
+      company:      c.name     || '',
+      firstName:    '',
+      lastName:     '',
+      email:        c.email    || '',
+      phone:        c.phone    || '',
+      city:         c.city     || '',
+      country:      c.country  || '',
+      website:      c.website  || '',
+      sector:       c.sector   || '',
+      sourceType:   'manual',
+      stage:        stage,
+      expectedValue: 0,
+      currency:     'EUR',
+      notes:        '',
+      createdAt:    now,
+      updatedAt:    now,
+    };
+    rec.confidenceScore = ldCalcConf(rec).score;
+
+    try {
+      const url = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/${LD_COL}?key=${cfg.apiKey}`;
+      const fields = {};
+      Object.entries(rec).forEach(([k, v]) => {
+        if (typeof v === 'number')       fields[k] = { integerValue: v };
+        else if (typeof v === 'boolean') fields[k] = { booleanValue: v };
+        else                             fields[k] = { stringValue: String(v ?? '') };
+      });
+      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields }) });
+      if (!res.ok) throw new Error(await res.text());
+      ok++;
+    } catch(e) {
+      console.warn('[Lead import]', c.name, e);
+      skip++;
+    }
+  }
+
+  if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-download me-1"></i>Aktar'; }
+  bootstrap.Modal.getInstance(document.getElementById('ldImportModal'))?.hide();
+
+  alert(`${ok} firma lead olarak aktarıldı.${skip ? ' '+skip+' hata.' : ''}`);
+  await loadLeads(); // Refresh
+}
