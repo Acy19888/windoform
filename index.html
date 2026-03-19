@@ -96,6 +96,37 @@
           <button class="btn btn-primary btn-sm" onclick="connectFuarbot()"><i class="bi bi-plug me-1"></i>Bağlan</button>
         </div>
         <div id="fb-connect-error" class="alert alert-danger mt-2 mb-0 py-2 small" style="display:none;"></div>
+
+        <!-- ── NETSIS CONFIG ── -->
+        <hr class="my-3">
+        <h6 class="mb-2" style="font-size:13px;"><i class="bi bi-building-gear me-1 text-success"></i>Netsis NetOpenX REST <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:10px;">ERP Entegrasyonu</span></h6>
+        <div class="row g-2">
+          <div class="col-12">
+            <label class="form-label form-label-sm fw-semibold">Sunucu URL</label>
+            <input type="text" class="form-control form-control-sm" id="ns-base-url" placeholder="http://192.168.1.100:8080/NetOpenX.Rest/">
+          </div>
+          <div class="col-6">
+            <label class="form-label form-label-sm fw-semibold">Kullanıcı Adı</label>
+            <input type="text" class="form-control form-control-sm" id="ns-username" placeholder="admin">
+          </div>
+          <div class="col-6">
+            <label class="form-label form-label-sm fw-semibold">Şifre</label>
+            <input type="password" class="form-control form-control-sm" id="ns-password" placeholder="••••••••" autocomplete="off">
+          </div>
+          <div class="col-6">
+            <label class="form-label form-label-sm fw-semibold">Şirket Kodu</label>
+            <input type="text" class="form-control form-control-sm" id="ns-company" placeholder="WINDOFORM">
+          </div>
+          <div class="col-6">
+            <label class="form-label form-label-sm fw-semibold">Şube Kodu <span class="text-muted">(opsiyonel)</span></label>
+            <input type="text" class="form-control form-control-sm" id="ns-branch" placeholder="001">
+          </div>
+        </div>
+        <div class="mt-2 d-flex gap-2 align-items-center flex-wrap">
+          <button class="btn btn-success btn-sm" onclick="saveNetsisSettings();loadNetsisSettingsToForm()"><i class="bi bi-floppy me-1"></i>Kaydet</button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="netsisPing()"><i class="bi bi-wifi me-1"></i>Bağlantı Test</button>
+          <span id="ns-ping-result"></span>
+        </div>
       </div>
     </div>
   </div>
@@ -610,9 +641,11 @@
       <h1><i class="bi bi-box-seam-fill me-2" style="color:#7c3aed;"></i>Ürünler</h1>
     </div>
     <div class="page-topbar-right">
+      <button class="btn btn-sm btn-outline-success me-2" id="ns-sync-btn" onclick="netsisStockSync()"><i class="bi bi-arrow-repeat me-1"></i>Netsis'ten Stok Senkronize Et</button>
       <button class="btn btn-sm btn-outline-success me-2" onclick="openCsvImport()"><i class="bi bi-filetype-csv me-1"></i>CSV İçe Aktar</button>
       <button class="btn btn-sm btn-primary me-2" onclick="openAddProduct()"><i class="bi bi-plus-lg me-1"></i>Ürün Ekle</button>
       <button class="btn btn-sm btn-outline-secondary" onclick="loadProducts()" title="Yenile"><i class="bi bi-arrow-clockwise"></i></button>
+      <span id="ns-sync-status" class="ms-2"></span>
     </div>
   </div>
   <div class="page-content">
@@ -1362,6 +1395,7 @@
 <script src="./assets/js/app.js?v=20260318j"></script>
 <script src="./assets/js/fuarbot2.js"></script>
 <script src="./assets/js/products.js"></script>
+<script src="./assets/js/netsis.js"></script>
 <script src="./assets/js/chatbot.js"></script>
 <script src="./assets/js/leads.js"></script>
 <script>document.addEventListener('DOMContentLoaded', () => { initChatbot(); });</script>

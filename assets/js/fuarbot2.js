@@ -29,6 +29,8 @@ function showFbConfig() {
     const el = document.getElementById('claude-api-key');
     if (el) el.value = ck;
   } catch { /* ignore */ }
+  // Load Netsis settings
+  if (typeof loadNetsisSettingsToForm === 'function') loadNetsisSettingsToForm();
 }
 
 function connectFuarbot() {

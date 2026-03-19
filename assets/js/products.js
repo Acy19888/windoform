@@ -786,6 +786,30 @@ async function faturaNetsisSend() {
     } catch(e) { console.warn('Fatura kayıt hatası:', e); }
   }
 
+  // ── Try real Netsis API if configured ────────────────────
+  let netsisDocNo = null;
+  try {
+    if (typeof buildNetsisInvoiceFromFatura === 'function' && typeof netsisSendInvoice === 'function') {
+      const netsisInvData = buildNetsisInvoiceFromFatura(ftCurrentQuote);
+      if (netsisInvData && netsisInvData.lines.length) {
+        const nCfg = (typeof loadNetsisConfig === 'function') ? loadNetsisConfig() : {};
+        if (nCfg.baseUrl && nCfg.username && nCfg.password) {
+          // Override lines with confirmed (live-edited) values
+          netsisInvData.lines = confirmedLines.map(l => ({
+            itemCode:    l.product     || '',
+            description: l.description || l.product || '',
+            qty:         Number(l.qty)       || 0,
+            unit:        l.unit              || 'ADET',
+            unitPrice:   Number(l.unitPrice) || 0,
+            vatRate:     18,
+          }));
+          const nRes = await netsisSendInvoice(netsisInvData);
+          if (nRes?.success) netsisDocNo = nRes.docNo;
+        }
+      }
+    }
+  } catch(ne) { console.warn('[Netsis] send error (non-blocking):', ne); }
+
   // Update UI
   if (btn) { btn.disabled = true; btn.classList.remove('btn-success'); btn.classList.add('btn-secondary'); btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Gönderildi'; }
   const badge = document.querySelector('#fatura-content .badge.bg-warning');
@@ -794,5 +818,6 @@ async function faturaNetsisSend() {
   const stockMsg = deducted > 0
     ? `${deducted} üründen stok düşüldü${notFound ? `, ${notFound} kalem katalogda bulunamadı` : ''}`
     : `Dikkat: ${notFound} kalem katalogda bulunamadı — stok güncellenemedi`;
-  toast(`✓ Fatura onaylandı ve kaydedildi. ${stockMsg}.`, 'success');
+  const netsisMsg = netsisDocNo ? ` | Netsis Fatura No: ${netsisDocNo}` : '';
+  toast(`✓ Fatura onaylandı ve kaydedildi. ${stockMsg}${netsisMsg}.`, 'success');
 }
