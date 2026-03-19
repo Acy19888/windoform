@@ -677,6 +677,7 @@ function showPage(name) {
   else if (name === 'fuarbot')        loadFuarbotPage();
   else if (name === 'fuar-dashboard') loadFuarDashboard();
   else if (name === 'fuar-users')     loadFuarUsers();
+  else if (name === 'ayarlar')        loadAyarlar();
   else if (name === 'leads')          loadLeads().catch(console.error);
   else if (name === 'teklifler')      loadTeklifler();
   else if (name === 'fatura')         loadFatura();

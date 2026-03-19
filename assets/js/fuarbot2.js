@@ -16,21 +16,18 @@ function loadFbConfig() {
 function saveFbConfig(cfg) { localStorage.setItem(FB_CFG_KEY, JSON.stringify(cfg)); }
 
 function showFbConfig() {
-  document.getElementById('fb-config-panel').style.display = '';
-  document.getElementById('fb-tabs-wrapper').style.display = 'none';
-  const cfg = loadFbConfig();
-  if (cfg) {
-    const s = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
-    s('fb-api-key', cfg.apiKey); s('fb-project-id', cfg.projectId); s('fb-auth-domain', cfg.authDomain);
+  // Redirect to the dedicated Ayarlar page instead of inline panel
+  if (typeof showPage === 'function') {
+    showPage('ayarlar');
   }
-  // Load Claude key
-  try {
-    const ck = JSON.parse(localStorage.getItem('windoform_cfg') || '{}').claudeKey || '';
-    const el = document.getElementById('claude-api-key');
-    if (el) el.value = ck;
-  } catch { /* ignore */ }
-  // Load Netsis settings
-  if (typeof loadNetsisSettingsToForm === 'function') loadNetsisSettingsToForm();
+}
+
+// Called when Fuarbot page is opened — show "not connected" notice if needed
+function _fbShowNotConnected() {
+  const panel = document.getElementById('fb-config-panel');
+  const tabs  = document.getElementById('fb-tabs-wrapper');
+  if (panel) panel.style.display = '';
+  if (tabs)  tabs.style.display  = 'none';
 }
 
 function connectFuarbot() {
@@ -553,7 +550,7 @@ function loadFuarbotPage() {
       if (fbMainTabActive === 'contacts') { renderCustomerList(fbCustomers); if (fbSelectedId) showDetail(fbSelectedId); }
       else renderAllQuotesView();
     }
-  } else { showFbConfig(); }
+  } else { _fbShowNotConnected(); }
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1832,4 +1829,43 @@ function ftPrint() {
   <br><button onclick="window.print()" style="background:#1a56db;color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:13px;">🖨️ Yazdır / PDF Olarak Kaydet</button>
   </body></html>`);
   w.document.close();
+}
+
+// ═══════════════════════════════════════════════════════════
+// AYARLAR PAGE — load all saved settings into form fields
+// ═══════════════════════════════════════════════════════════
+function loadAyarlar() {
+  // Firebase fields
+  const fbCfg = loadFbConfig();
+  if (fbCfg) {
+    const s = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+    s('fb-api-key',    fbCfg.apiKey);
+    s('fb-project-id', fbCfg.projectId);
+    s('fb-auth-domain',fbCfg.authDomain);
+  }
+
+  // Claude API key
+  try {
+    const ck = JSON.parse(localStorage.getItem('windoform_cfg') || '{}').claudeKey || '';
+    const el = document.getElementById('claude-api-key');
+    if (el) el.value = ck;
+  } catch { /* ignore */ }
+
+  // Netsis settings
+  if (typeof loadNetsisSettingsToForm === 'function') loadNetsisSettingsToForm();
+
+  // Firebase connection status badge
+  const badge = document.getElementById('ay-fb-status');
+  if (badge) {
+    if (fbCfg?.apiKey && fbPollInterval) {
+      badge.className = 'badge bg-success ms-auto';
+      badge.textContent = 'Bağlı';
+    } else if (fbCfg?.apiKey) {
+      badge.className = 'badge bg-warning text-dark ms-auto';
+      badge.textContent = 'Kayıtlı (bağlanmadı)';
+    } else {
+      badge.className = 'badge bg-secondary ms-auto';
+      badge.textContent = 'Yapılandırılmadı';
+    }
+  }
 }
