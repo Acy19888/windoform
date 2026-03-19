@@ -1573,19 +1573,29 @@ async function _tkPopulateDataLists() {
   } catch(e) {}
 }
 
+function _tkBuildAddr(co) {
+  return [co.address, co.district, co.city, co.postcode].filter(Boolean).join(', ');
+}
+
+function _tkFillFromCompany(co, overwrite) {
+  const fill = (id, v) => {
+    const el = document.getElementById(id);
+    if (!el || !v) return;
+    if (overwrite || !el.value.trim()) el.value = v;
+  };
+  fill('tk-edit-cemail', co.email);
+  fill('tk-edit-cphone', co.phone || co.phoneNormalized);
+  const addr = _tkBuildAddr(co);
+  fill('tk-edit-caddr', addr);
+}
+
 function _tkCompanyPick() {
   const val = (document.getElementById('tk-edit-ccompany')?.value || '').trim().toLowerCase();
   if (!val) return;
-  // Exact match first, then startsWith (handles partial typing before full selection)
   const co = _tkAllCompanies.find(c => (c.name||'').toLowerCase() === val)
           || _tkAllCompanies.find(c => (c.name||'').toLowerCase().startsWith(val));
   if (!co) return;
-  // Always overwrite with company data when a match is found
-  const fill = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
-  fill('tk-edit-cemail', co.email);
-  fill('tk-edit-cphone', co.phone || co.phoneNormalized);
-  const addr = [co.address, co.district, co.city].filter(Boolean).join(', ');
-  if (addr) fill('tk-edit-caddr', addr);
+  _tkFillFromCompany(co, true);   // overwrite — user explicitly picked this company
 }
 
 function _tkContactPick() {
@@ -1597,13 +1607,12 @@ function _tkContactPick() {
   const fill = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
   fill('tk-edit-cemail', cn.email);
   fill('tk-edit-cphone', cn.phone);
-  // If contact has a company, fill company name + company details too
+  // Fill from linked company (address + fallback email/phone)
   if (cn.companyId && _tkAllCompanies.length) {
     const co = _tkAllCompanies.find(c => c.id === cn.companyId);
     if (co) {
       fill('tk-edit-ccompany', co.name);
-      if (!document.getElementById('tk-edit-cemail')?.value) fill('tk-edit-cemail', co.email);
-      if (!document.getElementById('tk-edit-cphone')?.value) fill('tk-edit-cphone', co.phone || co.phoneNormalized);
+      _tkFillFromCompany(co, false);  // don't overwrite contact's own email/phone
     }
   }
 }
