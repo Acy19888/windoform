@@ -196,16 +196,49 @@ async function fbFetchContactData(fbId) {
       return rows.filter(r => r.document).map(r => fsDoc(r.document));
     };
 
-    // Activities: some Fuarbot versions store parentId, others contactId
-    const [actsA, actsB, quotes] = await Promise.all([
+    // 1. Activities from crm_activities (parentId or contactId)
+    // 2. Quotes from crm_quotes
+    // 3. Raw contacts/{fbId} document — has embedded timeline[] array with ALL events
+    //    (initial card scan, edits etc. that never made it into crm_activities)
+    const contactDocUrl = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/contacts/${fbId}?key=${cfg.apiKey}`;
+
+    const [actsA, actsB, quotes, contactDocRes] = await Promise.all([
       runQ('crm_activities', 'contactId', fbId),
       runQ('crm_activities', 'parentId',  fbId),
       runQ('crm_quotes',     'contactId', fbId),
+      fetch(contactDocUrl).catch(() => null),
     ]);
 
-    // Merge & deduplicate activities
+    // Merge & deduplicate crm_activities
     const actsMap = new Map();
     [...actsA, ...actsB].forEach(a => actsMap.set(a._id, a));
+
+    // Also include timeline events embedded in contacts/{fbId}.timeline
+    if (contactDocRes?.ok) {
+      try {
+        const contactDoc = await contactDocRes.json();
+        const timelineVal = contactDoc?.fields?.timeline;
+        // timeline is an arrayValue
+        const timelineItems = timelineVal?.arrayValue?.values || [];
+        timelineItems.forEach((item, i) => {
+          const obj = fsFields(item.mapValue?.fields || {});
+          const ts  = obj.timestamp || obj.createdAt || '';
+          const key = `tl_${fbId}_${i}`;
+          if (!actsMap.has(key)) {
+            actsMap.set(key, {
+              _id:       key,
+              type:      obj.type || 'note',
+              text:      obj.label || obj.text || '',
+              createdAt: ts,
+              createdBy: obj.user || '',
+              htmlBody:  obj.htmlBody || null,
+              message:   obj.message  || null,
+            });
+          }
+        });
+      } catch(parseErr) { /* ignore parse errors */ }
+    }
+
     const acts = [...actsMap.values()].sort((a, b) => (b.createdAt||'') > (a.createdAt||'') ? 1 : -1);
 
     // Update in-memory caches
@@ -214,6 +247,30 @@ async function fbFetchContactData(fbId) {
   } catch(e) {
     console.warn('[Fuarbot] fbFetchContactData failed:', e);
   }
+}
+
+// ── Find a Fuarbot customer in crm_customers by email or name ──
+// Used when fbAllCustomersRaw is empty (background sync not yet run)
+async function fbFindCustomerByEmailOrName(email, nameLow) {
+  const cfg = loadFbConfig();
+  if (!cfg?.apiKey || !cfg?.projectId) return null;
+  if (!email && !nameLow) return null;
+  const base = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents:runQuery?key=${cfg.apiKey}`;
+  const runQ = async (field, val) => {
+    if (!val) return [];
+    const body = { structuredQuery: { from:[{collectionId:'crm_customers'}], where:{ fieldFilter:{ field:{fieldPath:field}, op:'EQUAL', value:{stringValue:val} } }, limit:5 } };
+    const res = await fetch(base, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+    if (!res.ok) return [];
+    const rows = await res.json();
+    return rows.filter(r => r.document).map(r => fsDoc(r.document));
+  };
+  try {
+    const [byEmail, byName] = await Promise.all([
+      runQ('email', email),
+      runQ('name',  nameLow),
+    ]);
+    return byEmail[0] || byName[0] || null;
+  } catch(e) { return null; }
 }
 
 // ── Silent background sync (called from app startup) ──────

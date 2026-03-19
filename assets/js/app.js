@@ -1523,21 +1523,13 @@ async function showContactModal(id) {
   // ── Find matching Fuarbot customer by email or name ──
   const email   = (c.email || '').toLowerCase().trim();
   const nameLow = (c.name  || '').toLowerCase().trim();
-  let fbCust = null;
-  if (typeof fbCustomers !== 'undefined' && fbCustomers.length) {
-    fbCust = fbCustomers.find(x =>
-      (email && (x.email||'').toLowerCase().trim() === email) ||
-      (nameLow && (x.name||'').toLowerCase().trim() === nameLow)
-    );
-  }
-  // Also search ALL raw crm_customers (including imported ones) for a match
-  // so the timeline works even after a contact has been imported to CRM.
-  if (!fbCust && typeof fbAllCustomersRaw !== 'undefined' && fbAllCustomersRaw.length) {
-    fbCust = fbAllCustomersRaw.find(x =>
-      (email && (x.email||'').toLowerCase().trim() === email) ||
-      (nameLow && (x.name||'').toLowerCase().trim() === nameLow)
-    );
-  }
+  const _fbMatch = arr => arr && arr.find(x =>
+    (email   && (x.email||'').toLowerCase().trim() === email) ||
+    (nameLow && (x.name ||'').toLowerCase().trim() === nameLow)
+  );
+  // Try in-memory first (filtered list + full raw list including already-imported)
+  let fbCust = _fbMatch(typeof fbCustomers !== 'undefined' ? fbCustomers : null)
+            || _fbMatch(typeof fbAllCustomersRaw !== 'undefined' ? fbAllCustomersRaw : null);
 
   // ── Timeline/Quotes placeholder shown immediately ─────
   const tlContent = document.getElementById('cont-timeline-content');
@@ -1579,16 +1571,33 @@ async function showContactModal(id) {
     }
   };
 
-  // ── Render with cached data first (instant) ───────────
+  // ── Render cached data immediately, then async fetch ──
   _renderFbPanels();
 
-  // ── Then fetch fresh data from Firestore for this contact
-  if (fbCust?._id && typeof fbFetchContactData === 'function') {
-    fbFetchContactData(fbCust._id).then(() => {
-      // Only update if this modal is still open for the same contact
-      if (currentModalContactId === id) _renderFbPanels();
-    }).catch(() => {});
-  }
+  // ── Async: Firestore fallback lookup + fresh data fetch ─
+  (async () => {
+    // If not in memory → query crm_customers by email/name directly
+    if (!fbCust && typeof fbFindCustomerByEmailOrName === 'function') {
+      try {
+        fbCust = await fbFindCustomerByEmailOrName(email, nameLow);
+        if (fbCust) {
+          // Cache for future lookups
+          if (typeof fbAllCustomersRaw !== 'undefined' && !fbAllCustomersRaw.find(x => x._id === fbCust._id)) {
+            fbAllCustomersRaw.push(fbCust);
+          }
+          // Show whatever cached activities exist already
+          if (currentModalContactId === id) _renderFbPanels();
+        }
+      } catch(e) {}
+    }
+    // Fetch fresh Firestore data for this contact (activities + timeline + quotes)
+    if (fbCust?._id && typeof fbFetchContactData === 'function') {
+      try {
+        await fbFetchContactData(fbCust._id);
+        if (currentModalContactId === id) _renderFbPanels();
+      } catch(e) {}
+    }
+  })();
 
   new bootstrap.Modal(document.getElementById('contModal')).show();
 }
