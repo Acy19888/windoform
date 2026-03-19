@@ -733,16 +733,15 @@ function renderFuarUsers() {
   const el = document.getElementById('fuar-users-content');
 
   // Fuarbot verisinden henüz eklenmemiş çalışan sayısını hesapla
-  const discovered  = _discoverFuarbotEmployees();
+  const discovered    = _discoverFuarbotEmployees();
   const existingNames = new Set(fbUsersData.map(u => (u.name||'').toLowerCase().trim()));
-  const newOnes = discovered.filter(d => !existingNames.has(d.name.toLowerCase().trim()));
+  const newOnes       = discovered.filter(d => !existingNames.has(d.name.toLowerCase().trim()));
+  const badge         = newOnes.length ? `<span class="badge bg-success ms-1">${newOnes.length}</span>` : '';
 
-  const importBtn = newOnes.length
-    ? `<button class="btn btn-sm btn-outline-success me-2" onclick="openFuarbotImport()">
-        <i class="bi bi-cloud-download-fill me-1"></i>Fuarbot'tan İçe Aktar
-        <span class="badge bg-success ms-1">${newOnes.length}</span>
-      </button>`
-    : '';
+  // Buton her zaman görünür — veri yoksa tıklayınca açıklama gösterir
+  const importBtn = `<button class="btn btn-sm btn-outline-success me-2" onclick="openFuarbotImport()">
+    <i class="bi bi-cloud-download-fill me-1"></i>Fuarbot'tan İçe Aktar${badge}
+  </button>`;
 
   const addBtn = `<button class="btn btn-sm btn-primary" onclick="openAddFuarUser()">
     <i class="bi bi-person-plus-fill me-1"></i>Çalışan Ekle</button>`;
@@ -827,6 +826,10 @@ function openFuarbotImport() {
   const existingNames = new Set(fbUsersData.map(u => (u.name||'').toLowerCase().trim()));
   const newOnes       = discovered.filter(d => !existingNames.has(d.name.toLowerCase().trim()));
 
+  if (!discovered.length) {
+    toast('Fuarbot verisi henüz yüklenmemiş. Önce Fuarbot Sync sayfasında senkronize edin.', 'error');
+    return;
+  }
   if (!newOnes.length) { toast('Tüm çalışanlar zaten eklenmiş.', 'success'); return; }
 
   const rows = newOnes.map((d, i) => `
