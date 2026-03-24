@@ -1496,24 +1496,34 @@ async function loadTeklifler() {
         fsFetch(cfg.apiKey, cfg.projectId, 'crm_activities'),
         fsFetch(cfg.apiKey, cfg.projectId, 'contacts').catch(() => []),
       ]);
-      // Keep global crm_activities cache in sync
-      fbActivities = {};
-      freshActs.forEach(a => { const k = a.parentId||a.contactId||''; (fbActivities[k]||(fbActivities[k]=[])).push(a); });
-      allActs = [...freshActs];
-      // Extract timeline entries from embedded contacts/{id}.timeline arrays
+      // MERGE fresh crm_activities into fbActivities — do NOT reset it.
+      // fbFetchContactData already populated fbActivities with embedded timeline
+      // entries for contacts the user has opened; resetting would lose that data.
+      freshActs.forEach(a => {
+        const k = a.parentId||a.contactId||'';
+        if (!fbActivities[k]) fbActivities[k] = [];
+        if (!fbActivities[k].find(x => x._id === a._id)) fbActivities[k].push(a);
+      });
+      // Merge embedded contacts/{id}.timeline entries from the contacts collection.
       contactDocs.forEach(contact => {
         const timeline = Array.isArray(contact.timeline) ? contact.timeline : [];
+        if (!fbActivities[contact._id]) fbActivities[contact._id] = [];
         timeline.forEach((item, i) => {
-          allActs.push({
-            _id:       `tl_${contact._id}_${i}`,
-            type:      item.type || 'note',
-            text:      item.label || item.text || '',
-            createdAt: item.timestamp || item.createdAt || '',
-            createdBy: item.user || item.createdBy || '',
-            contactId: contact._id,
-          });
+          const tid = `tl_${contact._id}_${i}`;
+          if (!fbActivities[contact._id].find(x => x._id === tid)) {
+            fbActivities[contact._id].push({
+              _id:       tid,
+              type:      item.type || 'note',
+              text:      item.label || item.text || '',
+              createdAt: item.timestamp || item.createdAt || '',
+              createdBy: item.user || item.createdBy || '',
+              contactId: contact._id,
+            });
+          }
         });
       });
+      // allActs = everything we now know about (crm_activities + timelines)
+      allActs = Object.values(fbActivities).flat();
     } catch(_) {
       allActs = Object.values(fbActivities).flat(); // fallback to cache on error
     }
