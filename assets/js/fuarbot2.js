@@ -801,10 +801,25 @@ function renderFuarDashboard() {
   });
   const allActivities = Object.values(fbActivities).flat().filter(a => fuarInRange(a.createdAt, from, to));
 
+  // ── Quote-activities (Fuarbot stores sent quotes as activities, not crm_quotes docs)
+  // Deduplicate against crm_quotes by quote number to avoid double-counting
+  const _quoteNumsSeen = new Set(allQuotes.map(q => q.quoteNumber).filter(Boolean));
+  const quoteActivities = allActivities.filter(a => {
+    if (a.type !== 'quote' && !(a.type === 'email' && (a.text||'').toLowerCase().includes('teklif'))) return false;
+    const m = (a.text||'').match(/([A-Z]+-[\dA-Z]+-\d+)/);
+    const num = m?.[1];
+    if (num) { if (_quoteNumsSeen.has(num)) return false; _quoteNumsSeen.add(num); }
+    return true;
+  });
+
   // ── Totals ───────────────────────────────────────────────────
   const totalScanned = customers.length;
-  const totalQuotes  = allQuotes.length;
-  const totalRevenue = allQuotes.reduce((s, q) => s + Number(q.totalNet || 0), 0);
+  const _actRev = quoteActivities.reduce((s, a) => {
+    const m = (a.text||'').match(/([\d.]+,\d{2})\s*(?:EUR|€|\$|₺)/);
+    return s + (m ? parseFloat(m[1].replace(/\./g,'').replace(',','.')) : 0);
+  }, 0);
+  const totalQuotes  = allQuotes.length + quoteActivities.length;
+  const totalRevenue = allQuotes.reduce((s, q) => s + Number(q.totalNet || 0), 0) + _actRev;
   const totalEmails  = allActivities.filter(a => a.type === 'email').length;
 
   const setKpi = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
@@ -880,6 +895,14 @@ function renderFuarDashboard() {
     const k  = addEmp(by);
     employees[k].quotes++;
     employees[k].revenue += Number(q.totalNet || 0);
+  });
+
+  // Quote-activities (Fuarbot quotes stored as activities)
+  quoteActivities.forEach(a => {
+    const k = addEmp(_resolveEmp(a.createdBy, a.createdByUid));
+    employees[k].quotes++;
+    const m = (a.text||'').match(/([\d.]+,\d{2})\s*(?:EUR|€|\$|₺)/);
+    if (m) employees[k].revenue += parseFloat(m[1].replace(/\./g,'').replace(',','.')) || 0;
   });
 
   allActivities.filter(a => a.type === 'email').forEach(a => {
