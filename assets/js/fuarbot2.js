@@ -330,9 +330,56 @@ function showDetail(id) {
   fbSelectedId = id;
   document.querySelectorAll('.fb-card').forEach(el =>
     el.classList.toggle('active', el.getAttribute('onclick')?.includes(`'${id}'`)));
-  const c = fbCustomers.find(x => x._id === id);
+  const c = fbCustomers.find(x => x._id === id) || (fbAllCustomersRaw||[]).find(x => x._id === id);
   if (!c) return;
-  const quotes = fbQuotes[id]||[], acts = fbActivities[id]||[];
+  const crmQuotes = fbQuotes[id]||[], acts = fbActivities[id]||[];
+
+  // Merge activity-based quotes (Fuarbot mobile) into the Teklifler tab
+  const seenNums = new Set(crmQuotes.map(q => q.quoteNumber).filter(Boolean));
+  const allQuotes = [...crmQuotes];
+  acts.forEach(a => {
+    const txt = a.text || '';
+    const lo  = txt.toLowerCase();
+    const hasNum = /[A-Z]{2,}-[\dA-Z]+-\d+/.test(txt);
+    const isQ = a.type === 'quote' || a.type === 'offer' ||
+      (a.type === 'email' && (lo.includes('teklif') || lo.includes('angebot'))) || hasNum;
+    if (!isQ) return;
+    const numMatch = txt.match(/([A-Z]{2,}-[\dA-Z]+-\d+)/);
+    const num = numMatch?.[1];
+    if (num && seenNums.has(num)) return;
+    if (num) seenNums.add(num);
+    const amtMatch = txt.match(/([\d.]+,\d{2})\s*(EUR|€|\$|₺|USD|TRY)/);
+    const amt = amtMatch ? parseFloat(amtMatch[1].replace(/\./g,'').replace(',','.')) : 0;
+    const curMap = { '€':'EUR', '₺':'TRY', '$':'USD' };
+    const cur = curMap[amtMatch?.[2]] || amtMatch?.[2] || 'EUR';
+    const parts = txt.split('|').map(s => s.trim());
+    allQuotes.push({
+      _id: a._id, _fromActivity: true,
+      quoteNumber: num || '',
+      createdAt:   a.createdAt || a.timestamp || '',
+      status: 'sent', totalNet: amt, currency: cur,
+      lines: parts[1] ? [{ product: parts[1], qty: 1, unitPrice: amt, total: amt }] : [],
+    });
+  });
+
+  // Resolve scanner from oldest activity (scan event = last in newest-first array)
+  const scanAct = acts[acts.length - 1];
+  let tarayanHtml = '';
+  if (scanAct) {
+    let scanner = scanAct.createdBy || '';
+    if (typeof fbUsersData !== 'undefined' && fbUsersData.length) {
+      const u = fbUsersData.find(u =>
+        (scanAct.createdByUid && u._id === scanAct.createdByUid) ||
+        (scanAct.createdBy && (u.email||'').toLowerCase() === (scanAct.createdBy||'').toLowerCase())
+      );
+      if (u) scanner = u.name || u.email || scanner;
+    }
+    const scanDate = scanAct.createdAt ? new Date(scanAct.createdAt).toLocaleDateString('tr-TR') : '';
+    if (scanner || scanDate) {
+      tarayanHtml = `<div class="mb-1"><i class="bi bi-qr-code me-2 text-primary"></i><span class="text-muted">Tarayan:</span> <strong>${esc(scanner||'—')}</strong>${scanDate ? ` <span class="text-muted">· ${scanDate}</span>` : ''}</div>`;
+    }
+  }
+
   const phone = c.phone || c.mobile || '';
   document.getElementById('fb-detail').innerHTML = `
     <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
@@ -345,17 +392,18 @@ function showDetail(id) {
       ${c.email   ?`<div class="mb-1"><i class="bi bi-envelope me-2 text-primary"></i><a href="mailto:${esc(c.email)}">${esc(c.email)}</a></div>`:''}
       ${c.website ?`<div class="mb-1"><i class="bi bi-globe me-2 text-primary"></i>${esc(c.website)}</div>`:''}
       ${c.address ?`<div class="mb-1"><i class="bi bi-geo-alt me-2 text-primary"></i>${esc(c.address)}</div>`:''}
+      ${tarayanHtml}
       ${c.notes   ?`<div class="mt-2 text-muted border-top pt-2">${esc(c.notes)}</div>`:''}
     </div></div>
     <ul class="nav nav-tabs mb-3">
       <li class="nav-item"><a class="nav-link active" onclick="fbTab('quotes','${id}');return false;" id="fb-tab-quotes-${id}" href="#">
-        <i class="bi bi-file-earmark-text me-1"></i>Teklifler${quotes.length?`<span class="badge bg-warning text-dark ms-1">${quotes.length}</span>`:''}
+        <i class="bi bi-file-earmark-text me-1"></i>Teklifler${allQuotes.length?`<span class="badge bg-warning text-dark ms-1">${allQuotes.length}</span>`:''}
       </a></li>
       <li class="nav-item"><a class="nav-link" onclick="fbTab('timeline','${id}');return false;" id="fb-tab-timeline-${id}" href="#">
         <i class="bi bi-clock-history me-1"></i>Zaman Tüneli${acts.length?`<span class="badge bg-secondary ms-1">${acts.length}</span>`:''}
       </a></li>
     </ul>
-    <div id="fb-panel-quotes-${id}">${renderQuotes(quotes)}</div>
+    <div id="fb-panel-quotes-${id}">${renderQuotes(allQuotes)}</div>
     <div id="fb-panel-timeline-${id}" style="display:none;">${renderTimeline(acts)}</div>`;
 }
 
