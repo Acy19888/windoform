@@ -793,7 +793,12 @@ function renderFuarDashboard() {
   const customers   = allCusts.filter(c =>
     fuarInRange(c.createdAt, from, to) || fuarInRange(c.updatedAt, from, to)
   );
-  const allQuotes   = Object.values(fbQuotes).flat().filter(q => fuarInRange(q.createdAt, from, to));
+  const allQuotes   = Object.values(fbQuotes).flat().filter(q => {
+    // Fuarbot quotes may use sentAt or updatedAt instead of createdAt
+    const dt = q.createdAt || q.sentAt || q.updatedAt;
+    if (!dt) return fbDashDateFilter === 'all'; // undated → show only in 'all' view
+    return fuarInRange(dt, from, to);
+  });
   const allActivities = Object.values(fbActivities).flat().filter(a => fuarInRange(a.createdAt, from, to));
 
   // ── Totals ───────────────────────────────────────────────────
