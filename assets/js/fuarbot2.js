@@ -1540,20 +1540,35 @@ async function loadTeklifler() {
     // We need to check both sources.
     let allActs = [];
     try {
-      const [freshActs, contactDocs] = await Promise.all([
-        fsFetch(cfg.apiKey, cfg.projectId, 'crm_activities'),
-        fsFetch(cfg.apiKey, cfg.projectId, 'contacts').catch(() => []),
-      ]);
+      // Fetch fresh crm_activities
+      const freshActs = await fsFetch(cfg.apiKey, cfg.projectId, 'crm_activities');
       // MERGE fresh crm_activities into fbActivities — do NOT reset it.
-      // fbFetchContactData already populated fbActivities with embedded timeline
-      // entries for contacts the user has opened; resetting would lose that data.
       freshActs.forEach(a => {
         const k = a.parentId||a.contactId||'';
         if (!fbActivities[k]) fbActivities[k] = [];
         if (!fbActivities[k].find(x => x._id === a._id)) fbActivities[k].push(a);
       });
-      // Merge embedded contacts/{id}.timeline entries from the contacts collection.
-      contactDocs.forEach(contact => {
+
+      // Fetch embedded timelines for each unique contact referenced by activities.
+      // We fetch contacts/{id} individually (not the entire collection) because
+      // Firestore security rules typically allow reading a single document by ID
+      // but may deny listing the whole collection.
+      const contactIdsInActs = new Set(
+        freshActs.map(a => a.contactId || a.parentId || '').filter(Boolean)
+      );
+      // Also include contactIds we know from crm_customers / fbAllCustomersRaw
+      [...(fbAllCustomersRaw||[]), ...(fbCustomers||[])].forEach(c => contactIdsInActs.add(c._id));
+
+      const base = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents`;
+      const timelineFetches = [...contactIdsInActs].map(cid =>
+        fetch(`${base}/contacts/${cid}?key=${cfg.apiKey}`)
+          .then(r => r.ok ? r.json() : null)
+          .catch(() => null)
+      );
+      const timelineResults = await Promise.all(timelineFetches);
+      timelineResults.forEach(raw => {
+        if (!raw?.fields) return;
+        const contact = fsDoc(raw);
         const timeline = Array.isArray(contact.timeline) ? contact.timeline : [];
         if (!fbActivities[contact._id]) fbActivities[contact._id] = [];
         timeline.forEach((item, i) => {
@@ -1570,6 +1585,7 @@ async function loadTeklifler() {
           }
         });
       });
+
       // allActs = everything we now know about (crm_activities + timelines)
       allActs = Object.values(fbActivities).flat();
     } catch(actErr) {
