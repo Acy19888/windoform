@@ -1719,7 +1719,9 @@ function tkRenderRow(q) {
       <td>
         <button class="btn btn-sm btn-outline-primary me-1" onclick="tkViewDetail('${esc(q._id)}')" title="Detay"><i class="bi bi-eye-fill"></i></button>
         <button class="btn btn-sm btn-outline-danger me-1" onclick="tkPrintQuote('${esc(q._id)}')" title="Yazdır / PDF"><i class="bi bi-printer"></i></button>
-        <button class="btn btn-sm btn-outline-secondary" onclick="tkEmailQuote('${esc(q._id)}')" title="E-posta"><i class="bi bi-envelope-fill"></i></button>
+        <button class="btn btn-sm btn-outline-secondary me-1" onclick="tkEmailQuote('${esc(q._id)}')" title="E-posta"><i class="bi bi-envelope-fill"></i></button>
+        <button class="btn btn-sm btn-outline-success me-1" onclick="tkToFatura('${esc(q._id)}')" title="Fatura Oluştur"><i class="bi bi-receipt"></i></button>
+        <button class="btn btn-sm btn-outline-danger" onclick="tkDeleteQuote('${esc(q._id)}')" title="Sil"><i class="bi bi-trash-fill"></i></button>
       </td>
     </tr>`;
   }
@@ -1809,7 +1811,8 @@ function tkViewDetail(id) {
   document.getElementById('tk-modal-footer').innerHTML = q._fromActivity ? `
     <button class="btn btn-danger btn-sm" onclick="tkPrintQuote('${esc(q._id)}')"><i class="bi bi-printer me-1"></i>Yazdır / PDF</button>
     <button class="btn btn-outline-secondary btn-sm" onclick="tkEmailQuote('${esc(q._id)}')"><i class="bi bi-envelope me-1"></i>E-posta</button>
-    <span class="text-muted small ms-auto me-2"><i class="bi bi-phone me-1"></i>Fuarbot App</span>
+    <button class="btn btn-success btn-sm" onclick="tkToFatura('${esc(q._id)}');bootstrap.Modal.getInstance(document.getElementById('teklifDetailModal'))?.hide()"><i class="bi bi-receipt me-1"></i>Fatura Oluştur</button>
+    <span class="text-muted small ms-2 me-2"><i class="bi bi-phone me-1"></i>Fuarbot App</span>
     <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Kapat</button>
   ` : `
     ${q.pdfUrl
@@ -2188,12 +2191,29 @@ async function tkDeleteQuote(id) {
   const cfg = loadFbConfig();
   if (!cfg?.apiKey || !cfg?.projectId) return;
   try {
-    const res = await fetch(
-      `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/crm_quotes/${id}?key=${cfg.apiKey}`,
-      { method: 'DELETE' }
-    );
-    if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error?.message||'HTTP '+res.status); }
-    tkAllQuotes = tkAllQuotes.filter(x => x._id !== id);
+    if (q?._fromActivity) {
+      // App quotes: tl_* IDs are embedded timeline entries (no standalone doc to delete),
+      // real activity IDs can be deleted from crm_activities collection.
+      if (!id.startsWith('tl_')) {
+        const token = (typeof authToken === 'function') ? await authToken() : null;
+        const authH = token ? { 'Authorization': `Bearer ${token}` } : {};
+        await fetch(
+          `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/crm_activities/${id}?key=${cfg.apiKey}`,
+          { method: 'DELETE', headers: authH }
+        );
+      }
+      // Remove from local cache regardless
+      tkAllQuotes = tkAllQuotes.filter(x => x._id !== id);
+      const k = q.contactId || '';
+      if (fbActivities[k]) fbActivities[k] = fbActivities[k].filter(a => a._id !== id);
+    } else {
+      const res = await fetch(
+        `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/crm_quotes/${id}?key=${cfg.apiKey}`,
+        { method: 'DELETE' }
+      );
+      if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error?.message||'HTTP '+res.status); }
+      tkAllQuotes = tkAllQuotes.filter(x => x._id !== id);
+    }
     toast(`✓ Teklif silindi: ${num}`, 'success');
     renderTeklifler();
   } catch(e) { toast('Hata: ' + e.message, 'error'); }
