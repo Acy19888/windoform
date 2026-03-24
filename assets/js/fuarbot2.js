@@ -1485,15 +1485,35 @@ async function loadTeklifler() {
     // rather than crm_quotes documents. Merge them in as virtual quote objects.
     const seenNums  = new Set(flat.map(q => q.quoteNumber).filter(Boolean));
     const allCusts  = [...(fbAllCustomersRaw||[]), ...(fbCustomers||[])];
-    // Always fetch crm_activities fresh (same pattern as crm_quotes above).
-    // Relying on the cache is unreliable: cache may be empty or stale if
-    // the 3-min background sync hasn't run yet or that contact was never opened.
+    // Fetch crm_activities AND contacts (embedded timelines) in parallel.
+    // The Fuarbot mobile app stores quote-send events in EITHER:
+    //   a) crm_activities collection (standalone doc), OR
+    //   b) contacts/{id}.timeline[] (embedded array in the contacts collection)
+    // We need to check both sources.
     let allActs = [];
     try {
-      allActs = await fsFetch(cfg.apiKey, cfg.projectId, 'crm_activities');
-      // Keep global cache in sync
+      const [freshActs, contactDocs] = await Promise.all([
+        fsFetch(cfg.apiKey, cfg.projectId, 'crm_activities'),
+        fsFetch(cfg.apiKey, cfg.projectId, 'contacts').catch(() => []),
+      ]);
+      // Keep global crm_activities cache in sync
       fbActivities = {};
-      allActs.forEach(a => { const k = a.parentId||a.contactId||''; (fbActivities[k]||(fbActivities[k]=[])).push(a); });
+      freshActs.forEach(a => { const k = a.parentId||a.contactId||''; (fbActivities[k]||(fbActivities[k]=[])).push(a); });
+      allActs = [...freshActs];
+      // Extract timeline entries from embedded contacts/{id}.timeline arrays
+      contactDocs.forEach(contact => {
+        const timeline = Array.isArray(contact.timeline) ? contact.timeline : [];
+        timeline.forEach((item, i) => {
+          allActs.push({
+            _id:       `tl_${contact._id}_${i}`,
+            type:      item.type || 'note',
+            text:      item.label || item.text || '',
+            createdAt: item.timestamp || item.createdAt || '',
+            createdBy: item.user || item.createdBy || '',
+            contactId: contact._id,
+          });
+        });
+      });
     } catch(_) {
       allActs = Object.values(fbActivities).flat(); // fallback to cache on error
     }
