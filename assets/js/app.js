@@ -2337,6 +2337,10 @@ async function loadDashboard() {
   const [cos, cons] = await Promise.all([dbAll('companies'), dbAll('contacts')]);
   document.getElementById('stat-companies').textContent = cos.length;
   document.getElementById('stat-contacts').textContent  = cons.length;
+
+  // ── Fuarbot canlı özet ────────────────────────────────────
+  _loadFuarbotDashStats();
+
   const aq = cos.length ? Math.round(cos.reduce((a,b) => a + (b.qualityScore||0), 0) / cos.length) : 0;
   document.getElementById('stat-avg-quality').textContent  = aq;
   document.getElementById('stat-high-quality').textContent = cos.filter(c => (c.qualityScore||0) >= 80).length;
@@ -2377,6 +2381,77 @@ async function loadDashboard() {
       data:{ labels:['Yüksek (80+)','Orta (50-79)','Düşük (<50)'], datasets:[{data:[hc,mc,lc],backgroundColor:['#10b981','#f59e0b','#ef4444']}] },
       options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom'}} }
     });
+  }
+}
+
+async function _loadFuarbotDashStats() {
+  try {
+    const cfg = (typeof loadFbConfig === 'function') ? loadFbConfig() : null;
+    if (!cfg?.apiKey || !cfg?.projectId) return;
+
+    // In-memory'den al, yoksa Firestore'dan çek
+    let customers = (typeof fbAllCustomersRaw !== 'undefined' && fbAllCustomersRaw.length)
+      ? fbAllCustomersRaw
+      : (typeof fbCustomers !== 'undefined' && fbCustomers.length ? fbCustomers : null);
+    let quotes = (typeof fbQuotes !== 'undefined')
+      ? Object.values(fbQuotes).flat()
+      : [];
+
+    if (!customers) {
+      // Henüz sync olmamış — Firestore'dan çek
+      [customers, quotes] = await Promise.all([
+        (typeof fsFetch === 'function' ? fsFetch(cfg.apiKey, cfg.projectId, 'crm_customers').catch(()=>[]) : Promise.resolve([])),
+        (typeof fsFetch === 'function' ? fsFetch(cfg.apiKey, cfg.projectId, 'crm_quotes').catch(()=>[])    : Promise.resolve([])),
+      ]);
+    }
+
+    // Bugünkü taramalar
+    const todayStr = new Date().toISOString().slice(0,10);
+    const todayScans = customers.filter(c => (c.createdAt||'').slice(0,10) === todayStr).length;
+
+    // Toplam tutar
+    const totalRev = quotes.reduce((s,q) => s + Number(q.totalNet||q.totalGross||0), 0);
+    const sym = '€';
+    const fmtRev = totalRev >= 1000
+      ? (totalRev/1000).toLocaleString('de-DE',{maximumFractionDigits:1}) + 'k'
+      : totalRev.toLocaleString('de-DE',{maximumFractionDigits:0});
+
+    document.getElementById('fb-stat-today').textContent   = todayScans;
+    document.getElementById('fb-stat-total').textContent   = customers.length;
+    document.getElementById('fb-stat-quotes').textContent  = quotes.length;
+    document.getElementById('fb-stat-revenue').textContent = fmtRev + ' ' + sym;
+
+    // Badge CANLI göster
+    const badge = document.getElementById('fuarbot-dash-badge');
+    if (badge) badge.style.display = '';
+
+    // Son 5 tarama listesi
+    const recent = [...customers]
+      .sort((a,b) => (b.createdAt||'') > (a.createdAt||'') ? 1 : -1)
+      .slice(0,5);
+    const recentEl = document.getElementById('fb-dash-recent');
+    if (recentEl) {
+      if (!recent.length) {
+        recentEl.innerHTML = '<span class="text-muted">Henüz tarama yok.</span>';
+      } else {
+        recentEl.innerHTML = `<table class="table table-sm mb-0" style="font-size:12px;">
+          <thead class="table-light"><tr><th>Ad</th><th>Şirket</th><th>Tarayan</th><th>Tarih</th></tr></thead>
+          <tbody>
+          ${recent.map(c => {
+            const dt = c.createdAt ? new Date(c.createdAt).toLocaleString('tr-TR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+            return `<tr>
+              <td>${esc(c.name||'—')}</td>
+              <td>${esc(c.company||c.companyName||'—')}</td>
+              <td>${esc(c.createdBy||'—')}</td>
+              <td>${dt}</td>
+            </tr>`;
+          }).join('')}
+          </tbody>
+        </table>`;
+      }
+    }
+  } catch(e) {
+    console.warn('Fuarbot dash stats:', e.message);
   }
 }
 
