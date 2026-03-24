@@ -81,11 +81,14 @@ function setFbStatus(text, type) {
 
 async function fetchAllData(apiKey, projectId, silent) {
   try {
-    const [rawCustomers, activities, quotes] = await Promise.all([
+    const [rawCustomers, activities, quotes, employees] = await Promise.all([
       fsFetch(apiKey, projectId, 'crm_customers'),
       fsFetch(apiKey, projectId, 'crm_activities').catch(()=>[]),
       fsFetch(apiKey, projectId, 'crm_quotes').catch(()=>[]),
+      fsFetch(apiKey, projectId, 'fuarEmployees').catch(()=>[]),
     ]);
+    // Keep fbUsersData in sync so renderFuarDashboard always has employee names
+    if (employees.length) fbUsersData = employees;
 
     // ── Deduplicate crm_customers by name + email ──────────
     // Same person may have been scanned multiple times at the fair.
@@ -813,16 +816,42 @@ function renderFuarDashboard() {
     return k;
   };
 
+  // Build lookup maps from fuarEmployees: uid → name, email → name
+  const _empByUid   = {};
+  const _empByEmail = {};
+  fbUsersData.forEach(u => {
+    if (u._id)   _empByUid[u._id.trim()]               = u.name || u.email || u._id;
+    if (u.email) _empByEmail[u.email.trim().toLowerCase()] = u.name || u.email;
+  });
+
+  // Resolve raw createdBy (email or name) or createdByUid to display name
+  const _resolveEmp = (rawName, rawUid) => {
+    if (rawUid && _empByUid[rawUid])   return _empByUid[rawUid];
+    if (rawName) {
+      const lo = rawName.trim().toLowerCase();
+      if (_empByEmail[lo]) return _empByEmail[lo];
+      return rawName.trim(); // already a display name
+    }
+    return null;
+  };
+
   // crm_customers hat kein createdBy — aus crm_activities (erster Eintrag) holen
   const _getCreatedBy = (c) => {
-    if (c.createdBy) return c.createdBy;
-    // Erste Activity dieses Kontakts = Scan-Event
+    if (c.createdBy || c.createdByUid) {
+      return _resolveEmp(c.createdBy, c.createdByUid);
+    }
+    // Erste Activity dieses Kontakts = Scan-Event (älteste = letzter im Array)
     const acts = fbActivities[c._id] || [];
-    const first = acts[acts.length - 1]; // älteste zuerst (Array ist absteigend sortiert)
-    if (first?.createdBy) return first.createdBy;
-    // Alle Activities (auch zeitgefilterte) durchsuchen
-    const anyAct = Object.values(fbActivities).flat().find(a => (a.parentId || a.contactId) === c._id && a.createdBy);
-    return anyAct?.createdBy || null;
+    const first = acts[acts.length - 1];
+    if (first) {
+      const resolved = _resolveEmp(first.createdBy, first.createdByUid);
+      if (resolved) return resolved;
+    }
+    // Alle Activities durchsuchen
+    const allFlat = Object.values(fbActivities).flat();
+    const anyAct = allFlat.find(a => (a.parentId || a.contactId) === c._id && (a.createdBy || a.createdByUid));
+    if (anyAct) return _resolveEmp(anyAct.createdBy, anyAct.createdByUid);
+    return null;
   };
 
   customers.forEach(c => {
@@ -832,14 +861,14 @@ function renderFuarDashboard() {
 
   allQuotes.forEach(q => {
     const contactCreatedBy = _getCreatedBy(allCusts.find(c => c._id === q.contactId) || {});
-    const by = q.createdBy || contactCreatedBy || null;
+    const by = _resolveEmp(q.createdBy, q.createdByUid) || contactCreatedBy || null;
     const k  = addEmp(by);
     employees[k].quotes++;
     employees[k].revenue += Number(q.totalNet || 0);
   });
 
   allActivities.filter(a => a.type === 'email').forEach(a => {
-    const k = addEmp(a.createdBy);
+    const k = addEmp(_resolveEmp(a.createdBy, a.createdByUid));
     employees[k].emails++;
   });
 
