@@ -813,14 +813,26 @@ function renderFuarDashboard() {
     return k;
   };
 
+  // crm_customers hat kein createdBy — aus crm_activities (erster Eintrag) holen
+  const _getCreatedBy = (c) => {
+    if (c.createdBy) return c.createdBy;
+    // Erste Activity dieses Kontakts = Scan-Event
+    const acts = fbActivities[c._id] || [];
+    const first = acts[acts.length - 1]; // älteste zuerst (Array ist absteigend sortiert)
+    if (first?.createdBy) return first.createdBy;
+    // Alle Activities (auch zeitgefilterte) durchsuchen
+    const anyAct = Object.values(fbActivities).flat().find(a => (a.parentId || a.contactId) === c._id && a.createdBy);
+    return anyAct?.createdBy || null;
+  };
+
   customers.forEach(c => {
-    const k = addEmp(c.createdBy);
+    const k = addEmp(_getCreatedBy(c));
     employees[k].scanned++;
   });
 
   allQuotes.forEach(q => {
-    // Use quote's own createdBy; fall back to the contact's createdBy
-    const by = q.createdBy || allCusts.find(c => c._id === q.contactId)?.createdBy || null;
+    const contactCreatedBy = _getCreatedBy(allCusts.find(c => c._id === q.contactId) || {});
+    const by = q.createdBy || contactCreatedBy || null;
     const k  = addEmp(by);
     employees[k].quotes++;
     employees[k].revenue += Number(q.totalNet || 0);
