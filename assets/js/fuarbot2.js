@@ -1225,6 +1225,10 @@ async function saveFuarUser() {
 
   if (!nameVal || !emailVal) { toast('Ad ve e-posta zorunludur.', 'error'); return; }
 
+  // Auth token is required for Firestore write rules
+  const token = (typeof authToken === 'function') ? await authToken() : null;
+  const authHeaders = token ? { 'Authorization': `Bearer ${token}` } : {};
+
   const now = new Date().toISOString();
   const fields = {
     name:      { stringValue: nameVal },
@@ -1241,7 +1245,7 @@ async function saveFuarUser() {
       fields.createdAt = { stringValue: now };
       res = await fetch(`${base}?key=${cfg.apiKey}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ fields }),
       });
     } else {
@@ -1249,7 +1253,7 @@ async function saveFuarUser() {
       const mask = Object.keys(fields).map(k => 'updateMask.fieldPaths=' + encodeURIComponent(k)).join('&');
       res = await fetch(`${base}/${id}?key=${cfg.apiKey}&${mask}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ fields }),
       });
     }
@@ -1328,9 +1332,11 @@ async function deleteFuarUser(id) {
 
   const cfg = loadFbConfig();
   if (!cfg?.apiKey || !cfg?.projectId) return;
+  const token = (typeof authToken === 'function') ? await authToken() : null;
+  const authHeaders = token ? { 'Authorization': `Bearer ${token}` } : {};
   const url = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/${FB_EMP_COL}/${id}?key=${cfg.apiKey}`;
   try {
-    const res = await fetch(url, { method: 'DELETE' });
+    const res = await fetch(url, { method: 'DELETE', headers: authHeaders });
     if (!res.ok) {
       const e = await res.json().catch(() => ({}));
       throw new Error(e.error?.message || 'HTTP ' + res.status);
