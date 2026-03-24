@@ -1480,6 +1480,73 @@ async function loadTeklifler() {
       } catch(e) { /* best effort */ }
     }
 
+    // ── Include quote-activities from Fuarbot mobile app ────────
+    // Fuarbot stores sent quotes as crm_activities (type:'email', text:'Teklif gönderildi: ANG-...')
+    // rather than crm_quotes documents. Merge them in as virtual quote objects.
+    const seenNums  = new Set(flat.map(q => q.quoteNumber).filter(Boolean));
+    const allCusts  = [...(fbAllCustomersRaw||[]), ...(fbCustomers||[])];
+    // Use cached activities, or fetch fresh if cache is empty (e.g. first load before sync completes)
+    if (Object.keys(fbActivities).length === 0) {
+      try {
+        const freshActs = await fsFetch(cfg.apiKey, cfg.projectId, 'crm_activities');
+        fbActivities = {};
+        freshActs.forEach(a => { const k = a.parentId||a.contactId||''; (fbActivities[k]||(fbActivities[k]=[])).push(a); });
+      } catch(_) {}
+    }
+    const allActs   = Object.values(fbActivities).flat();
+    allActs.forEach(a => {
+      const txt = a.text || '';
+      const lo  = txt.toLowerCase();
+      const hasNum    = /[A-Z]{2,}-[\dA-Z]+-\d+/.test(txt);
+      const isQuoteAct = a.type === 'quote' || a.type === 'offer' ||
+        (a.type === 'email' && (lo.includes('teklif') || lo.includes('angebot'))) || hasNum;
+      if (!isQuoteAct) return;
+      const numMatch = txt.match(/([A-Z]{2,}-[\dA-Z]+-\d+)/);
+      const num = numMatch?.[1];
+      if (num && seenNums.has(num)) return;   // already in crm_quotes
+      if (num) seenNums.add(num);
+      // Parse amount + currency
+      const amtMatch = txt.match(/([\d.]+,\d{2})\s*(EUR|€|\$|₺|USD|TRY)/);
+      const amt = amtMatch ? parseFloat(amtMatch[1].replace(/\./g,'').replace(',','.')) : 0;
+      const curMap = { '€':'EUR', '₺':'TRY', '$':'USD' };
+      const cur = curMap[amtMatch?.[2]] || amtMatch?.[2] || 'EUR';
+      // Parse product (between first and second '|')
+      const parts = txt.split('|').map(s => s.trim());
+      const product = parts[1] || '';
+      // Parse recipient email  (An: ...)
+      const emailMatch = txt.match(/\(An:\s*([^\)]+)\)/i);
+      const contactEmail = emailMatch?.[1]?.trim() || '';
+      // Look up contact
+      const cust = (contactEmail
+        ? allCusts.find(c => (c.email||'').toLowerCase() === contactEmail.toLowerCase())
+        : null) || allCusts.find(c => c._id === (a.contactId||a.parentId||''));
+      // Resolve creator display name
+      let createdByName = a.createdBy || '';
+      if (fbUsersData?.length) {
+        const u = fbUsersData.find(u =>
+          (a.createdByUid && u._id === a.createdByUid) ||
+          (a.createdBy && (u.email||'').toLowerCase() === a.createdBy.toLowerCase())
+        );
+        if (u) createdByName = u.name || u.email || createdByName;
+      }
+      flat.push({
+        _id:            a._id,
+        _fromActivity:  true,
+        quoteNumber:    num || '',
+        contactId:      a.contactId || a.parentId || '',
+        contactName:    cust?.name || '',
+        contactCompany: cust?.company || cust?.companyName || '',
+        contactEmail:   contactEmail || cust?.email || '',
+        createdBy:      createdByName,
+        createdAt:      a.createdAt || a.timestamp || '',
+        status:         'sent',
+        totalNet:       amt,
+        currency:       cur,
+        lines:          product ? [{ product, qty: 1, unitPrice: amt, total: amt }] : [],
+        _activityText:  txt,
+      });
+    });
+
     // Sort newest first
     tkAllQuotes = flat.sort((a, b) => (b.createdAt || '') > (a.createdAt || '') ? 1 : -1);
     renderTeklifler();
@@ -1601,6 +1668,22 @@ function tkRenderRow(q) {
   const status  = q.status === 'sent'
     ? '<span class="badge bg-success-subtle text-success border border-success-subtle">Gönderildi</span>'
     : '<span class="badge bg-secondary-subtle text-secondary border">Taslak</span>';
+
+  // Quotes that originated from the Fuarbot mobile app (stored as crm_activities)
+  // are read-only — no edit/delete/print (we don't have the full data)
+  if (q._fromActivity) {
+    const appBadge = '<span class="badge bg-warning-subtle text-warning border border-warning-subtle ms-1" title="Fuarbot uygulamasından gönderildi"><i class="bi bi-phone"></i> App</span>';
+    return `<tr>
+      <td class="fw-semibold" style="font-family:monospace;">${num}${appBadge}</td>
+      <td>${cust}</td>
+      <td class="text-truncate" style="max-width:160px;" title="${prod}">${prod}</td>
+      <td>${date}</td>
+      <td class="fw-semibold">${total} ${sym}</td>
+      <td>${status}</td>
+      <td><span class="text-muted small"><i class="bi bi-phone me-1"></i>Fuarbot App</span></td>
+    </tr>`;
+  }
+
   const pdfBtn  = q.pdfUrl
     ? `<a href="${esc(q.pdfUrl)}" target="_blank" class="btn btn-sm btn-outline-danger me-1" title="PDF İndir"><i class="bi bi-file-earmark-pdf"></i></a>`
     : `<button class="btn btn-sm btn-outline-danger me-1" title="PDF Yazdır" onclick="tkPrintQuote('${esc(q._id)}')"><i class="bi bi-printer"></i></button>`;
