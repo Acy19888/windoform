@@ -53,6 +53,24 @@ async function authRegister(email, password) {
   const data = await res.json();
   if (!res.ok) throw new Error(_authErrMsg(data.error?.message));
   _authSave(data);
+
+  // ── Yeni kullanıcıyı fuarEmployees koleksiyonuna ekle ──
+  // Böylece Kullanıcılar sayfasında hemen görünür
+  try {
+    const uid   = data.localId;
+    const token = data.idToken;
+    const name  = email.split('@')[0]; // geçici isim, kullanıcı sonra düzenleyebilir
+    await _fsPatch(cfg, `fuarEmployees/${uid}`, {
+      name,
+      email,
+      role:      'Saha Görevlisi',
+      uid,
+      createdAt: new Date().toISOString(),
+    }, token);
+  } catch(e) {
+    console.warn('fuarEmployees kaydı oluşturulamadı:', e.message);
+  }
+
   return data;
 }
 

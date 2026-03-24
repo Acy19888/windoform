@@ -877,6 +877,37 @@ async function loadFuarUsers() {
   try {
     let docs = [];
     try { docs = await fsFetch(cfg.apiKey, cfg.projectId, FB_EMP_COL); } catch(_) {}
+
+    // Giriş yapan kullanıcı listede yoksa otomatik ekle
+    if (typeof authEmail === 'function' && authEmail()) {
+      const myEmail = authEmail().toLowerCase().trim();
+      const myUid   = typeof authUid === 'function' ? (authUid() || myEmail) : myEmail;
+      const exists  = docs.some(u => (u.email||'').toLowerCase().trim() === myEmail || u._id === myUid);
+      if (!exists) {
+        try {
+          const token = typeof authToken === 'function' ? await authToken() : null;
+          const name  = myEmail.split('@')[0];
+          const now   = new Date().toISOString();
+          const fields = {
+            name:      { stringValue: name },
+            email:     { stringValue: myEmail },
+            role:      { stringValue: 'Saha Görevlisi' },
+            uid:       { stringValue: myUid },
+            createdAt: { stringValue: now },
+          };
+          const base = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/${FB_EMP_COL}/${myUid}?key=${cfg.apiKey}`;
+          const mask = Object.keys(fields).map(k => 'updateMask.fieldPaths=' + encodeURIComponent(k)).join('&');
+          const headers = { 'Content-Type': 'application/json' };
+          if (token) headers['Authorization'] = `Bearer ${token}`;
+          const r = await fetch(`${base}&${mask}`, { method: 'PATCH', headers, body: JSON.stringify({ fields }) });
+          if (r.ok) {
+            const newDoc = { _id: myUid, name, email: myEmail, role: 'Saha Görevlisi', uid: myUid, createdAt: now };
+            docs.push(newDoc);
+          }
+        } catch(e) { console.warn('Auto-register user:', e.message); }
+      }
+    }
+
     fbUsersData = docs;
     renderFuarUsers();
   } catch (e) {
