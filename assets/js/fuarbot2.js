@@ -1485,15 +1485,18 @@ async function loadTeklifler() {
     // rather than crm_quotes documents. Merge them in as virtual quote objects.
     const seenNums  = new Set(flat.map(q => q.quoteNumber).filter(Boolean));
     const allCusts  = [...(fbAllCustomersRaw||[]), ...(fbCustomers||[])];
-    // Use cached activities, or fetch fresh if cache is empty (e.g. first load before sync completes)
-    if (Object.keys(fbActivities).length === 0) {
-      try {
-        const freshActs = await fsFetch(cfg.apiKey, cfg.projectId, 'crm_activities');
-        fbActivities = {};
-        freshActs.forEach(a => { const k = a.parentId||a.contactId||''; (fbActivities[k]||(fbActivities[k]=[])).push(a); });
-      } catch(_) {}
+    // Always fetch crm_activities fresh (same pattern as crm_quotes above).
+    // Relying on the cache is unreliable: cache may be empty or stale if
+    // the 3-min background sync hasn't run yet or that contact was never opened.
+    let allActs = [];
+    try {
+      allActs = await fsFetch(cfg.apiKey, cfg.projectId, 'crm_activities');
+      // Keep global cache in sync
+      fbActivities = {};
+      allActs.forEach(a => { const k = a.parentId||a.contactId||''; (fbActivities[k]||(fbActivities[k]=[])).push(a); });
+    } catch(_) {
+      allActs = Object.values(fbActivities).flat(); // fallback to cache on error
     }
-    const allActs   = Object.values(fbActivities).flat();
     allActs.forEach(a => {
       const txt = a.text || '';
       const lo  = txt.toLowerCase();
