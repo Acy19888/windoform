@@ -1402,10 +1402,16 @@ async function loadTeklifler() {
   }
   el.innerHTML = '<div class="text-muted p-3"><span class="spinner-border spinner-border-sm me-2"></span>Teklifler yükleniyor…</div>';
   try {
-    // Use already-loaded fbQuotes if available, otherwise fetch fresh
-    let flat = Object.values(fbQuotes || {}).flat();
-    if (!flat.length) {
+    // Always fetch fresh from Firestore so newly created quotes appear immediately
+    let flat;
+    try {
       flat = await fsFetch(cfg.apiKey, cfg.projectId, 'crm_quotes');
+      // Keep fbQuotes cache in sync for dashboard/timeline
+      fbQuotes = {};
+      flat.forEach(q => { const k = q.contactId||''; (fbQuotes[k]||(fbQuotes[k]=[])).push(q); });
+    } catch(_) {
+      // Fallback to in-memory cache if Firestore unreachable
+      flat = Object.values(fbQuotes || {}).flat();
     }
     // Enrich Fuarbot quotes: contactId → contactName/contactCompany if missing
     // (old migrated quotes only have contactId, no name fields)
@@ -1965,18 +1971,20 @@ async function tkSaveQuote() {
     vatAmount:       toNum(vatAmt),
     source:          toStr('manual'),
     createdBy:       tkEditingId
-      ? toStr(tkFindQuote(tkEditingId)?.createdBy || 'manual')
-      : toStr(window._currentUserName || 'manual'),
+      ? toStr(tkFindQuote(tkEditingId)?.createdBy || (typeof authEmail==='function'?authEmail():'manual'))
+      : toStr(typeof authEmail==='function' ? (authEmail()||'manual') : 'manual'),
   };
 
   const base = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/crm_quotes`;
+  const token = (typeof authToken === 'function') ? await authToken() : null;
+  const authH = token ? { 'Authorization': `Bearer ${token}` } : {};
 
   try {
     let docId;
     if (tkEditingId) {
       // PATCH existing
       const res = await fetch(`${base}/${tkEditingId}?key=${cfg.apiKey}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        method: 'PATCH', headers: { 'Content-Type': 'application/json', ...authH },
         body: JSON.stringify({ fields }),
       });
       if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error?.message||'HTTP '+res.status); }
@@ -1988,18 +1996,24 @@ async function tkSaveQuote() {
     } else {
       // POST new
       const res = await fetch(`${base}?key=${cfg.apiKey}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...authH },
         body: JSON.stringify({ fields }),
       });
       if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error?.message||'HTTP '+res.status); }
       const data = await res.json();
       docId = data.name?.split('/').pop() || ('tk_'+Date.now());
-      const newQ = { _id: docId, quoteNumber, createdAt, updatedAt: now, currency, vatRate, status, contactName, contactCompany, contactEmail, contactPhone, contactAddress, notes, product: lines[0]?.product||'', lines, totalNet, totalGross, vatAmount: vatAmt, source: 'manual' };
+      const newQ = { _id: docId, quoteNumber, createdAt, updatedAt: now, currency, vatRate, status, contactName, contactCompany, contactEmail, contactPhone, contactAddress, notes, product: lines[0]?.product||'', lines, totalNet, totalGross, vatAmount: vatAmt, source: 'manual', createdBy: window._currentUserName || 'manual' };
       tkAllQuotes.unshift(newQ);
+      // Also update fbQuotes cache so dashboard sees the new quote immediately
+      const ck = '';
+      (fbQuotes[ck] || (fbQuotes[ck] = [])).unshift(newQ);
       toast(`✓ Teklif oluşturuldu: ${quoteNumber}`, 'success');
     }
     bootstrap.Modal.getInstance(document.getElementById('teklifEditModal'))?.hide();
     renderTeklifler();
+    // Refresh dashboard quote count
+    if (typeof renderFuarDashboard === 'function') renderFuarDashboard();
+    if (typeof _loadFuarbotDashStats === 'function') _loadFuarbotDashStats();
   } catch(e) { toast('Hata: ' + e.message, 'error'); }
 }
 
