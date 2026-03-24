@@ -1716,7 +1716,11 @@ function tkRenderRow(q) {
       <td>${date}</td>
       <td class="fw-semibold">${total} ${sym}</td>
       <td>${status}</td>
-      <td><span class="text-muted small"><i class="bi bi-phone me-1"></i>Fuarbot App</span></td>
+      <td>
+        <button class="btn btn-sm btn-outline-primary me-1" onclick="tkViewDetail('${esc(q._id)}')" title="Detay"><i class="bi bi-eye-fill"></i></button>
+        <button class="btn btn-sm btn-outline-danger me-1" onclick="tkPrintQuote('${esc(q._id)}')" title="Yazdır / PDF"><i class="bi bi-printer"></i></button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="tkEmailQuote('${esc(q._id)}')" title="E-posta"><i class="bi bi-envelope-fill"></i></button>
+      </td>
     </tr>`;
   }
 
@@ -1802,7 +1806,12 @@ function tkViewDetail(id) {
       <div class="card-header bg-light py-2 fw-semibold small text-uppercase">Kalemler</div>
       ${linesHtml}
     </div>`;
-  document.getElementById('tk-modal-footer').innerHTML = `
+  document.getElementById('tk-modal-footer').innerHTML = q._fromActivity ? `
+    <button class="btn btn-danger btn-sm" onclick="tkPrintQuote('${esc(q._id)}')"><i class="bi bi-printer me-1"></i>Yazdır / PDF</button>
+    <button class="btn btn-outline-secondary btn-sm" onclick="tkEmailQuote('${esc(q._id)}')"><i class="bi bi-envelope me-1"></i>E-posta</button>
+    <span class="text-muted small ms-auto me-2"><i class="bi bi-phone me-1"></i>Fuarbot App</span>
+    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Kapat</button>
+  ` : `
     ${q.pdfUrl
       ? `<a href="${esc(q.pdfUrl)}" target="_blank" class="btn btn-danger btn-sm"><i class="bi bi-file-earmark-pdf me-1"></i>PDF İndir</a>`
       : `<button class="btn btn-danger btn-sm" onclick="tkPrintQuote('${esc(q._id)}')"><i class="bi bi-printer me-1"></i>Yazdır / PDF</button>`}
