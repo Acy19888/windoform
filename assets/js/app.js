@@ -190,6 +190,7 @@ async function _appStart() {
     await loadCompanies();
     // Start Fuarbot background sync so activities/quotes are always fresh
     if (typeof fbBackgroundSync === 'function') setTimeout(fbBackgroundSync, 1500);
+    if (typeof _autoRegisterCurrentUser === 'function') setTimeout(_autoRegisterCurrentUser, 2000);
   } catch (err) {
     console.error('Başlangıç hatası:', err);
     toast('Veritabanı başlatılamadı: ' + err.message + ' — Tarayıcı izinlerini kontrol edin.', 'error');

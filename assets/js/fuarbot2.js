@@ -864,6 +864,40 @@ function renderFuarDashboard() {
 let fbUsersData = [];
 const FB_EMP_COL = 'fuarEmployees';
 
+// Giriş yapan kullanıcıyı fuarEmployees'e ekle (eğer yoksa)
+// _appStart'tan çağrılır — sayfa açılışında çalışır
+async function _autoRegisterCurrentUser() {
+  try {
+    const cfg = loadFbConfig();
+    if (!cfg?.apiKey || !cfg?.projectId) return;
+    if (typeof authEmail !== 'function' || !authEmail()) return;
+
+    const myEmail = authEmail().toLowerCase().trim();
+    const myUid   = (typeof authUid === 'function' && authUid()) || myEmail;
+    const token   = typeof authToken === 'function' ? await authToken() : null;
+
+    // Belge zaten var mı?
+    const docUrl = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/${FB_EMP_COL}/${myUid}?key=${cfg.apiKey}`;
+    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+    const check = await fetch(docUrl, { headers });
+    if (check.ok) return; // zaten var
+
+    // Yok — oluştur
+    const now    = new Date().toISOString();
+    const name   = myEmail.split('@')[0];
+    const fields = {
+      name:      { stringValue: name },
+      email:     { stringValue: myEmail },
+      role:      { stringValue: 'Saha Görevlisi' },
+      uid:       { stringValue: myUid },
+      createdAt: { stringValue: now },
+    };
+    const mask = Object.keys(fields).map(k => 'updateMask.fieldPaths=' + encodeURIComponent(k)).join('&');
+    const ph = { 'Content-Type': 'application/json', ...headers };
+    await fetch(`${docUrl}&${mask}`, { method: 'PATCH', headers: ph, body: JSON.stringify({ fields }) });
+  } catch(e) { /* sessizce geç */ }
+}
+
 async function loadFuarUsers() {
   const cfg = loadFbConfig();
   const el  = document.getElementById('fuar-users-content');
