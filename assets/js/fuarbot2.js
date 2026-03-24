@@ -1478,6 +1478,7 @@ let tkFilterTo    = '';
 let tkSearchQ     = '';
 
 async function loadTeklifler() {
+  console.log('[Teklifler v20260324f] loadTeklifler() start');
   const cfg = loadFbConfig();
   const el  = document.getElementById('teklifler-content');
   if (!cfg?.apiKey || !cfg?.projectId) {
@@ -1593,6 +1594,9 @@ async function loadTeklifler() {
       allActs = Object.values(fbActivities).flat(); // fallback to cache on error
     }
     console.log('[Teklifler] allActs total:', allActs.length, '| seenNums:', [...seenNums]);
+    // Debug: show which acts contain a quote number pattern
+    const quoteNumActs = allActs.filter(a => /[A-Z]{2,}-[\dA-Z]+-\d+/.test(a.text||''));
+    console.log('[Teklifler] acts with quote#:', quoteNumActs.map(a => ({ num: (a.text||'').match(/([A-Z]{2,}-[\dA-Z]+-\d+)/)?.[1], type: a.type, src: a._id?.startsWith('tl_') ? 'timeline' : 'activity' })));
     allActs.forEach(a => {
       const txt = a.text || '';
       const lo  = txt.toLowerCase();
