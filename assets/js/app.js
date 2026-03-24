@@ -2452,11 +2452,30 @@ async function _loadFuarbotDashStats() {
           <thead class="table-light"><tr><th>Ad</th><th>Şirket</th><th>Tarayan</th><th>Tarih</th></tr></thead>
           <tbody>
           ${recent.map(c => {
-            const dt = c.createdAt ? new Date(c.createdAt).toLocaleString('tr-TR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+            // crm_customers has no createdBy — resolve scanner from fbActivities (oldest act = scan event)
+            let tarayan = c.createdBy || '';
+            if (!tarayan && typeof fbActivities !== 'undefined') {
+              const acts = fbActivities[c._id] || [];
+              const scanAct = acts[acts.length - 1]; // sorted newest-first → last = oldest
+              if (scanAct) {
+                if (typeof fbUsersData !== 'undefined' && fbUsersData.length) {
+                  const u = fbUsersData.find(u =>
+                    (scanAct.createdByUid && u._id === scanAct.createdByUid) ||
+                    (scanAct.createdBy && (u.email||'').toLowerCase() === (scanAct.createdBy||'').toLowerCase())
+                  );
+                  tarayan = u ? (u.name || u.email || scanAct.createdBy) : (scanAct.createdBy || '');
+                } else {
+                  tarayan = scanAct.createdBy || '';
+                }
+              }
+            }
+            // Tarih: updatedAt (re-scans) or createdAt
+            const dateStr = c.updatedAt || c.createdAt;
+            const dt = dateStr ? new Date(dateStr).toLocaleString('tr-TR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
             return `<tr>
               <td>${esc(c.name||'—')}</td>
               <td>${esc(c.company||c.companyName||'—')}</td>
-              <td>${esc(c.createdBy||'—')}</td>
+              <td>${esc(tarayan||'—')}</td>
               <td>${dt}</td>
             </tr>`;
           }).join('')}
