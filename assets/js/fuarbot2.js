@@ -1524,9 +1524,11 @@ async function loadTeklifler() {
       });
       // allActs = everything we now know about (crm_activities + timelines)
       allActs = Object.values(fbActivities).flat();
-    } catch(_) {
+    } catch(actErr) {
+      console.warn('[Teklifler] activity fetch error:', actErr);
       allActs = Object.values(fbActivities).flat(); // fallback to cache on error
     }
+    console.log('[Teklifler] allActs total:', allActs.length, '| seenNums:', [...seenNums]);
     allActs.forEach(a => {
       const txt = a.text || '';
       const lo  = txt.toLowerCase();
@@ -1536,6 +1538,7 @@ async function loadTeklifler() {
       if (!isQuoteAct) return;
       const numMatch = txt.match(/([A-Z]{2,}-[\dA-Z]+-\d+)/);
       const num = numMatch?.[1];
+      console.log('[Teklifler] act candidate:', num, '| dup?', seenNums.has(num), '| type:', a.type, '| txt:', txt.slice(0,60));
       if (num && seenNums.has(num)) return;   // already in crm_quotes
       if (num) seenNums.add(num);
       // Parse amount + currency
