@@ -144,14 +144,9 @@ async function fetchAllData(apiKey, projectId, silent) {
     const syncEl = document.getElementById('fb-last-sync');
     if (syncEl) syncEl.textContent = new Date().toLocaleTimeString('tr-TR');
 
-    // Update quotes badge
-    const totalQ = Object.values(fbQuotes).reduce((s,a)=>s+a.length, 0);
-    const qBadge = document.getElementById('fb-maintab-quotes-badge');
-    if (qBadge) { qBadge.textContent = totalQ; qBadge.style.display = totalQ ? '' : 'none'; }
-
     if (!silent) {
-      if (fbMainTabActive === 'contacts') { renderCustomerList(fbCustomers); if (fbSelectedId) showDetail(fbSelectedId); }
-      else if (fbMainTabActive === 'quotes') { renderAllQuotesView(); }
+      renderCustomerList(fbCustomers);
+      if (fbSelectedId) showDetail(fbSelectedId);
     }
   } catch (e) {
     setFbStatus((e.message.includes('PERMISSION')||e.message.includes('403')) ? 'Erişim reddedildi — Firebase kurallarını kontrol edin' : 'Hata: ' + e.message, 'danger');
@@ -285,14 +280,8 @@ function fbBackgroundSync() {
 
 // ── Main tab switching ────────────────────────────────────
 function fbSwitchMainTab(tab) {
-  fbMainTabActive = tab;
-  ['contacts','quotes'].forEach(t => {
-    document.getElementById('fb-maintab-' + t)?.classList.toggle('active', t === tab);
-    const pane = document.getElementById('fb-pane-' + t);
-    if (pane) pane.style.display = t === tab ? '' : 'none';
-  });
-  if (tab === 'quotes') renderAllQuotesView();
-  if (tab === 'contacts') renderCustomerList(fbCustomers);
+  fbMainTabActive = 'contacts';
+  renderCustomerList(fbCustomers);
 }
 
 // ── Render helpers ────────────────────────────────────────
@@ -748,8 +737,7 @@ function loadFuarbotPage() {
     else {
       document.getElementById('fb-config-panel').style.display = 'none';
       document.getElementById('fb-tabs-wrapper').style.display = '';
-      if (fbMainTabActive === 'contacts') { renderCustomerList(fbCustomers); if (fbSelectedId) showDetail(fbSelectedId); }
-      else renderAllQuotesView();
+      renderCustomerList(fbCustomers); if (fbSelectedId) showDetail(fbSelectedId);
     }
   } else { _fbShowNotConnected(); }
 }

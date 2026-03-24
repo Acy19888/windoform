@@ -175,10 +175,6 @@
       <button class="fb-maintab active" id="fb-maintab-contacts" onclick="fbSwitchMainTab('contacts')">
         <i class="bi bi-people me-1"></i>Kişiler
       </button>
-      <button class="fb-maintab" id="fb-maintab-quotes" onclick="fbSwitchMainTab('quotes')">
-        <i class="bi bi-file-earmark-text me-1"></i>Teklifler
-        <span id="fb-maintab-quotes-badge" class="badge bg-warning text-dark ms-1" style="display:none;"></span>
-      </button>
     </div>
 
     <!-- Pane: Kişiler (master-detail) -->
@@ -204,18 +200,7 @@
         </div>
       </div>
     </div>
-
-    <!-- Pane: Teklifler (all quotes) -->
-    <div id="fb-pane-quotes" style="display:none;" class="fb-aq-pane">
-      <div class="fb-aq-toolbar">
-        <input type="text" class="form-control form-control-sm" id="fb-quotes-search" placeholder="Teklif veya müşteri ara…" oninput="fbQuotesFilter()" style="max-width:260px;">
-        <select class="form-select form-select-sm" id="fb-quotes-filter" onchange="fbQuotesFilter()" style="max-width:160px;">
-          <option value="all">Tümü</option>
-          <option value="sent">Gönderildi</option>
-          <option value="draft">Taslak</option>
-        </select>
-      </div>
-      <div id="fb-all-quotes" class="fb-aq-list"></div>
+<div id="fb-all-quotes" class="fb-aq-list"></div>
     </div>
 
   </div>
@@ -1674,7 +1659,7 @@
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="./assets/js/auth.js"></script>
 <script src="./assets/js/app.js?v=20260324c"></script>
-<script src="./assets/js/fuarbot2.js?v=20260324f"></script>
+<script src="./assets/js/fuarbot2.js?v=20260324g"></script>
 <script src="./assets/js/products.js"></script>
 <script src="./assets/js/netsis.js"></script>
 <script src="./assets/js/chatbot.js"></script>
