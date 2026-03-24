@@ -829,8 +829,18 @@ function renderFuarDashboard() {
     if (rawUid && _empByUid[rawUid])   return _empByUid[rawUid];
     if (rawName) {
       const lo = rawName.trim().toLowerCase();
+      // Exact email match
       if (_empByEmail[lo]) return _empByEmail[lo];
-      return rawName.trim(); // already a display name
+      // Exact full-name match (case-insensitive)
+      const exact = fbUsersData.find(u => (u.name||'').toLowerCase() === lo);
+      if (exact) return exact.name;
+      // Partial: activity might store only first name ("Volkan" → "Volkan Saglik")
+      const partial = fbUsersData.find(u => {
+        const n = (u.name||'').toLowerCase();
+        return n.startsWith(lo + ' ') || n === lo;
+      });
+      if (partial) return partial.name;
+      return rawName.trim(); // fallback: use as-is
     }
     return null;
   };
