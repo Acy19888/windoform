@@ -784,7 +784,12 @@ function renderFuarDashboard() {
   if (lbl) lbl.textContent = lblMap[fbDashDateFilter] || '';
 
   // ── Filter data by date ──────────────────────────────────────
-  const customers   = fbCustomers.filter(c => fuarInRange(c.createdAt, from, to));
+  // fbAllCustomersRaw = alle Kontakte inkl. bereits importierte (ungefiltert)
+  // fbCustomers = nur noch NICHT importierte — NICHT für Zählung verwenden!
+  const allCusts    = fbAllCustomersRaw.length ? fbAllCustomersRaw : fbCustomers;
+  const customers   = allCusts.filter(c =>
+    fuarInRange(c.createdAt, from, to) || fuarInRange(c.updatedAt, from, to)
+  );
   const allQuotes   = Object.values(fbQuotes).flat().filter(q => fuarInRange(q.createdAt, from, to));
   const allActivities = Object.values(fbActivities).flat().filter(a => fuarInRange(a.createdAt, from, to));
 
@@ -815,7 +820,7 @@ function renderFuarDashboard() {
 
   allQuotes.forEach(q => {
     // Use quote's own createdBy; fall back to the contact's createdBy
-    const by = q.createdBy || fbCustomers.find(c => c._id === q.contactId)?.createdBy || null;
+    const by = q.createdBy || allCusts.find(c => c._id === q.contactId)?.createdBy || null;
     const k  = addEmp(by);
     employees[k].quotes++;
     employees[k].revenue += Number(q.totalNet || 0);
