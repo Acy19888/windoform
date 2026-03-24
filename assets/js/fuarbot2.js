@@ -799,13 +799,21 @@ function renderFuarDashboard() {
     if (!dt) return fbDashDateFilter === 'all'; // undated → show only in 'all' view
     return fuarInRange(dt, from, to);
   });
-  const allActivities = Object.values(fbActivities).flat().filter(a => fuarInRange(a.createdAt, from, to));
+  const allActivities = Object.values(fbActivities).flat().filter(a => {
+    const dt = a.createdAt || a.timestamp;
+    if (!dt) return fbDashDateFilter === 'all';
+    return fuarInRange(dt, from, to);
+  });
 
   // ── Quote-activities (Fuarbot stores sent quotes as activities, not crm_quotes docs)
   // Deduplicate against crm_quotes by quote number to avoid double-counting
   const _quoteNumsSeen = new Set(allQuotes.map(q => q.quoteNumber).filter(Boolean));
   const quoteActivities = allActivities.filter(a => {
-    if (a.type !== 'quote' && !(a.type === 'email' && (a.text||'').toLowerCase().includes('teklif'))) return false;
+    const txt = (a.text||'').toLowerCase();
+    const isQuoteType  = a.type === 'quote' || a.type === 'offer' || a.type === 'angebot';
+    const isEmailQuote = a.type === 'email' && (txt.includes('teklif') || txt.includes('angebot') || txt.includes('quote'));
+    const hasQuoteNum  = /[A-Z]{2,}-[\dA-Z]+-\d+/.test(a.text||'');
+    if (!isQuoteType && !isEmailQuote && !hasQuoteNum) return false;
     const m = (a.text||'').match(/([A-Z]+-[\dA-Z]+-\d+)/);
     const num = m?.[1];
     if (num) { if (_quoteNumsSeen.has(num)) return false; _quoteNumsSeen.add(num); }
