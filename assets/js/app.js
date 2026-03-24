@@ -2389,25 +2389,35 @@ async function _loadFuarbotDashStats() {
     const cfg = (typeof loadFbConfig === 'function') ? loadFbConfig() : null;
     if (!cfg?.apiKey || !cfg?.projectId) return;
 
-    // In-memory'den al, yoksa Firestore'dan çek
-    let customers = (typeof fbAllCustomersRaw !== 'undefined' && fbAllCustomersRaw.length)
-      ? fbAllCustomersRaw
-      : (typeof fbCustomers !== 'undefined' && fbCustomers.length ? fbCustomers : null);
-    let quotes = (typeof fbQuotes !== 'undefined')
-      ? Object.values(fbQuotes).flat()
-      : [];
-
-    if (!customers) {
-      // Henüz sync olmamış — Firestore'dan çek
-      [customers, quotes] = await Promise.all([
-        (typeof fsFetch === 'function' ? fsFetch(cfg.apiKey, cfg.projectId, 'crm_customers').catch(()=>[]) : Promise.resolve([])),
-        (typeof fsFetch === 'function' ? fsFetch(cfg.apiKey, cfg.projectId, 'crm_quotes').catch(()=>[])    : Promise.resolve([])),
-      ]);
+    // Her zaman fbAllCustomersRaw kullan — bu import edilenleri de içerir
+    // fbCustomers = sadece henüz import edilmemiş olanlar (filtrelenmiş), KULLANMA
+    let customers = [];
+    if (typeof fbAllCustomersRaw !== 'undefined' && fbAllCustomersRaw.length) {
+      customers = fbAllCustomersRaw;
+    } else {
+      // Henüz sync olmamış — Firestore'dan doğrudan çek (filtresiz)
+      customers = typeof fsFetch === 'function'
+        ? await fsFetch(cfg.apiKey, cfg.projectId, 'crm_customers').catch(()=>[])
+        : [];
+      // Cache'e ekle
+      if (customers.length && typeof fbAllCustomersRaw !== 'undefined') {
+        customers.forEach(c => { if (!fbAllCustomersRaw.find(x=>x._id===c._id)) fbAllCustomersRaw.push(c); });
+      }
     }
 
-    // Bugünkü taramalar
+    let quotes = (typeof fbQuotes !== 'undefined' && Object.keys(fbQuotes).length)
+      ? Object.values(fbQuotes).flat()
+      : await (typeof fsFetch === 'function'
+          ? fsFetch(cfg.apiKey, cfg.projectId, 'crm_quotes').catch(()=>[])
+          : Promise.resolve([]));
+
+    // Bugünkü aktivite: createdAt VEYA updatedAt bugün olan kişiler
+    // (tekrar taranan eski müşteriler de sayılır)
     const todayStr = new Date().toISOString().slice(0,10);
-    const todayScans = customers.filter(c => (c.createdAt||'').slice(0,10) === todayStr).length;
+    const todayScans = customers.filter(c =>
+      (c.createdAt||'').slice(0,10) === todayStr ||
+      (c.updatedAt||'').slice(0,10) === todayStr
+    ).length;
 
     // Toplam tutar
     const totalRev = quotes.reduce((s,q) => s + Number(q.totalNet||q.totalGross||0), 0);
@@ -2425,9 +2435,13 @@ async function _loadFuarbotDashStats() {
     const badge = document.getElementById('fuarbot-dash-badge');
     if (badge) badge.style.display = '';
 
-    // Son 5 tarama listesi
+    // Son 5 tarama — updatedAt veya createdAt'e göre sırala (tekrar tarananlar üstte)
     const recent = [...customers]
-      .sort((a,b) => (b.createdAt||'') > (a.createdAt||'') ? 1 : -1)
+      .sort((a,b) => {
+        const ta = b.updatedAt || b.createdAt || '';
+        const tb = a.updatedAt || a.createdAt || '';
+        return ta > tb ? 1 : -1;
+      })
       .slice(0,5);
     const recentEl = document.getElementById('fb-dash-recent');
     if (recentEl) {
