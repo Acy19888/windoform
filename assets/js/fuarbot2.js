@@ -1009,9 +1009,8 @@ function renderFuarUsers() {
   const el = document.getElementById('fuar-users-content');
 
   // Fuarbot verisinden henüz eklenmemiş çalışan sayısını hesapla
-  const discovered    = _discoverFuarbotEmployees();
-  const existingNames = new Set(fbUsersData.map(u => (u.name||'').toLowerCase().trim()));
-  const newOnes       = discovered.filter(d => !existingNames.has(d.name.toLowerCase().trim()));
+  const discovered = _discoverFuarbotEmployees();
+  const newOnes    = discovered.filter(d => !_isAlreadyEmployee(d.name, d.email));
   const badge         = newOnes.length ? `<span class="badge bg-success ms-1">${newOnes.length}</span>` : '';
 
   // Buton her zaman görünür — veri yoksa tıklayınca açıklama gösterir
@@ -1072,6 +1071,24 @@ function renderFuarUsers() {
     </div>`;
 }
 
+// Check if a discovered name is already covered by an existing fuarEmployee
+// Handles: exact match, partial first-name match ("Volkan" ↔ "Volkan Saglik"),
+// and email match
+function _isAlreadyEmployee(discoveredName, discoveredEmail) {
+  const lo    = (discoveredName  || '').toLowerCase().trim();
+  const loMail= (discoveredEmail || '').toLowerCase().trim();
+  return fbUsersData.some(u => {
+    const n = (u.name  || '').toLowerCase().trim();
+    const e = (u.email || '').toLowerCase().trim();
+    if (loMail && e && loMail === e) return true;   // email match
+    if (!n || !lo) return false;
+    if (n === lo) return true;                        // exact name
+    if (n.startsWith(lo + ' ')) return true;          // "Volkan" matches "Volkan Saglik"
+    if (lo.startsWith(n + ' ')) return true;          // "Volkan Saglik" matches "Volkan"
+    return false;
+  });
+}
+
 // Fuarbot verilerinden benzersiz çalışanları topla
 function _discoverFuarbotEmployees() {
   const map = {};
@@ -1098,9 +1115,8 @@ function _discoverFuarbotEmployees() {
 
 // İçe aktarma modalını aç
 function openFuarbotImport() {
-  const discovered    = _discoverFuarbotEmployees();
-  const existingNames = new Set(fbUsersData.map(u => (u.name||'').toLowerCase().trim()));
-  const newOnes       = discovered.filter(d => !existingNames.has(d.name.toLowerCase().trim()));
+  const discovered = _discoverFuarbotEmployees();
+  const newOnes    = discovered.filter(d => !_isAlreadyEmployee(d.name, d.email));
 
   if (!discovered.length) {
     toast('Fuarbot verisi henüz yüklenmemiş. Önce Fuarbot Sync sayfasında senkronize edin.', 'error');
