@@ -2542,7 +2542,7 @@ function loadAyarlar() {
 window.cleanupTestData = async function(cutoffDate = '2026-03-22') {
   const cfg = loadFbConfig();
   if (!cfg?.apiKey || !cfg?.projectId) { console.error('No Firebase config'); return; }
-  const token = authToken();
+  const token = await authToken();
   const base  = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents`;
   const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) };
   const cutoff  = new Date(cutoffDate).toISOString();
