@@ -110,6 +110,7 @@
     <a href="#" data-page="fuar-dashboard" onclick="showPage('fuar-dashboard');return false;"><i class="bi bi-speedometer2"></i>Fuar Dashboard</a>
     <a href="#" data-page="fuar-users"     onclick="showPage('fuar-users');return false;"><i class="bi bi-people-fill"></i>Kullan&#x131;c&#x131;lar</a>
     <a href="#" data-page="leads"         onclick="showPage('leads');return false;"><i class="bi bi-funnel-fill"></i>Leads &amp; Pipeline</a>
+    <a href="#" data-page="emails"        onclick="showPage('emails');return false;"><i class="bi bi-envelope-fill"></i>E-postalar</a>
     <a href="#" data-page="teklifler"      onclick="showPage('teklifler');return false;"><i class="bi bi-file-earmark-text-fill"></i>Teklifler</a>
     <a href="#" data-page="fatura"         onclick="showPage('fatura');return false;"><i class="bi bi-receipt"></i>Fatura</a>
     <a href="#" data-page="urunler"        onclick="showPage('urunler');return false;"><i class="bi bi-box-seam-fill"></i>Ürünler</a>
@@ -640,6 +641,30 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════
+     E-POSTALAR PAGE
+══════════════════════════════════════════════════════ -->
+<div id="emails" class="page" style="display:none;">
+  <div class="page-topbar">
+    <div class="page-topbar-left">
+      <h1><i class="bi bi-envelope-fill me-2" style="color:#475569;"></i>E-postalar</h1>
+    </div>
+    <div class="page-topbar-right">
+      <button class="btn btn-primary btn-sm" onclick="emailCompose(null)">
+        <i class="bi bi-pencil-square me-1"></i>Yeni E-posta
+      </button>
+    </div>
+  </div>
+  <div class="page-content">
+    <div id="emails-page-content">
+      <div class="text-center py-5 text-muted">
+        <i class="bi bi-envelope" style="font-size:3rem;opacity:.3;"></i>
+        <div class="mt-2">E-postalar yükleniyor…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
      AYARLAR PAGE
 ══════════════════════════════════════════════════════ -->
 <div id="ayarlar" class="page">
@@ -770,8 +795,97 @@
       </div>
     </div>
 
+    <!-- ── 4. E-posta İmzası ── -->
+    <div id="signature-settings-container">
+      <!-- email.js tarafından doldurulur -->
+      <div class="card mb-4">
+        <div class="card-body text-muted small">E-posta imzası yükleniyor…</div>
+      </div>
+    </div>
+
+    <!-- ── 5. Rol Yetkileri (sadece Admin) ── -->
+    <div id="role-settings-container" data-role="admin">
+      <!-- email.js tarafından doldurulur -->
+    </div>
+
   </div><!-- /page-content -->
 </div><!-- /ayarlar -->
+
+<!-- ══════════════════════════════════════════════════════
+     E-POSTA COMPOSE MODAL
+══════════════════════════════════════════════════════ -->
+<div class="modal fade" id="emailComposeModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2 px-3">
+        <h6 class="modal-title fw-semibold"><i class="bi bi-pencil-square me-2 text-primary"></i>Yeni E-posta</h6>
+        <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <!-- Header fields -->
+        <div class="p-3 border-bottom" style="font-size:13px;">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <span class="text-muted" style="width:60px;flex-shrink:0;">Kimden</span>
+            <span id="ec-from-display" class="text-muted fst-italic"></span>
+          </div>
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <label class="text-muted mb-0" style="width:60px;flex-shrink:0;" for="ec-to">Kime</label>
+            <input type="email" id="ec-to" class="form-control form-control-sm border-0 border-bottom rounded-0 p-0"
+                   placeholder="alici@ornek.com" style="font-size:13px;">
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <label class="text-muted mb-0" style="width:60px;flex-shrink:0;" for="ec-subject">Konu</label>
+            <input type="text" id="ec-subject" class="form-control form-control-sm border-0 border-bottom rounded-0 p-0"
+                   placeholder="E-posta konusu" style="font-size:13px;font-weight:500;">
+          </div>
+        </div>
+        <!-- Toolbar -->
+        <div class="px-3 pt-2 border-bottom d-flex gap-1 flex-wrap" style="font-size:12px;">
+          <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="emailFormat('bold')" title="Kalın"><b>B</b></button>
+          <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="emailFormat('italic')" title="İtalik"><i>I</i></button>
+          <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="emailFormat('underline')" title="Altı çizili"><u>U</u></button>
+          <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="emailFormat('insertUnorderedList')" title="Liste"><i class="bi bi-list-ul"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="emailFormat('createLink',prompt('URL:','https://'))" title="Link"><i class="bi bi-link-45deg"></i></button>
+        </div>
+        <!-- Body -->
+        <div id="ec-body" contenteditable="true"
+             class="p-3"
+             style="min-height:220px;max-height:380px;overflow-y:auto;font-family:sans-serif;font-size:14px;line-height:1.6;outline:none;">
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+        <button type="button" class="btn btn-primary btn-sm" id="ec-send-btn" onclick="emailSend()">
+          <i class="bi bi-send me-1"></i>Gönder
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     E-POSTA DETAIL MODAL
+══════════════════════════════════════════════════════ -->
+<div class="modal fade" id="emailDetailModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2 px-3">
+        <h6 class="modal-title fw-semibold" id="em-detail-subject"></h6>
+        <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div class="px-3 py-2 border-bottom bg-light" id="em-detail-meta" style="font-size:13px;"></div>
+        <div id="em-detail-body" class="p-3" style="min-height:200px;max-height:480px;overflow-y:auto;"></div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" id="em-detail-reply-btn" class="btn btn-outline-primary btn-sm">
+          <i class="bi bi-reply me-1"></i>Yanıtla
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm ms-auto" data-bs-dismiss="modal">Kapat</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- FUAR DASHBOARD -->
 <div id="fuar-dashboard" class="page">
@@ -1563,6 +1677,16 @@
               <span id="cont-quotes-badge" class="badge bg-warning text-dark ms-1" style="display:none;font-size:10px;"></span>
             </a>
           </li>
+          <li class="nav-item">
+            <a class="nav-link" id="cont-tab-emails" href="#" onclick="contSwitchTab('emails');return false;">
+              <i class="bi bi-envelope me-1"></i>E-postalar
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" id="cont-tab-notes" href="#" onclick="contSwitchTab('notes');return false;">
+              <i class="bi bi-sticky me-1"></i>Notlar
+            </a>
+          </li>
         </ul>
 
         <!-- Panel: Bilgi -->
@@ -1597,8 +1721,43 @@
           </div>
         </div>
 
+        <!-- Panel: E-postalar -->
+        <div id="cont-panel-emails" style="display:none;max-height:460px;overflow-y:auto;">
+          <div class="text-muted small text-center py-4"><span class="spinner-border spinner-border-sm me-1"></span>Yükleniyor…</div>
+        </div>
+
+        <!-- Panel: Notlar -->
+        <div id="cont-panel-notes" style="display:none;" class="p-3">
+          <!-- Yeni not formu -->
+          <div class="mb-3 p-3 bg-light rounded border">
+            <textarea id="note-new-text" class="form-control mb-2" rows="2"
+                      placeholder="Yeni not ekle…" style="font-size:13px;resize:vertical;"></textarea>
+            <div class="d-flex gap-2 align-items-center">
+              <select id="note-new-color" class="form-select form-select-sm" style="width:auto;">
+                <option value="yellow">🟡 Sarı</option>
+                <option value="blue">🔵 Mavi</option>
+                <option value="green">🟢 Yeşil</option>
+                <option value="red">🔴 Kırmızı</option>
+                <option value="purple">🟣 Mor</option>
+              </select>
+              <button class="btn btn-primary btn-sm" onclick="notesAdd()">
+                <i class="bi bi-plus-lg me-1"></i>Ekle
+              </button>
+            </div>
+          </div>
+          <!-- Not listesi -->
+          <div id="cont-panel-notes-list">
+            <div class="text-muted small text-center py-3">
+              <span class="spinner-border spinner-border-sm me-1"></span>Yükleniyor…
+            </div>
+          </div>
+        </div>
+
       </div>
       <div class="modal-footer">
+        <button type="button" class="btn btn-outline-success btn-sm" onclick="emailCompose(window._emContactRef)">
+          <i class="bi bi-envelope me-1"></i>E-posta Gönder
+        </button>
         <button type="button" class="btn btn-outline-primary btn-sm" onclick="editContactModal()"><i class="bi bi-pencil me-1"></i>D&#x00fc;zenle</button>
         <button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteContactModal()"><i class="bi bi-trash me-1"></i>Sil</button>
         <button type="button" class="btn btn-secondary btn-sm ms-auto" data-bs-dismiss="modal">Kapat</button>
@@ -1697,12 +1856,13 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="./assets/js/auth.js"></script>
-<script src="./assets/js/app.js?v=20260324o"></script>
+<script src="./assets/js/app.js?v=20260324p"></script>
 <script src="./assets/js/fuarbot2.js?v=20260324n"></script>
 <script src="./assets/js/products.js"></script>
 <script src="./assets/js/netsis.js"></script>
 <script src="./assets/js/chatbot.js"></script>
 <script src="./assets/js/leads.js"></script>
+<script src="./assets/js/email.js?v=20260324a"></script>
 <script>document.addEventListener('DOMContentLoaded', () => { initChatbot(); });</script>
 
 <!-- ══════════════════════════════════════════

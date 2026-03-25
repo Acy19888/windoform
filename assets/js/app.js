@@ -191,6 +191,8 @@ async function _appStart() {
     // Start Fuarbot background sync so activities/quotes are always fresh
     if (typeof fbBackgroundSync === 'function') setTimeout(fbBackgroundSync, 1500);
     if (typeof _autoRegisterCurrentUser === 'function') setTimeout(_autoRegisterCurrentUser, 2000);
+    // E-Mail / Rollen / Signatur initialisieren
+    if (typeof emailInit === 'function') setTimeout(emailInit, 2500);
   } catch (err) {
     console.error('Başlangıç hatası:', err);
     toast('Veritabanı başlatılamadı: ' + err.message + ' — Tarayıcı izinlerini kontrol edin.', 'error');
@@ -758,7 +760,8 @@ function showPage(name) {
   else if (name === 'fuarbot')        loadFuarbotPage();
   else if (name === 'fuar-dashboard') loadFuarDashboard();
   else if (name === 'fuar-users')     loadFuarUsers();
-  else if (name === 'ayarlar')        loadAyarlar();
+  else if (name === 'ayarlar')        { loadAyarlar(); if(typeof signatureSettingsInit==='function') signatureSettingsInit(); if(typeof roleSettingsInit==='function') roleSettingsInit(); }
+  else if (name === 'emails')         { if (typeof loadEmailsPage === 'function') loadEmailsPage(); }
   else if (name === 'leads')          loadLeads().catch(console.error);
   else if (name === 'teklifler')      loadTeklifler();
   else if (name === 'fatura')         loadFatura();
@@ -1503,6 +1506,8 @@ async function showContactModal(id) {
   const c = await dbGet('contacts', id);
   if (!c) return;
   currentModalContactId = id;
+  // Expose contact for email compose button in modal footer
+  if (typeof window !== 'undefined') window._emContactRef = c;
   const co = c.companyId ? await dbGet('companies', c.companyId) : null;
 
   document.getElementById('cont-name').textContent = c.name;
@@ -1604,12 +1609,19 @@ async function showContactModal(id) {
 }
 
 function contSwitchTab(tab) {
-  ['info','timeline','quotes'].forEach(t => {
+  ['info','timeline','quotes','emails','notes'].forEach(t => {
     const panel = document.getElementById(`cont-panel-${t}`);
     const navEl = document.getElementById(`cont-tab-${t}`);
     if (panel) panel.style.display = t === tab ? '' : 'none';
     if (navEl) navEl.classList.toggle('active', t === tab);
   });
+  // Lazy-load E-postalar und Notizen beim ersten Öffnen
+  if (tab === 'emails' && currentModalContactId && typeof emailLoadContactEmails === 'function') {
+    emailLoadContactEmails(currentModalContactId);
+  }
+  if (tab === 'notes' && currentModalContactId && typeof notesLoad === 'function') {
+    notesLoad(currentModalContactId);
+  }
 }
 
 function editContactModal() {
