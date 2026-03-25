@@ -181,7 +181,7 @@ async function rolePermsSave() {
 // E-POSTA COMPOSE
 // ══════════════════════════════════════════════════════════════
 
-function emailCompose(contact) {
+async function emailCompose(contact) {
   _emContact = contact || null;
   const modal = document.getElementById('emailComposeModal');
   if (!modal) return;
@@ -191,15 +191,26 @@ function emailCompose(contact) {
   const bodyEl = document.getElementById('ec-body');
   const fromEl = document.getElementById('ec-from-display');
 
-  if (toEl)   toEl.value = contact?.email || '';
+  if (toEl)   toEl.value = contact?.email || (contact?.name ? contact.name + ' ' : '') + (contact?.email ? `<${contact.email}>` : '') || '';
+  // If contact has name+email, show "Name <email>", else just email
+  if (contact?.name && contact?.email) {
+    if (toEl) toEl.value = `${contact.name} <${contact.email}>`;
+  } else if (contact?.email) {
+    if (toEl) toEl.value = contact.email;
+  } else {
+    if (toEl) toEl.value = '';
+  }
+
   if (subEl)  subEl.value = '';
-  if (fromEl) fromEl.textContent = _userEmailAddr || '(E-posta adresi ayarlanmamış → Ayarlar)';
+  if (fromEl) fromEl.textContent = _userEmailAddr || '(Ayarlar → E-posta adresinizi girin)';
+
+  // Load signature fresh from Firestore if not yet loaded
+  if (!_userSig) await _loadSignatureFresh();
 
   if (bodyEl) {
     bodyEl.innerHTML = _userSig
-      ? `<p><br></p><p>--</p>${_userSig}`
+      ? `<p><br></p><p><span style="color:#888">--</span></p>${_userSig}`
       : '<p><br></p>';
-    // Cursor an den Anfang
     setTimeout(() => {
       const r = document.createRange();
       r.setStart(bodyEl.firstChild || bodyEl, 0);
@@ -211,7 +222,145 @@ function emailCompose(contact) {
     }, 350);
   }
 
+  // Pre-load contacts for autocomplete
+  _loadEmailContactsCache();
+
   bootstrap.Modal.getOrCreateInstance(modal).show();
+}
+
+// ── Signature fresh-load (falls emailInit noch nicht durch) ──
+async function _loadSignatureFresh() {
+  try {
+    const cfg = loadFbConfig(); if (!cfg) return;
+    const uid = typeof authUid === 'function' ? authUid() : null; if (!uid) return;
+    const token = await authToken(); if (!token) return;
+    const res = await fetch(
+      `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/fuarEmployees/${uid}?key=${cfg.apiKey}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    const d = await res.json();
+    if (d.fields?.emailSignature?.stringValue) {
+      _userSig      = d.fields.emailSignature.stringValue;
+      _userEmailAddr= d.fields.emailAddress?.stringValue || _userEmailAddr;
+      _userDispName = d.fields.name?.stringValue || _userDispName;
+    }
+  } catch {}
+}
+
+// ── Kontakt-Autocomplete ─────────────────────────────────────
+let _emailContactsCache = [];
+async function _loadEmailContactsCache() {
+  if (_emailContactsCache.length > 0) return;
+  try {
+    // Try IndexedDB first
+    if (typeof dbGetAll === 'function' && typeof db !== 'undefined' && db) {
+      const contacts = await dbGetAll('contacts');
+      _emailContactsCache = (contacts || [])
+        .filter(c => c.email || c.contactEmail)
+        .map(c => ({
+          name:  [c.firstName, c.lastName].filter(Boolean).join(' ') || c.firma || '',
+          email: c.contactEmail || c.email || '',
+          firma: c.firma || '',
+        }));
+      return;
+    }
+    // Fallback: Firestore
+    const cfg   = loadFbConfig(); if (!cfg) return;
+    const token = await authToken(); if (!token) return;
+    const res   = await fetch(
+      `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents:runQuery?key=${cfg.apiKey}`,
+      { method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${token}`},
+        body: JSON.stringify({ structuredQuery: { from:[{collectionId:'contacts'}], limit:500,
+          select:{ fields:[{fieldPath:'firstName'},{fieldPath:'lastName'},{fieldPath:'email'},{fieldPath:'contactEmail'},{fieldPath:'firma'}] }
+        }})
+      }
+    );
+    const rows = await res.json();
+    _emailContactsCache = (Array.isArray(rows)?rows:[]).filter(r=>r.document).map(r => {
+      const f = r.document.fields||{};
+      return {
+        name:  [f.firstName?.stringValue,f.lastName?.stringValue].filter(Boolean).join(' ')||'',
+        email: f.contactEmail?.stringValue||f.email?.stringValue||'',
+        firma: f.firma?.stringValue||'',
+      };
+    }).filter(c => c.email);
+  } catch {}
+}
+
+function emailToSearch(q) {
+  const dd = document.getElementById('ec-to-dropdown');
+  if (!dd) return;
+  if (!q || q.length < 1) { dd.style.display = 'none'; return; }
+  const lq = q.toLowerCase();
+  const hits = _emailContactsCache.filter(c =>
+    c.name.toLowerCase().includes(lq) ||
+    c.email.toLowerCase().includes(lq) ||
+    c.firma.toLowerCase().includes(lq)
+  ).slice(0, 8);
+  if (!hits.length) { dd.style.display = 'none'; return; }
+  dd.innerHTML = hits.map(c => `
+    <div class="px-3 py-2 d-flex gap-2 align-items-center"
+         style="cursor:pointer;border-bottom:1px solid #f1f5f9;"
+         onmousedown="emailToSelect('${esc(c.name)} <${esc(c.email)}>')"
+         onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''">
+      <i class="bi bi-person-circle text-muted"></i>
+      <div>
+        <div style="font-weight:500;">${esc(c.name||c.email)}</div>
+        <div class="text-muted" style="font-size:11px;">${esc(c.email)}${c.firma?' · '+esc(c.firma):''}</div>
+      </div>
+    </div>`).join('');
+  dd.style.display = 'block';
+}
+
+function emailToSelect(val) {
+  const el = document.getElementById('ec-to');
+  if (el) el.value = val;
+  const dd = document.getElementById('ec-to-dropdown');
+  if (dd) dd.style.display = 'none';
+}
+
+// Close dropdown on outside click
+document.addEventListener('click', e => {
+  if (!e.target.closest('#ec-to') && !e.target.closest('#ec-to-dropdown')) {
+    const dd = document.getElementById('ec-to-dropdown');
+    if (dd) dd.style.display = 'none';
+  }
+});
+
+// ── AI Text-Verbesserung ─────────────────────────────────────
+async function emailAiImprove() {
+  const bodyEl = document.getElementById('ec-body');
+  const btn    = document.getElementById('ec-ai-btn');
+  if (!bodyEl) return;
+
+  const text = bodyEl.innerText.trim();
+  if (!text || text.length < 10) {
+    _emToast('Önce e-posta metni yazın', 'error'); return;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ İyileştiriliyor…'; }
+
+  try {
+    const res = await fetch('/api/ai/improve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    const data = await res.json();
+    if (data.improved) {
+      // Keep signature: split at "--" separator if present
+      const sigSep = bodyEl.innerHTML.indexOf('<p><span style="color:#888">--</span></p>');
+      const sigPart = sigSep > -1 ? bodyEl.innerHTML.slice(sigSep) : '';
+      bodyEl.innerHTML = `<p>${data.improved.replace(/\n\n/g,'</p><p>').replace(/\n/g,'<br>')}</p>` + sigPart;
+      _emToast('Metin geliştirildi ✓', 'success');
+    } else {
+      _emToast(data.error || 'AI yanıt vermedi', 'error');
+    }
+  } catch (e) {
+    _emToast('AI hatası: ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '✨ AI ile Geliştir'; }
+  }
 }
 
 function emailComposeReply(fromEmail, subject) {
