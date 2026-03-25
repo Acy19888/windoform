@@ -2497,6 +2497,42 @@ function ftPrint() {
   <br><button onclick="window.print()" style="background:#1a56db;color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:13px;">🖨️ Yazdır / PDF Olarak Kaydet</button>
   </body></html>`);
   w.document.close();
+
+  // ── Save invoice record to crm_invoices ─────────────────
+  _ftSaveInvoice({ no, date, cName, cCompany, cEmail, grand, sym, q: ftCurrentQuote });
+}
+
+async function _ftSaveInvoice({ no, date, cName, cCompany, cEmail, grand, sym, q }) {
+  try {
+    const cfg = loadFbConfig();
+    if (!cfg?.apiKey || !cfg?.projectId) return;
+    const token = await authToken();
+    const authH = token ? { Authorization: 'Bearer ' + token } : {};
+    const now   = new Date().toISOString();
+    const cur   = q?.currency || 'EUR';
+    const fields = {
+      invoiceNumber: { stringValue: no },
+      invoiceDate:   { stringValue: date || now.slice(0,10) },
+      quoteNumber:   { stringValue: q?.quoteNumber || '' },
+      quoteId:       { stringValue: q?._id || '' },
+      contactName:   { stringValue: cName },
+      contactCompany:{ stringValue: cCompany },
+      contactEmail:  { stringValue: cEmail },
+      totalNet:      { doubleValue: grand },
+      currency:      { stringValue: cur },
+      createdAt:     { timestampValue: now },
+      createdBy:     { stringValue: window._currentUserName || '' },
+    };
+    const base = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/crm_invoices`;
+    await fetch(`${base}?key=${cfg.apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authH },
+      body: JSON.stringify({ fields }),
+    });
+    console.log('[Fatura] Saved to crm_invoices:', no, grand, cur);
+  } catch(e) {
+    console.warn('[Fatura] Could not save to crm_invoices:', e.message);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════

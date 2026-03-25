@@ -2483,7 +2483,7 @@ async function _loadFuarbotDashStats() {
         </table>`;
       }
     }
-    // ── Umsatz / Gelir istatistikleri ─────────────────────────
+    // ── Fatura / Rechnungs-Statistiken (aus crm_invoices) ────
     const now2 = new Date();
     const thisMonth = now2.getMonth(), thisYear = now2.getFullYear();
     const lastMonth = thisMonth === 0 ? 11 : thisMonth - 1;
@@ -2495,15 +2495,21 @@ async function _loadFuarbotDashStats() {
       ? (v/1000).toLocaleString('de-DE',{maximumFractionDigits:1})+' k€'
       : v.toLocaleString('de-DE',{minimumFractionDigits:0,maximumFractionDigits:0})+' €';
 
-    const allQ = quotes;
-    const rev = q => Number(q.totalNet||q.totalGross||0);
-    const inMonth = (q, m, y) => { const d = new Date(q.createdAt||q.updatedAt||''); return d.getMonth()===m && d.getFullYear()===y; };
+    // Fetch real invoices from crm_invoices (saved when printing a Fatura)
+    const invoices = typeof fsFetch === 'function'
+      ? await fsFetch(cfg.apiKey, cfg.projectId, 'crm_invoices').catch(()=>[])
+      : [];
 
-    const thisMonthRev  = allQ.filter(q=>inMonth(q,thisMonth,thisYear)).reduce((s,q)=>s+rev(q),0);
-    const lastMonthRev  = allQ.filter(q=>inMonth(q,lastMonth,lastMonthYear)).reduce((s,q)=>s+rev(q),0);
-    const thisYearRev   = allQ.filter(q=>new Date(q.createdAt||'').getFullYear()===thisYear).reduce((s,q)=>s+rev(q),0);
-    const avgQ          = allQ.length ? allQ.reduce((s,q)=>s+rev(q),0)/allQ.length : 0;
-    const draftRev      = allQ.filter(q=>q.status==='draft').reduce((s,q)=>s+rev(q),0);
+    const rev = q => Number(q.totalNet||0);
+    const inMonth = (q, m, y) => { const d = new Date(q.createdAt||''); return d.getMonth()===m && d.getFullYear()===y; };
+
+    const thisMonthRev  = invoices.filter(q=>inMonth(q,thisMonth,thisYear)).reduce((s,q)=>s+rev(q),0);
+    const lastMonthRev  = invoices.filter(q=>inMonth(q,lastMonth,lastMonthYear)).reduce((s,q)=>s+rev(q),0);
+    const thisYearRev   = invoices.filter(q=>new Date(q.createdAt||'').getFullYear()===thisYear).reduce((s,q)=>s+rev(q),0);
+    const avgQ          = invoices.length ? invoices.reduce((s,q)=>s+rev(q),0)/invoices.length : 0;
+    // "Taslak" = quotes still not invoiced (in crm_quotes but not in crm_invoices)
+    const invoicedNums  = new Set(invoices.map(i=>i.quoteNumber).filter(Boolean));
+    const draftRev      = quotes.filter(q=>q.status==='draft'||(q.quoteNumber&&!invoicedNums.has(q.quoteNumber))).reduce((s,q)=>s+Number(q.totalNet||0),0);
 
     const trend = lastMonthRev > 0 ? Math.round(((thisMonthRev-lastMonthRev)/lastMonthRev)*100) : null;
     const trendHtml = trend !== null
