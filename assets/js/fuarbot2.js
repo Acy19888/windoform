@@ -956,6 +956,7 @@ function renderFuarDashboard() {
   });
 
   const empRows = Object.entries(employees)
+    .filter(([name]) => name !== 'Bilinmiyor')   // hide unresolvable-creator bucket
     .sort((a, b) => (b[1].scanned + b[1].quotes) - (a[1].scanned + a[1].quotes));
 
   const tbody = document.getElementById('fuar-dash-emp-tbody');
