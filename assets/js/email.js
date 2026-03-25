@@ -294,11 +294,31 @@ async function emailSend() {
   }
 }
 
-// Toolbar-Formatierung für den Rich-Text-Editor
+// Toolbar-Formatierung: für Compose-Body UND Signatur-Editor
 function emailFormat(cmd, val) {
-  document.getElementById('ec-body')?.focus();
+  // Aktives contenteditable Element bestimmen
+  const active = document.activeElement;
+  const target = (active?.contentEditable === 'true') ? active : document.getElementById('ec-body');
+  target?.focus();
   document.execCommand(cmd, false, val || null);
 }
+
+// ── Konsolen-Helper: eigene UID als Admin setzen ──────────────
+// Aufruf in der Browser-Konsole: setMeAsAdmin()
+window.setMeAsAdmin = async function() {
+  const cfg = typeof loadFbConfig === 'function' ? loadFbConfig() : null;
+  const uid = typeof authUid === 'function' ? authUid() : null;
+  const token = typeof authToken === 'function' ? await authToken() : null;
+  if (!cfg || !uid) return console.error('[Admin] Nicht eingeloggt');
+  const url = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/fuarEmployees/${uid}?updateMask.fieldPaths=crmRole&key=${cfg.apiKey}`;
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ fields: { crmRole: { stringValue: 'admin' } } }),
+  });
+  if (res.ok) { console.log('[Admin] ✓ crmRole = admin gesetzt. Seite neu laden!'); }
+  else { const e = await res.json(); console.error('[Admin] Fehler:', e); }
+};
 
 // ══════════════════════════════════════════════════════════════
 // E-POSTA INBOX — pro Kontakt
