@@ -748,7 +748,19 @@ function showPage(name) {
     return;
   }
 
-  // 4. İçerik yükle — DB hazır değilse sessizce geç
+  // Firestore-only pages — kein IndexedDB nötig, immer ausführen
+  if (name === 'emails') { if (typeof loadEmailsPage === 'function') loadEmailsPage(); return; }
+  if (name === 'ayarlar') { loadAyarlar(); if(typeof signatureSettingsInit==='function') signatureSettingsInit(); if(typeof roleSettingsInit==='function') roleSettingsInit(); return; }
+  if (name === 'fuarbot')        { loadFuarbotPage(); return; }
+  if (name === 'fuar-dashboard') { loadFuarDashboard(); return; }
+  if (name === 'fuar-users')     { loadFuarUsers(); return; }
+  if (name === 'leads')          { loadLeads().catch(console.error); return; }
+  if (name === 'teklifler')      { loadTeklifler(); return; }
+  if (name === 'fatura')         { loadFatura(); return; }
+  if (name === 'urunler')        { loadProducts(); return; }
+  if (name === 'uretim')         { loadUretim(); return; }
+
+  // 4. IndexedDB-abhängige Seiten
   if (!db) { console.warn('showPage: DB henüz hazır değil, içerik yüklenemedi'); return; }
 
   if      (name === 'companies')  loadCompanies().catch(console.error);
@@ -757,12 +769,6 @@ function showPage(name) {
   else if (name === 'import')     loadImportHistory().catch(console.error);
   else if (name === 'reports')    loadReports().catch(console.error);
   else if (name === 'duplicates') loadDuplicates().catch(console.error);
-  else if (name === 'fuarbot')        loadFuarbotPage();
-  else if (name === 'fuar-dashboard') loadFuarDashboard();
-  else if (name === 'fuar-users')     loadFuarUsers();
-  else if (name === 'ayarlar')        { loadAyarlar(); if(typeof signatureSettingsInit==='function') signatureSettingsInit(); if(typeof roleSettingsInit==='function') roleSettingsInit(); }
-  else if (name === 'emails')         { if (typeof loadEmailsPage === 'function') loadEmailsPage(); }
-  else if (name === 'leads')          loadLeads().catch(console.error);
   else if (name === 'teklifler')      loadTeklifler();
   else if (name === 'fatura')         loadFatura();
   else if (name === 'urunler')        loadProducts();
