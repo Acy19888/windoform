@@ -224,13 +224,14 @@ async function fbFetchContactData(fbId) {
           const key = `tl_${fbId}_${i}`;
           if (!actsMap.has(key)) {
             actsMap.set(key, {
-              _id:       key,
-              type:      obj.type || 'note',
-              text:      obj.label || obj.text || '',
-              createdAt: ts,
-              createdBy: obj.user || '',
-              htmlBody:  obj.htmlBody || null,
-              message:   obj.message  || null,
+              _id:          key,
+              type:         obj.type || 'note',
+              text:         obj.label || obj.text || '',
+              createdAt:    ts,
+              createdBy:    obj.user || obj.createdBy || '',
+              createdByUid: obj.uid  || obj.createdByUid || '',
+              htmlBody:     obj.htmlBody || null,
+              message:      obj.message  || null,
             });
           }
         });
@@ -1564,12 +1565,13 @@ async function loadTeklifler() {
           const tid = `tl_${contact._id}_${i}`;
           if (!fbActivities[contact._id].find(x => x._id === tid)) {
             fbActivities[contact._id].push({
-              _id:       tid,
-              type:      item.type || 'note',
-              text:      item.label || item.text || '',
-              createdAt: item.timestamp || item.createdAt || '',
-              createdBy: item.user || item.createdBy || '',
-              contactId: contact._id,
+              _id:          tid,
+              type:         item.type || 'note',
+              text:         item.label || item.text || '',
+              createdAt:    item.timestamp || item.createdAt || '',
+              createdBy:    item.user || item.createdBy || '',
+              createdByUid: item.uid  || item.createdByUid || '',
+              contactId:    contact._id,
             });
           }
         });
@@ -2534,3 +2536,47 @@ function loadAyarlar() {
     }
   }
 }
+
+// ── Admin: delete test data before a cutoff date ──────────────
+// Call from browser console: cleanupTestData()
+window.cleanupTestData = async function(cutoffDate = '2026-03-22') {
+  const cfg = loadFbConfig();
+  if (!cfg?.apiKey || !cfg?.projectId) { console.error('No Firebase config'); return; }
+  const token = authToken();
+  const base  = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents`;
+  const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) };
+  const cutoff  = new Date(cutoffDate).toISOString();
+
+  const collections = ['crm_customers', 'crm_activities', 'crm_quotes', 'contacts'];
+  let totalDeleted = 0;
+
+  for (const col of collections) {
+    console.log(`[cleanup] Scanning ${col}…`);
+    let docs = [], pageToken = '';
+    do {
+      const url = `${base}/${col}?key=${cfg.apiKey}&pageSize=300${pageToken ? '&pageToken='+pageToken : ''}`;
+      const res = await fetch(url);
+      if (!res.ok) { console.warn(`[cleanup] Could not list ${col}:`, res.status); break; }
+      const data = await res.json();
+      docs = docs.concat(data.documents || []);
+      pageToken = data.nextPageToken || '';
+    } while (pageToken);
+
+    const toDelete = docs.filter(d => {
+      const fields = d.fields || {};
+      const ts = fields.createdAt?.timestampValue || fields.createdAt?.stringValue ||
+                 fields.timestamp?.timestampValue  || fields.timestamp?.stringValue  || '';
+      return ts && ts < cutoff;
+    });
+
+    console.log(`[cleanup] ${col}: ${docs.length} total, ${toDelete.length} to delete`);
+    for (const d of toDelete) {
+      const delUrl = `${d.name}?key=${cfg.apiKey}`;
+      const r = await fetch(delUrl, { method: 'DELETE', headers });
+      if (r.ok) { totalDeleted++; console.log(`  ✓ deleted ${d.name.split('/').pop()}`); }
+      else       { console.warn(`  ✗ failed  ${d.name.split('/').pop()}`, r.status); }
+    }
+  }
+  console.log(`[cleanup] Done. ${totalDeleted} documents deleted.`);
+  alert(`Fertig! ${totalDeleted} Test-Dokumente gelöscht.`);
+};
