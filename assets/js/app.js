@@ -2483,6 +2483,75 @@ async function _loadFuarbotDashStats() {
         </table>`;
       }
     }
+    // ── Umsatz / Gelir istatistikleri ─────────────────────────
+    const now2 = new Date();
+    const thisMonth = now2.getMonth(), thisYear = now2.getFullYear();
+    const lastMonth = thisMonth === 0 ? 11 : thisMonth - 1;
+    const lastMonthYear = thisMonth === 0 ? thisYear - 1 : thisYear;
+
+    const fmtEur = v => v >= 1000000
+      ? (v/1000000).toLocaleString('de-DE',{maximumFractionDigits:1})+' M€'
+      : v >= 1000
+      ? (v/1000).toLocaleString('de-DE',{maximumFractionDigits:1})+' k€'
+      : v.toLocaleString('de-DE',{minimumFractionDigits:0,maximumFractionDigits:0})+' €';
+
+    const allQ = quotes;
+    const rev = q => Number(q.totalNet||q.totalGross||0);
+    const inMonth = (q, m, y) => { const d = new Date(q.createdAt||q.updatedAt||''); return d.getMonth()===m && d.getFullYear()===y; };
+
+    const thisMonthRev  = allQ.filter(q=>inMonth(q,thisMonth,thisYear)).reduce((s,q)=>s+rev(q),0);
+    const lastMonthRev  = allQ.filter(q=>inMonth(q,lastMonth,lastMonthYear)).reduce((s,q)=>s+rev(q),0);
+    const thisYearRev   = allQ.filter(q=>new Date(q.createdAt||'').getFullYear()===thisYear).reduce((s,q)=>s+rev(q),0);
+    const avgQ          = allQ.length ? allQ.reduce((s,q)=>s+rev(q),0)/allQ.length : 0;
+    const draftRev      = allQ.filter(q=>q.status==='draft').reduce((s,q)=>s+rev(q),0);
+
+    const trend = lastMonthRev > 0 ? Math.round(((thisMonthRev-lastMonthRev)/lastMonthRev)*100) : null;
+    const trendHtml = trend !== null
+      ? `<span style="color:${trend>=0?'#10b981':'#ef4444'};font-size:11px;">${trend>=0?'↑':'↓'} ${Math.abs(trend)}% geçen ay</span>`
+      : `<span style="color:#9ca3af;font-size:11px;">İlk ay</span>`;
+
+    const setEl = (id, val) => { const e = document.getElementById(id); if(e) e.innerHTML = val; };
+    setEl('rev-stat-month',       fmtEur(thisMonthRev));
+    setEl('rev-stat-month-trend', trendHtml);
+    setEl('rev-stat-year',        fmtEur(thisYearRev));
+    setEl('rev-stat-avg',         fmtEur(avgQ));
+    setEl('rev-stat-pending',     fmtEur(draftRev));
+
+    // 6 aylık chart
+    const m6labels = [], m6data = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(thisYear, thisMonth - i, 1);
+      m6labels.push(d.toLocaleString('tr-TR',{month:'short'}) + ' \'' + String(d.getFullYear()).slice(2));
+      m6data.push(allQ.filter(q=>inMonth(q,d.getMonth(),d.getFullYear())).reduce((s,q)=>s+rev(q),0));
+    }
+    const mCtx = document.getElementById('chart-revenue-monthly')?.getContext('2d');
+    if (mCtx) {
+      if (window._chartRevMonthly) window._chartRevMonthly.destroy();
+      window._chartRevMonthly = new Chart(mCtx, {
+        type: 'bar',
+        data: {
+          labels: m6labels,
+          datasets: [{
+            data: m6data,
+            backgroundColor: m6data.map((_,i) => i===5 ? '#3b82f6' : '#bfdbfe'),
+            borderRadius: 8,
+            borderSkipped: false,
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display:false }, tooltip: {
+            callbacks: { label: ctx => ' ' + fmtEur(ctx.raw) }
+          }},
+          scales: {
+            x: { grid: { display:false } },
+            y: { grid: { color:'#f3f4f6' }, ticks: {
+              callback: v => v>=1000 ? (v/1000).toFixed(0)+'k' : v
+            }}
+          }
+        }
+      });
+    }
   } catch(e) {
     console.warn('Fuarbot dash stats:', e.message);
   }
