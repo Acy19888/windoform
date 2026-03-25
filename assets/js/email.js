@@ -258,10 +258,11 @@ async function _loadEmailContactsCache() {
       _emailContactsCache = (contacts || [])
         .filter(c => c.email || c.contactEmail)
         .map(c => ({
-          name:  [c.firstName, c.lastName].filter(Boolean).join(' ') || c.firma || '',
+          name:  [c.firstName, c.lastName].filter(Boolean).join(' ') || c.name || c.firma || '',
           email: c.contactEmail || c.email || '',
           firma: c.firma || '',
-        }));
+        }))
+        .filter(c => c.email);
       return;
     }
     // Fallback: Firestore
@@ -271,7 +272,7 @@ async function _loadEmailContactsCache() {
       `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents:runQuery?key=${cfg.apiKey}`,
       { method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${token}`},
         body: JSON.stringify({ structuredQuery: { from:[{collectionId:'contacts'}], limit:500,
-          select:{ fields:[{fieldPath:'firstName'},{fieldPath:'lastName'},{fieldPath:'email'},{fieldPath:'contactEmail'},{fieldPath:'firma'}] }
+          select:{ fields:[{fieldPath:'firstName'},{fieldPath:'lastName'},{fieldPath:'name'},{fieldPath:'email'},{fieldPath:'contactEmail'},{fieldPath:'firma'}] }
         }})
       }
     );
@@ -279,7 +280,8 @@ async function _loadEmailContactsCache() {
     _emailContactsCache = (Array.isArray(rows)?rows:[]).filter(r=>r.document).map(r => {
       const f = r.document.fields||{};
       return {
-        name:  [f.firstName?.stringValue,f.lastName?.stringValue].filter(Boolean).join(' ')||'',
+        name:  [f.firstName?.stringValue,f.lastName?.stringValue].filter(Boolean).join(' ')
+               || f.name?.stringValue || '',
         email: f.contactEmail?.stringValue||f.email?.stringValue||'',
         firma: f.firma?.stringValue||'',
       };
@@ -291,12 +293,13 @@ function emailToSearch(q) {
   const dd = document.getElementById('ec-to-dropdown');
   if (!dd) return;
   if (!q || q.length < 1) { dd.style.display = 'none'; return; }
-  const lq = q.toLowerCase();
-  const hits = _emailContactsCache.filter(c =>
-    c.name.toLowerCase().includes(lq) ||
-    c.email.toLowerCase().includes(lq) ||
-    c.firma.toLowerCase().includes(lq)
-  ).slice(0, 8);
+
+  // Split query into words — ALL words must match somewhere (name OR email OR firma)
+  const words = q.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  const hits = _emailContactsCache.filter(c => {
+    const haystack = `${c.name} ${c.email} ${c.firma}`.toLowerCase();
+    return words.every(w => haystack.includes(w));
+  }).slice(0, 8);
   if (!hits.length) { dd.style.display = 'none'; return; }
   dd.innerHTML = hits.map(c => `
     <div class="px-3 py-2 d-flex gap-2 align-items-center"
