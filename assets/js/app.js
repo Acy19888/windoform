@@ -2405,6 +2405,31 @@ async function _loadFuarbotDashStats() {
       }
     }
 
+    // ── Tarayan için: activities + employees her zaman doğrudan çek ──────────
+    // fbActivities / fbUsersData fuarbot2.js cache'i — sadece o tab açıksa dolu olur.
+    // Dashboard başlangıçta açık olduğu için her zaman Firestore'dan al.
+    let _dashActivities = {};
+    let _dashEmployees  = [];
+    if (typeof fsFetch === 'function') {
+      const [rawActs, rawEmps] = await Promise.all([
+        fsFetch(cfg.apiKey, cfg.projectId, 'crm_activities').catch(()=>[]),
+        fsFetch(cfg.apiKey, cfg.projectId, 'fuarEmployees').catch(()=>[]),
+      ]);
+      rawActs.forEach(a => {
+        const k = a.parentId || a.contactId || '';
+        if (k) { (_dashActivities[k] || (_dashActivities[k] = [])).push(a); }
+      });
+      Object.values(_dashActivities).forEach(arr =>
+        arr.sort((a,b) => (b.createdAt||'') > (a.createdAt||'') ? 1 : -1)
+      );
+      _dashEmployees = rawEmps;
+      // fuarbot2 cache de güncelle — eğer boşsa
+      if (typeof fbUsersData !== 'undefined' && !fbUsersData.length && rawEmps.length) fbUsersData = rawEmps;
+      if (typeof fbActivities !== 'undefined' && !Object.keys(fbActivities).length && Object.keys(_dashActivities).length) {
+        Object.assign(fbActivities, _dashActivities);
+      }
+    }
+
     let quotes = (typeof fbQuotes !== 'undefined' && Object.keys(fbQuotes).length)
       ? Object.values(fbQuotes).flat()
       : await (typeof fsFetch === 'function'
@@ -2452,21 +2477,19 @@ async function _loadFuarbotDashStats() {
           <thead class="table-light"><tr><th>Ad</th><th>Şirket</th><th>Tarayan</th><th>Tarih</th></tr></thead>
           <tbody>
           ${recent.map(c => {
-            // crm_customers has no createdBy — resolve scanner from fbActivities (oldest act = scan event)
+            // Resolve scanner: use freshly-fetched _dashActivities + _dashEmployees
             let tarayan = c.createdBy || '';
-            if (!tarayan && typeof fbActivities !== 'undefined') {
-              const acts = fbActivities[c._id] || [];
-              const scanAct = acts[acts.length - 1]; // sorted newest-first → last = oldest
+            if (!tarayan) {
+              const acts = _dashActivities[c._id] || [];
+              const scanAct = acts[acts.length - 1]; // sorted newest-first → last = oldest (= scan event)
               if (scanAct) {
-                if (typeof fbUsersData !== 'undefined' && fbUsersData.length) {
-                  const u = fbUsersData.find(u =>
-                    (scanAct.createdByUid && u._id === scanAct.createdByUid) ||
-                    (scanAct.createdBy && (u.email||'').toLowerCase() === (scanAct.createdBy||'').toLowerCase())
-                  );
-                  tarayan = u ? (u.name || u.email || scanAct.createdBy) : (scanAct.createdBy || '');
-                } else {
-                  tarayan = scanAct.createdBy || '';
-                }
+                const uid = scanAct.createdByUid || scanAct.uid || '';
+                const email = (scanAct.createdBy || '').toLowerCase();
+                const u = _dashEmployees.find(u =>
+                  (uid && u._id === uid) ||
+                  (email && (u.email||'').toLowerCase() === email)
+                );
+                tarayan = u ? (u.name || u.email || scanAct.createdBy || '') : (scanAct.createdBy || uid || '');
               }
             }
             // Tarih: updatedAt (re-scans) or createdAt
