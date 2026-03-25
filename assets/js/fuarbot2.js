@@ -2581,3 +2581,30 @@ window.cleanupTestData = async function(cutoffDate = '2026-03-22') {
   console.log(`[cleanup] Done. ${totalDeleted} documents deleted.`);
   alert(`Fertig! ${totalDeleted} Test-Dokumente gelöscht.`);
 };
+
+// ── Admin: delete ALL documents from a given collection ───────
+window.deleteAllLeads = async function() {
+  const cfg = loadFbConfig();
+  if (!cfg?.apiKey || !cfg?.projectId) { console.error('No Firebase config'); return; }
+  const token = await authToken();
+  const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) };
+  const base = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents`;
+  let docs = [], pageToken = '';
+  do {
+    const url = `${base}/leads?key=${cfg.apiKey}&pageSize=300${pageToken ? '&pageToken='+pageToken : ''}`;
+    const res = await fetch(url);
+    if (!res.ok) { console.error('Could not list leads:', res.status); return; }
+    const data = await res.json();
+    docs = docs.concat(data.documents || []);
+    pageToken = data.nextPageToken || '';
+  } while (pageToken);
+  console.log(`[deleteAllLeads] Found ${docs.length} leads to delete`);
+  let deleted = 0;
+  for (const d of docs) {
+    const r = await fetch(`https://firestore.googleapis.com/v1/${d.name}?key=${cfg.apiKey}`, { method: 'DELETE', headers });
+    if (r.ok) { deleted++; console.log(`  ✓ ${d.name.split('/').pop()}`); }
+    else       { console.warn(`  ✗ ${d.name.split('/').pop()}`, r.status); }
+  }
+  console.log(`[deleteAllLeads] Done. ${deleted}/${docs.length} deleted.`);
+  alert(`Fertig! ${deleted} Leads gelöscht.`);
+};
