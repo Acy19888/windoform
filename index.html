@@ -111,6 +111,7 @@
     <a href="#" data-page="fuar-users"     onclick="showPage('fuar-users');return false;"><i class="bi bi-people-fill"></i>Kullan&#x131;c&#x131;lar</a>
     <a href="#" data-page="leads"         onclick="showPage('leads');return false;"><i class="bi bi-funnel-fill"></i>Leads &amp; Pipeline</a>
     <a href="#" data-page="emails"        onclick="showPage('emails');return false;"><i class="bi bi-envelope-fill"></i>E-postalar</a>
+    <a href="#" data-page="performans"    onclick="showPage('performans');return false;"><i class="bi bi-bar-chart-line-fill"></i>Performanslar</a>
     <a href="#" data-page="teklifler"      onclick="showPage('teklifler');return false;"><i class="bi bi-file-earmark-text-fill"></i>Teklifler</a>
     <a href="#" data-page="fatura"         onclick="showPage('fatura');return false;"><i class="bi bi-receipt"></i>Fatura</a>
     <a href="#" data-page="urunler"        onclick="showPage('urunler');return false;"><i class="bi bi-box-seam-fill"></i>Ürünler</a>
@@ -636,6 +637,66 @@
           </div>
         </div>
       </form>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     PERFORMANS PAGE
+══════════════════════════════════════════════════════ -->
+<div id="performans" class="page">
+  <div class="page-topbar">
+    <div class="page-topbar-left">
+      <h1><i class="bi bi-bar-chart-line-fill me-2" style="color:#6366f1;"></i>Eleman Performansları</h1>
+    </div>
+    <div class="page-topbar-right d-flex gap-2 align-items-center">
+      <select id="perf-period-sel" class="form-select form-select-sm" style="width:auto;" onchange="performansLoad()">
+        <option value="30">Son 30 Gün</option>
+        <option value="90" selected>Son 90 Gün</option>
+        <option value="180">Son 6 Ay</option>
+        <option value="365">Bu Yıl</option>
+        <option value="0">Tüm Zamanlar</option>
+      </select>
+      <button class="btn btn-sm btn-outline-secondary" onclick="performansLoad()"><i class="bi bi-arrow-clockwise"></i></button>
+    </div>
+  </div>
+  <div class="page-content">
+    <!-- Team KPI Cards -->
+    <div id="perf-kpi-row" class="row g-3 mb-4"></div>
+    <!-- Ranking Table -->
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white border-bottom d-flex justify-content-between align-items-center py-2 px-3">
+        <span class="fw-semibold" style="font-size:14px;"><i class="bi bi-trophy-fill text-warning me-2"></i>Sıralama</span>
+        <div class="d-flex gap-2">
+          <button class="btn btn-xs btn-outline-secondary active" id="perf-sort-rev" onclick="perfSort('revenue',this)" style="font-size:11px;padding:2px 8px;">Ciro</button>
+          <button class="btn btn-xs btn-outline-secondary" id="perf-sort-email" onclick="perfSort('emails',this)" style="font-size:11px;padding:2px 8px;">E-posta</button>
+          <button class="btn btn-xs btn-outline-secondary" id="perf-sort-reply" onclick="perfSort('reply',this)" style="font-size:11px;padding:2px 8px;">Yanıt %</button>
+          <button class="btn btn-xs btn-outline-secondary" id="perf-sort-conv" onclick="perfSort('conv',this)" style="font-size:11px;padding:2px 8px;">Dönüşüm %</button>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        <div id="perf-table-wrap">
+          <div class="text-center py-5 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Yükleniyor…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PERFORMANS DETAIL MODAL -->
+<div class="modal fade" id="perfDetailModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2 px-4">
+        <div>
+          <h6 class="modal-title fw-bold mb-0" id="perf-detail-name"></h6>
+          <div class="text-muted" id="perf-detail-role" style="font-size:12px;"></div>
+        </div>
+        <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-4" id="perf-detail-body">
+        <div class="text-center py-4"><span class="spinner-border"></span></div>
+      </div>
     </div>
   </div>
 </div>
@@ -1872,6 +1933,7 @@
 <script src="./assets/js/chatbot.js"></script>
 <script src="./assets/js/leads.js"></script>
 <script src="./assets/js/email.js?v=20260325b"></script>
+<script src="./assets/js/performans.js?v=20260325a"></script>
 <script>document.addEventListener('DOMContentLoaded', () => { initChatbot(); });</script>
 
 <!-- ══════════════════════════════════════════

@@ -759,6 +759,7 @@ function showPage(name) {
   if (name === 'fatura')         { loadFatura(); return; }
   if (name === 'urunler')        { loadProducts(); return; }
   if (name === 'uretim')         { loadUretim(); return; }
+  if (name === 'performans')     { if (typeof performansLoad === 'function') performansLoad(); return; }
 
   // 4. IndexedDB-abhängige Seiten
   if (!db) { console.warn('showPage: DB henüz hazır değil, içerik yüklenemedi'); return; }
