@@ -685,7 +685,7 @@ async function notesAdd() {
           createdBy:    { stringValue: _userDispName || (typeof authEmail === 'function' ? authEmail() : '') },
           createdByUid: { stringValue: typeof authUid === 'function' ? (authUid() || '') : '' },
           createdAt:    { timestampValue: new Date().toISOString() },
-        }}},
+        }}),
       }
     );
     if (textarea) textarea.value = '';
