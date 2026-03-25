@@ -2571,7 +2571,7 @@ window.cleanupTestData = async function(cutoffDate = '2026-03-22') {
 
     console.log(`[cleanup] ${col}: ${docs.length} total, ${toDelete.length} to delete`);
     for (const d of toDelete) {
-      const delUrl = `${d.name}?key=${cfg.apiKey}`;
+      const delUrl = `https://firestore.googleapis.com/v1/${d.name}?key=${cfg.apiKey}`;
       const r = await fetch(delUrl, { method: 'DELETE', headers });
       if (r.ok) { totalDeleted++; console.log(`  ✓ deleted ${d.name.split('/').pop()}`); }
       else       { console.warn(`  ✗ failed  ${d.name.split('/').pop()}`, r.status); }
