@@ -353,8 +353,11 @@ async function emailAiImprove() {
     if (data.improved) {
       // Keep signature: split at "--" separator if present
       const sigSep = bodyEl.innerHTML.indexOf('<p><span style="color:#888">--</span></p>');
-      const sigPart = sigSep > -1 ? bodyEl.innerHTML.slice(sigSep) : '';
-      bodyEl.innerHTML = `<p>${data.improved.replace(/\n\n/g,'</p><p>').replace(/\n/g,'<br>')}</p>` + sigPart;
+      const sigPart = sigSep > -1 ? bodyEl.innerHTML.slice(sigSep) : (_userSig ? `<p><span style="color:#888">--</span></p>${_userSig}` : '');
+      // Strip any trailing sign-off the AI may have added (lines after last blank line that look like a signature)
+      let improved = data.improved.trim();
+      improved = improved.replace(/\n+(Mit freundlichen Grüßen|Freundliche Grüße|Kind regards|Best regards|Regards|Viele Grüße|Mit besten Grüßen)[^\n]*/gi, '').trim();
+      bodyEl.innerHTML = `<p>${improved.replace(/\n\n/g,'</p><p>').replace(/\n/g,'<br>')}</p>` + sigPart;
       _emToast('Metin geliştirildi ✓', 'success');
     } else {
       _emToast(data.error || 'AI yanıt vermedi', 'error');
@@ -637,9 +640,44 @@ async function emailShowDetail(emailId) {
       setTimeout(() => emailComposeReply(from, subject), 350);
     };
 
+    // Delete-Button
+    const delBtn = document.getElementById('em-detail-delete-btn');
+    if (delBtn) delBtn.onclick = () => {
+      bootstrap.Modal.getOrCreateInstance(modal).hide();
+      setTimeout(() => emailDelete(emailId), 300);
+    };
+
   } catch (e) {
     document.getElementById('em-detail-body').innerHTML =
       `<div class="alert alert-danger small">Yüklenemedi: ${esc(e.message)}</div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// E-POSTA SİL
+// ══════════════════════════════════════════════════════════════
+
+async function emailDelete(emailId) {
+  if (!emailId) return;
+  if (!confirm('Bu e-postayı silmek istediğinizden emin misiniz?')) return;
+  try {
+    const cfg   = loadFbConfig();
+    const token = await authToken();
+    const res   = await fetch(
+      `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/${_EM_COL}/${emailId}?key=${cfg.apiKey}`,
+      { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!res.ok && res.status !== 404) throw new Error('Silinemedi: ' + res.status);
+    _emToast('E-posta silindi', 'success');
+    // Refresh whichever view is open
+    if (document.getElementById('emails-page-content')?.closest('.page-section')?.style?.display !== 'none') {
+      loadEmailsPage();
+    }
+    if (window.currentModalContactId) {
+      emailLoadContactEmails(window.currentModalContactId);
+    }
+  } catch (e) {
+    _emToast('Silme hatası: ' + e.message, 'error');
   }
 }
 
@@ -675,24 +713,25 @@ async function loadEmailsPage() {
     const unreadCnt   = _emailPageAll.filter(e => e.direction === 'inbound').length; // all inbound = "unread" for now
 
     c.innerHTML = `
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <div>
-        <span class="badge bg-success me-1">${inboundCnt} Gelen</span>
-        <span class="badge bg-primary">${outboundCnt} Giden</span>
+    <div class="em-page-header">
+      <div class="em-page-tabs" id="em-page-tabs">
+        <button class="em-tab-btn active" onclick="emailPageFilter('all',this)">
+          Tümü <span class="em-tab-badge">${_emailPageAll.length}</span>
+        </button>
+        <button class="em-tab-btn" onclick="emailPageFilter('inbound',this)">
+          <i class="bi bi-arrow-down-left me-1"></i>Gelen
+          ${inboundCnt ? `<span class="em-tab-badge em-tab-badge-in">${inboundCnt}</span>` : ''}
+        </button>
+        <button class="em-tab-btn" onclick="emailPageFilter('outbound',this)">
+          <i class="bi bi-arrow-up-right me-1"></i>Giden
+          ${outboundCnt ? `<span class="em-tab-badge em-tab-badge-out">${outboundCnt}</span>` : ''}
+        </button>
       </div>
-      <button class="btn btn-primary btn-sm" onclick="emailCompose(null)">
-        <i class="bi bi-pencil-square me-1"></i>Yeni E-posta
-      </button>
     </div>
-    <ul class="nav nav-tabs mb-0" id="em-page-tabs">
-      <li class="nav-item"><a class="nav-link active" href="#" onclick="emailPageFilter('all',this);return false;">Tümü</a></li>
-      <li class="nav-item"><a class="nav-link" href="#" onclick="emailPageFilter('inbound',this);return false;"><i class="bi bi-arrow-down-left text-success me-1"></i>Gelen</a></li>
-      <li class="nav-item"><a class="nav-link" href="#" onclick="emailPageFilter('outbound',this);return false;"><i class="bi bi-arrow-up-right text-primary me-1"></i>Giden</a></li>
-    </ul>
-    <div id="em-page-list" class="border border-top-0 rounded-bottom">
+    <div id="em-page-list" class="em-page-list">
       ${_emailPageAll.length
         ? _emailPageAll.map(_renderEmailPageItem).join('')
-        : '<div class="text-muted text-center py-5"><i class="bi bi-inbox" style="font-size:2.5rem;opacity:.3;"></i><div class="mt-2">Henüz e-posta yok</div></div>'}
+        : '<div class="em-empty-state"><i class="bi bi-inbox"></i><div>Henüz e-posta yok</div></div>'}
     </div>`;
 
   } catch (e) {
@@ -701,7 +740,7 @@ async function loadEmailsPage() {
 }
 
 function emailPageFilter(f, el) {
-  document.querySelectorAll('#em-page-tabs .nav-link').forEach(l => l.classList.remove('active'));
+  document.querySelectorAll('#em-page-tabs .em-tab-btn').forEach(l => l.classList.remove('active'));
   el.classList.add('active');
   const list = document.getElementById('em-page-list');
   if (!list) return;
@@ -714,23 +753,29 @@ function emailPageFilter(f, el) {
 }
 
 function _renderEmailPageItem(em) {
-  const isOut = em.direction === 'outbound';
-  const dt    = em.sentAt ? new Date(em.sentAt).toLocaleString('tr-TR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
+  const isOut    = em.direction === 'outbound';
+  const dt       = em.sentAt ? new Date(em.sentAt).toLocaleString('tr-TR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
+  const nameRaw  = isOut ? (em.to || '') : (em.from || '');
+  const namePart = nameRaw.replace(/<[^>]+>/g, '').trim() || (isOut ? 'Alıcı' : 'Gönderici');
+  const initials = namePart.split(/[\s@<>]+/).filter(Boolean).slice(0,2).map(w => w[0]?.toUpperCase()).join('');
+  const avatarBg = isOut ? 'linear-gradient(135deg,#6366f1,#4f46e5)' : 'linear-gradient(135deg,#10b981,#059669)';
   return `
-  <div class="d-flex gap-3 p-3 border-bottom align-items-start" style="cursor:pointer;font-size:13px;"
-       onclick="emailShowDetail('${esc(em._id)}')">
-    <i class="bi ${isOut ? 'bi-arrow-up-right text-primary' : 'bi-arrow-down-left text-success'} mt-1"></i>
-    <div class="flex-grow-1 min-w-0" style="overflow:hidden;">
-      <div class="d-flex justify-content-between align-items-center gap-2">
-        <span class="fw-semibold text-truncate">${esc(em.subject)}</span>
-        <div class="d-flex gap-1 align-items-center flex-shrink-0">
+  <div class="em-list-item" onclick="emailShowDetail('${esc(em._id)}')">
+    <div class="em-avatar" style="background:${avatarBg}">${initials || (isOut ? '→' : '←')}</div>
+    <div class="em-item-body">
+      <div class="em-item-top">
+        <span class="em-item-subject">${esc(em.subject || '(Konu yok)')}</span>
+        <div class="em-item-meta-right">
           ${_tickHtml(em)}
-          <span class="text-muted" style="font-size:11px;white-space:nowrap;">${dt}</span>
+          <span class="em-item-time">${dt}</span>
+          <button class="em-delete-btn" onclick="event.stopPropagation();emailDelete('${esc(em._id)}')" title="Sil">
+            <i class="bi bi-trash"></i>
+          </button>
         </div>
       </div>
-      <div class="text-muted text-truncate" style="font-size:11px;">
-        ${isOut ? '→ ' + esc(em.to) : '← ' + esc(em.from)}
-        ${em.createdBy ? ' · ' + esc(em.createdBy) : ''}
+      <div class="em-item-sub">
+        <span class="${isOut ? 'em-dir-out' : 'em-dir-in'}">${isOut ? '↑' : '↓'}</span>
+        ${esc(namePart)}${em.createdBy ? ' · ' + esc(em.createdBy) : ''}
       </div>
     </div>
   </div>`;
