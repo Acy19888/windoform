@@ -1587,7 +1587,15 @@ async function showContactModal(id) {
     createdEl.textContent = d ? d.toLocaleDateString('tr-TR', {day:'2-digit',month:'short',year:'numeric'}) : '-';
   }
   const sourceEl = document.getElementById('cont-source');
-  if (sourceEl) sourceEl.textContent = c.source || c.sourceTag || '-';
+  if (sourceEl) {
+    let src = c.source || c.sourceTag || '';
+    // Fallback: extract from notes "Fuarbot: <EventName>" for older contacts
+    if (!src && c.notes) {
+      const m = c.notes.match(/^Fuarbot:\s*(.+?)(\n|$)/);
+      if (m) src = m[1].replace(/^Fuarbot:\s*/i, '').trim();
+    }
+    sourceEl.textContent = src || '-';
+  }
 
   // Reset to Timeline tab
   contSwitchTab('timeline');
