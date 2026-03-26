@@ -32,8 +32,10 @@ export default async function handler(req, res) {
     const fromEmail = extractEmail(fromRaw);
 
     // ── To ────────────────────────────────────────────────────
+    // Use the real recipient address from env var if set (avoids showing Resend's internal address)
     const toRaw   = emailData.to || emailData.recipient || '';
-    const toEmail = Array.isArray(toRaw) ? toRaw.join(', ') : String(toRaw);
+    const toRawStr = Array.isArray(toRaw) ? toRaw.join(', ') : String(toRaw);
+    const toEmail = process.env.RECIPIENT_EMAIL || toRawStr;
 
     // ── Subject ───────────────────────────────────────────────
     const subject = emailData.subject || '(Konu yok)';
