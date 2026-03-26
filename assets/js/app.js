@@ -1596,7 +1596,7 @@ async function showContactModal(id) {
   const qBadge    = document.getElementById('cont-quotes-badge');
   tlContent.innerHTML = '<div class="text-muted small text-center py-4"><i class="bi bi-hourglass-split me-2 opacity-25"></i>Yükleniyor…</div>';
 
-  // ── Helper: render timeline + quotes from current memory ─
+  // ── Helper: render timeline + quotes + CRM notes from current memory ─
   const _renderFbPanels = () => {
     const fbActs = fbCust && typeof fbActivities !== 'undefined' ? (fbActivities[fbCust._id] || []) : [];
     const fbQts  = fbCust && typeof fbQuotes     !== 'undefined' ? (fbQuotes[fbCust._id]     || []) : [];
@@ -1609,14 +1609,27 @@ async function showContactModal(id) {
       const statusLabel = q.status === 'sent' ? '✓ Gönderildi' : 'Taslak';
       return { type:'quote', createdAt:q.createdAt, text:[q.quoteNumber||'Teklif',amt,statusLabel].filter(Boolean).join(' · ') };
     });
-    const allTlItems = [...fbActs, ...qtAsActs].sort((a,b) => (b.createdAt||'') > (a.createdAt||'') ? 1 : -1);
+
+    // CRM notes from crm_notes collection (stored by email.js after fetch)
+    const crmNotes = Array.isArray(window._cmNotes) ? window._cmNotes : [];
+    const notesAsActs = crmNotes.map(n => ({
+      type: 'note',
+      createdAt: n.createdAt,
+      text: n.text,
+      createdBy: n.createdBy,
+      _noteColor: n.color,
+      _notePinned: n.pinned,
+    }));
+
+    const allTlItems = [...fbActs, ...qtAsActs, ...notesAsActs]
+      .sort((a,b) => (b.createdAt||'') > (a.createdAt||'') ? 1 : -1);
 
     if (allTlItems.length && typeof renderTimeline === 'function') {
       tlContent.innerHTML = renderTimeline(allTlItems);
       tlBadge.textContent = allTlItems.length;
       tlBadge.style.display = '';
     } else {
-      tlContent.innerHTML = '<div class="text-muted small text-center py-4"><i class="bi bi-clock-history me-2 opacity-25"></i>Fuarbot\'ta aktivite bulunamadı.</div>';
+      tlContent.innerHTML = '<div class="text-muted small text-center py-4"><i class="bi bi-clock-history me-2 opacity-25"></i>Aktivite bulunamadı.</div>';
       tlBadge.style.display = 'none';
     }
     if (fbQts.length && typeof renderQuoteCard === 'function') {
@@ -1629,8 +1642,17 @@ async function showContactModal(id) {
     }
   };
 
+  // Expose so email.js can refresh timeline when notes change
+  window._contRenderTimeline = _renderFbPanels;
+  window._cmNotes = []; // reset for this contact
+
   // ── Render cached data immediately, then async fetch ──
   _renderFbPanels();
+
+  // ── Load CRM notes in background so they appear in Aktiviteler timeline ──
+  if (typeof notesLoad === 'function') {
+    notesLoad(id, true).catch(() => {});
+  }
 
   // ── Async: Firestore fallback lookup + fresh data fetch ─
   (async () => {

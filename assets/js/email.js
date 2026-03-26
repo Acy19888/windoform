@@ -748,11 +748,14 @@ const _NOTE_COLORS = {
   purple: { bg:'#f3e8ff', border:'#d8b4fe', label:'Mor'    },
 };
 
-async function notesLoad(contactId) {
+async function notesLoad(contactId, _silent) {
   _notesContactId = String(contactId);
   const c = document.getElementById('cont-panel-notes-list');
   if (!c) return;
-  c.innerHTML = '<div class="text-center py-3"><span class="spinner-border spinner-border-sm text-muted"></span></div>';
+  // In silent mode (background fetch for timeline) don't show spinner or overwrite UI
+  if (!_silent) {
+    c.innerHTML = '<div class="text-center py-3"><span class="spinner-border spinner-border-sm text-muted"></span></div>';
+  }
 
   try {
     const cfg   = loadFbConfig();
@@ -795,9 +798,17 @@ async function notesLoad(contactId) {
         return (b.createdAt || '') > (a.createdAt || '') ? 1 : -1;
       });
 
-    c.innerHTML = notes.length
-      ? notes.map(_renderNote).join('')
-      : '<div class="cont-empty-state text-muted py-4"><i class="bi bi-sticky me-2 opacity-25"></i>Henüz not yok</div>';
+    if (!_silent) {
+      c.innerHTML = notes.length
+        ? notes.map(_renderNote).join('')
+        : '<div class="cont-empty-state text-muted py-4"><i class="bi bi-sticky me-2 opacity-25"></i>Henüz not yok</div>';
+    }
+
+    // ── Sync notes to Aktiviteler timeline ──
+    window._cmNotes = notes;
+    if (typeof window._contRenderTimeline === 'function') {
+      window._contRenderTimeline();
+    }
 
   } catch (e) {
     c.innerHTML = `<div class="alert alert-warning small m-2">Notlar yüklenemedi: ${esc(e.message)}</div>`;
