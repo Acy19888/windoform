@@ -762,15 +762,20 @@ async function notesLoad(contactId) {
       {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        // No orderBy → avoids composite index requirement; we sort in JS below
         body:    JSON.stringify({ structuredQuery: {
           from:    [{ collectionId: _NOTES_COL }],
           where:   { fieldFilter: { field: { fieldPath: 'contactId' }, op: 'EQUAL', value: { stringValue: String(contactId) } } },
-          orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'DESCENDING' }],
-          limit:   100,
+          limit:   200,
         }}),
       }
     );
-    const rows  = await res.json();
+    const rawBody = await res.text();
+    if (!res.ok) {
+      c.innerHTML = `<div class="alert alert-warning small m-2">Sorgu hatası ${res.status}: ${esc(rawBody.slice(0,200))}</div>`;
+      return;
+    }
+    const rows  = JSON.parse(rawBody);
     const notes = (Array.isArray(rows) ? rows : [])
       .filter(r => r.document)
       .map(r => {
@@ -784,11 +789,15 @@ async function notesLoad(contactId) {
           createdAt: f.createdAt?.timestampValue || '',
         };
       })
-      .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+      // Sort in JS: pinned first, then newest first
+      .sort((a, b) => {
+        if (a.pinned !== b.pinned) return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
+        return (b.createdAt || '') > (a.createdAt || '') ? 1 : -1;
+      });
 
     c.innerHTML = notes.length
       ? notes.map(_renderNote).join('')
-      : '<div class="text-muted small text-center py-3"><i class="bi bi-sticky me-1"></i>Henüz not yok</div>';
+      : '<div class="cont-empty-state text-muted py-4"><i class="bi bi-sticky me-2 opacity-25"></i>Henüz not yok</div>';
 
   } catch (e) {
     c.innerHTML = `<div class="alert alert-warning small m-2">Notlar yüklenemedi: ${esc(e.message)}</div>`;
@@ -825,10 +834,13 @@ async function notesAdd() {
   }
   if (!_notesContactId) { _emToast('Kontakt ID bulunamadı', 'error'); return; }
 
+  // Disable button while saving
+  const btn = document.querySelector('#cont-panel-notes .cont-note-add-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Kaydediliyor…'; }
   try {
     const cfg   = loadFbConfig();
     const token = await authToken();
-    await fetch(
+    const saveRes = await fetch(
       `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/${_NOTES_COL}?key=${cfg.apiKey}`,
       {
         method:  'POST',
@@ -844,9 +856,20 @@ async function notesAdd() {
         }}),
       }
     );
+    if (!saveRes.ok) {
+      const errTxt = await saveRes.text();
+      console.error('notesAdd Firestore error:', saveRes.status, errTxt);
+      _emToast(`Not kaydedilemedi (${saveRes.status})`, 'error');
+      return;
+    }
     if (textarea) textarea.value = '';
-    notesLoad(_notesContactId);
-  } catch (e) { _emToast('Not kaydedilemedi: ' + e.message, 'error'); }
+    await notesLoad(_notesContactId);
+  } catch (e) {
+    console.error('notesAdd error:', e);
+    _emToast('Not kaydedilemedi: ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-plus-circle-fill me-1"></i>Not Ekle'; }
+  }
 }
 
 async function notesTogglePin(id, cur) {
