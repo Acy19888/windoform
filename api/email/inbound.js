@@ -61,6 +61,30 @@ export default async function handler(req, res) {
       text = emailData.payload.text || emailData.payload.plain || '';
     }
 
+    // ── Fetch full email content via Resend API if body is empty ──
+    // Resend inbound webhook only sends metadata; use email_id to get full content
+    const emailId = emailData.email_id || emailData.id || '';
+    if ((!html && !text) && emailId && process.env.RESEND_API_KEY) {
+      try {
+        console.log('[inbound] Fetching full email from Resend API, id:', emailId);
+        const resendRes = await fetch(`https://api.resend.com/emails/${emailId}`, {
+          headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` }
+        });
+        if (resendRes.ok) {
+          const resendData = await resendRes.json();
+          console.log('[inbound] Resend API response keys:', Object.keys(resendData));
+          html = resendData.html || '';
+          text = resendData.text || resendData.plain_text || '';
+          console.log('[inbound] Fetched — html len:', html.length, '| text len:', text.length);
+        } else {
+          const errBody = await resendRes.text();
+          console.warn('[inbound] Resend API error:', resendRes.status, errBody);
+        }
+      } catch (fetchErr) {
+        console.error('[inbound] Resend API fetch failed:', fetchErr.message);
+      }
+    }
+
     // Last resort: store readable JSON summary as text for debugging
     if (!html && !text) {
       const keys = Object.keys(emailData).filter(k => !['headers','attachments','dkim','spf'].includes(k));

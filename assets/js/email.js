@@ -16,6 +16,7 @@ let _userDispName   = '';
 let _rolePerms      = {};
 let _notesContactId = null;
 let _emailPageAll   = [];
+let _emailContactMap = {}; // email → display name cache
 
 const _DEFAULT_PERMS = {
   admin: ['dashboard','companies','contacts','fuarbot','fuar-dashboard','fuar-users',
@@ -718,6 +719,17 @@ async function loadEmailsPage() {
     const rows   = await res.json();
     _emailPageAll = _parseEmailRows(rows);
 
+    // Build email→name lookup from contacts (for display names)
+    try {
+      if (typeof dbAll === 'function') {
+        const cons = await dbAll('contacts');
+        _emailContactMap = {};
+        cons.forEach(c => {
+          if (c.email) _emailContactMap[c.email.trim().toLowerCase()] = c.name || '';
+        });
+      }
+    } catch (_) { /* ignore */ }
+
     const inboundCnt  = _emailPageAll.filter(e => e.direction === 'inbound').length;
     const outboundCnt = _emailPageAll.filter(e => e.direction === 'outbound').length;
     const unreadCnt   = _emailPageAll.filter(e => e.direction === 'inbound').length; // all inbound = "unread" for now
@@ -773,9 +785,14 @@ function _renderEmailPageItem(em) {
   const isOut    = em.direction === 'outbound';
   const dt       = em.sentAt ? new Date(em.sentAt).toLocaleString('tr-TR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
   const nameRaw  = isOut ? (em.to || '') : (em.from || '');
-  // Extract display name: "Anna Yuksel <anna@gmail.com>" → "Anna Yuksel", else email prefix
+  // Extract plain email from "Name <email>" or bare address
+  const addrMatch = nameRaw.match(/<([^>]+)>/);
+  const emailAddr = (addrMatch ? addrMatch[1] : nameRaw.replace(/<[^>]+>/g,'')).trim().toLowerCase();
+  // 1) CRM contact name, 2) display name in "Name <email>" format, 3) email address
   const nameMatch = nameRaw.match(/^([^<]+?)\s*</);
-  const namePart  = (nameMatch ? nameMatch[1].trim() : nameRaw.replace(/<[^>]+>/g,'').trim())
+  const namePart  = _emailContactMap[emailAddr]
+                    || (nameMatch ? nameMatch[1].trim() : '')
+                    || nameRaw.replace(/<[^>]+>/g,'').trim()
                     || (isOut ? 'Alıcı' : 'Gönderici');
   const initials  = namePart.split(/[\s@]+/).filter(Boolean).slice(0,2).map(w => w[0]?.toUpperCase()).join('');
   const avatarBg  = isOut ? 'linear-gradient(135deg,#6366f1,#4f46e5)' : 'linear-gradient(135deg,#10b981,#059669)';
