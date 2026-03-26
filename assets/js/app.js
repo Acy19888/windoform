@@ -1519,21 +1519,53 @@ async function showContactModal(id) {
   if (typeof window !== 'undefined') window._emContactRef = c;
   const co = c.companyId ? await dbGet('companies', c.companyId) : null;
 
-  document.getElementById('cont-name').textContent = c.name;
-  const freshScore = calculateContactQuality(c);
-  const qb = document.getElementById('cont-quality-badge');
-  qb.textContent = `${freshScore}%`;
-  qb.className = `badge ${qualityBadgeClass(freshScore)}`;
-  document.getElementById('cont-title').textContent = c.title || '-';
-  document.getElementById('cont-phone-wrap').innerHTML  = phoneLink(c.phone, c.phoneNormalized);
-  document.getElementById('cont-email-wrap').innerHTML  = emailLink(c.email);
-  document.getElementById('cont-company-badge').innerHTML = co
-    ? `<span class="badge-company" onclick="showCompanyModal(${co.id})">${esc(co.name)}</span>` : '-';
-  document.getElementById('cont-status').textContent = c.status || '-';
-  document.getElementById('cont-notes').textContent  = c.notes || '-';
+  // ── Avatar initials ──
+  const initials = (c.name || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+  const avatarEl = document.getElementById('cont-avatar');
+  if (avatarEl) avatarEl.textContent = initials;
 
-  // Reset to Info tab
-  contSwitchTab('info');
+  // ── Subtitle: title · company ──
+  const subtitleEl = document.getElementById('cont-title-sub');
+  if (subtitleEl) {
+    const parts = [c.title, co?.name].filter(Boolean);
+    subtitleEl.textContent = parts.join(' · ') || '';
+  }
+
+  // ── Quality bar ──
+  const freshScore = calculateContactQuality(c);
+  const qPct = document.getElementById('cont-quality-pct');
+  if (qPct) qPct.textContent = `${freshScore}%`;
+  const qBar = document.getElementById('cont-quality-bar');
+  if (qBar) { setTimeout(() => { qBar.style.width = `${freshScore}%`; }, 80); }
+
+  // ── Left panel property fields ──
+  const _setPropText = (field, val) => {
+    const row = document.querySelector(`.cont-prop-val[data-field="${field}"] .cont-prop-text`);
+    if (row) row.textContent = val || '-';
+  };
+  _setPropText('name', c.name);
+  _setPropText('title', c.title);
+  _setPropText('company', co?.name);
+  _setPropText('status', c.status);
+  _setPropText('notes', c.notes);
+
+  // Phone / email use innerHTML for links
+  const phoneWrap = document.getElementById('cont-phone-wrap');
+  if (phoneWrap) phoneWrap.innerHTML = phoneLink(c.phone, c.phoneNormalized) || c.phone || '-';
+  const emailWrap = document.getElementById('cont-email-wrap');
+  if (emailWrap) emailWrap.innerHTML = emailLink(c.email) || c.email || '-';
+
+  // Metadata
+  const createdEl = document.getElementById('cont-created-at');
+  if (createdEl) {
+    const d = c.createdAt ? new Date(c.createdAt) : null;
+    createdEl.textContent = d ? d.toLocaleDateString('tr-TR', {day:'2-digit',month:'short',year:'numeric'}) : '-';
+  }
+  const sourceEl = document.getElementById('cont-source');
+  if (sourceEl) sourceEl.textContent = c.source || c.sourceTag || '-';
+
+  // Reset to Timeline tab
+  contSwitchTab('timeline');
 
   // ── Find matching Fuarbot customer by email or name ──
   const email   = (c.email || '').toLowerCase().trim();
@@ -1614,11 +1646,11 @@ async function showContactModal(id) {
     }
   })();
 
-  new bootstrap.Modal(document.getElementById('contModal')).show();
+  bootstrap.Offcanvas.getOrCreateInstance(document.getElementById('contModal')).show();
 }
 
 function contSwitchTab(tab) {
-  ['info','timeline','quotes','emails','notes'].forEach(t => {
+  ['timeline','emails','quotes','notes'].forEach(t => {
     const panel = document.getElementById(`cont-panel-${t}`);
     const navEl = document.getElementById(`cont-tab-${t}`);
     if (panel) panel.style.display = t === tab ? '' : 'none';
@@ -1647,7 +1679,7 @@ function editContactModal() {
     document.getElementById('ect-company').value = co?.name || '';
     document.getElementById('ect-status').value  = c.status || 'Aktif';
     document.getElementById('ect-notes').value   = c.notes || '';
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('contModal')).hide();
+    bootstrap.Offcanvas.getOrCreateInstance(document.getElementById('contModal')).hide();
     new bootstrap.Modal(document.getElementById('editContModal')).show();
   })();
 }
@@ -1657,11 +1689,148 @@ function deleteContactModal() {
     const c = await dbGet('contacts', currentModalContactId);
     if (!c || !confirm(`"${c.name}" kişisini silmek istiyor musunuz?`)) return;
     await dbDelete('contacts', c.id);
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('contModal')).hide();
+    bootstrap.Offcanvas.getOrCreateInstance(document.getElementById('contModal')).hide();
     toast(`"${c.name}" kişisi silindi`);
     await loadContacts();
   })();
 }
+
+// ── Inline contact field editing (HubSpot-style) ────────────────────────────
+function contFieldEdit(el) {
+  if (!el || el.classList.contains('no-edit') || el.classList.contains('editing')) return;
+  const field = el.dataset.field;
+  const type  = el.dataset.type || 'text';
+  const textSpan = el.querySelector('.cont-prop-text');
+  const currentVal = (textSpan?.textContent || '').trim();
+  if (currentVal === '-') textSpan.textContent = '';
+
+  el.classList.add('editing');
+
+  let input;
+  if (type === 'textarea') {
+    input = document.createElement('textarea');
+    input.rows = 3;
+    input.style.cssText = 'width:100%;font-size:12px;padding:4px 6px;border:1px solid #6366f1;border-radius:6px;resize:vertical;';
+    input.value = currentVal === '-' ? '' : currentVal;
+  } else if (type === 'select') {
+    input = document.createElement('select');
+    input.style.cssText = 'width:100%;font-size:12px;padding:4px 6px;border:1px solid #6366f1;border-radius:6px;';
+    ['Aktif','Pasif','Potansiyel','VIP','Soğuk'].forEach(opt => {
+      const o = document.createElement('option');
+      o.value = o.textContent = opt;
+      if (opt === currentVal) o.selected = true;
+      input.appendChild(o);
+    });
+  } else if (type === 'company') {
+    input = document.createElement('input');
+    input.type = 'text';
+    input.setAttribute('list', 'company-datalist');
+    input.style.cssText = 'width:100%;font-size:12px;padding:4px 6px;border:1px solid #6366f1;border-radius:6px;';
+    input.value = currentVal === '-' ? '' : currentVal;
+  } else {
+    input = document.createElement('input');
+    input.type = type;
+    input.style.cssText = 'width:100%;font-size:12px;padding:4px 6px;border:1px solid #6366f1;border-radius:6px;';
+    input.value = currentVal === '-' ? '' : currentVal;
+  }
+
+  // Hide span + pen, show input
+  if (textSpan) textSpan.style.display = 'none';
+  el.querySelector('.cont-edit-pen')?.style && (el.querySelector('.cont-edit-pen').style.display = 'none');
+  el.appendChild(input);
+  input.focus();
+  if (input.select) input.select();
+
+  const _commit = async () => {
+    const newVal = input.value.trim();
+    el.removeChild(input);
+    if (textSpan) textSpan.style.display = '';
+    el.querySelector('.cont-edit-pen')?.style && (el.querySelector('.cont-edit-pen').style.display = '');
+    el.classList.remove('editing');
+    if (newVal === (currentVal === '-' ? '' : currentVal)) return; // no change
+    textSpan.textContent = newVal || '-';
+    await contFieldSave(field, newVal);
+  };
+
+  input.addEventListener('blur', _commit);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && type !== 'textarea') { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { input.value = currentVal; input.blur(); }
+  });
+}
+
+async function contFieldSave(field, value) {
+  if (!currentModalContactId) return;
+  try {
+    const c = await dbGet('contacts', currentModalContactId);
+    if (!c) return;
+    const update = {};
+
+    if (field === 'company') {
+      // Resolve company name → companyId
+      const cos = await dbAll('companies');
+      const co  = value ? cos.find(x => trLow(x.name) === trLow(value)) : null;
+      update.companyId = co?.id || null;
+      // Also update subtitle
+      const subtitleEl = document.getElementById('cont-title-sub');
+      if (subtitleEl) {
+        const parts = [(c.title || ''), value].filter(Boolean);
+        subtitleEl.textContent = parts.join(' · ');
+      }
+    } else {
+      update[field] = value;
+    }
+
+    // Special: update avatar initials if name changed
+    if (field === 'name' && value) {
+      const initials = value.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2);
+      const avatarEl = document.getElementById('cont-avatar');
+      if (avatarEl) avatarEl.textContent = initials;
+      // Update subtitle
+      const subtitleEl = document.getElementById('cont-title-sub');
+      if (subtitleEl) {
+        const co = c.companyId ? await dbGet('companies', c.companyId) : null;
+        const parts = [c.title, co?.name].filter(Boolean);
+        subtitleEl.textContent = parts.join(' · ');
+      }
+    }
+    if (field === 'title' && value) {
+      const subtitleEl = document.getElementById('cont-title-sub');
+      if (subtitleEl) {
+        const co = c.companyId ? await dbGet('companies', c.companyId) : null;
+        const parts = [value, co?.name].filter(Boolean);
+        subtitleEl.textContent = parts.join(' · ');
+      }
+    }
+
+    await dbUpdate('contacts', currentModalContactId, update);
+
+    // Recalculate quality after edit
+    const updatedC = await dbGet('contacts', currentModalContactId);
+    if (updatedC) {
+      const newScore = calculateContactQuality(updatedC);
+      const qPct = document.getElementById('cont-quality-pct');
+      if (qPct) qPct.textContent = `${newScore}%`;
+      const qBar = document.getElementById('cont-quality-bar');
+      if (qBar) qBar.style.width = `${newScore}%`;
+    }
+
+    // Show save toast
+    const toast = document.getElementById('cont-save-toast');
+    if (toast) {
+      toast.style.display = 'block';
+      toast.style.opacity = '1';
+      clearTimeout(toast._t);
+      toast._t = setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => { toast.style.display = 'none'; }, 300); }, 2000);
+    }
+
+    // Refresh contacts list in background
+    if (typeof loadContacts === 'function') loadContacts().catch(()=>{});
+  } catch(e) {
+    console.error('contFieldSave error:', e);
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 async function saveContact(e) {
   e.preventDefault();
