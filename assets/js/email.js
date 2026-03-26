@@ -558,28 +558,28 @@ function _parseEmailRows(rows) {
 }
 
 function _renderEmailItem(em) {
-  const isOut  = em.direction === 'outbound';
-  const dt     = em.sentAt ? new Date(em.sentAt).toLocaleString('tr-TR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
-  const preview = (em.text || em.html.replace(/<[^>]+>/g, '')).slice(0, 90).replace(/\n/g, ' ');
-  const ticks  = _tickHtml(em);
+  const isOut   = em.direction === 'outbound';
+  const dt      = em.sentAt ? new Date(em.sentAt).toLocaleString('tr-TR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
+  const preview = (em.text || (em.html||'').replace(/<[^>]+>/g, '')).slice(0, 80).replace(/\s+/g,' ').trim();
+  const nameRaw = isOut ? (em.to||'') : (em.from||'');
+  const nameMatch = nameRaw.match(/^([^<]+?)\s*</);
+  const namePart  = (nameMatch ? nameMatch[1].trim() : nameRaw.replace(/<[^>]+>/g,'').trim()) || (isOut ? 'Alıcı' : 'Gönderici');
 
   return `
   <div class="email-item d-flex gap-2 p-2 border-bottom align-items-start"
        style="cursor:pointer;font-size:13px;"
        onclick="emailShowDetail('${esc(em._id)}')">
-    <i class="bi ${isOut ? 'bi-arrow-up-right text-primary' : 'bi-arrow-down-left text-success'} mt-1"></i>
+    <i class="bi ${isOut ? 'bi-arrow-up-right text-primary' : 'bi-arrow-down-left text-success'} mt-1" style="flex-shrink:0;"></i>
     <div class="flex-grow-1 min-w-0" style="overflow:hidden;">
       <div class="d-flex justify-content-between align-items-center gap-1">
-        <span class="fw-semibold text-truncate">${esc(em.subject)}</span>
+        <span class="fw-bold text-truncate" style="color:#1e293b;">${esc(namePart)}</span>
         <div class="d-flex gap-1 align-items-center flex-shrink-0">
-          ${ticks}
+          ${_tickHtml(em)}
           <span class="text-muted" style="font-size:11px;white-space:nowrap;">${dt}</span>
         </div>
       </div>
-      <div class="text-muted text-truncate" style="font-size:11px;">
-        ${isOut ? '→ ' + esc(em.to) : '← ' + esc(em.from)}
-      </div>
-      <div class="text-muted text-truncate" style="font-size:11px;opacity:.7;">${esc(preview)}</div>
+      <div class="text-truncate fw-semibold" style="font-size:12px;color:#334155;">${esc(em.subject||'(Konu yok)')}</div>
+      ${preview ? `<div class="text-muted text-truncate" style="font-size:11px;opacity:.7;">${esc(preview)}</div>` : ''}
     </div>
   </div>`;
 }
@@ -773,15 +773,19 @@ function _renderEmailPageItem(em) {
   const isOut    = em.direction === 'outbound';
   const dt       = em.sentAt ? new Date(em.sentAt).toLocaleString('tr-TR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
   const nameRaw  = isOut ? (em.to || '') : (em.from || '');
-  const namePart = nameRaw.replace(/<[^>]+>/g, '').trim() || (isOut ? 'Alıcı' : 'Gönderici');
-  const initials = namePart.split(/[\s@<>]+/).filter(Boolean).slice(0,2).map(w => w[0]?.toUpperCase()).join('');
-  const avatarBg = isOut ? 'linear-gradient(135deg,#6366f1,#4f46e5)' : 'linear-gradient(135deg,#10b981,#059669)';
+  // Extract display name: "Anna Yuksel <anna@gmail.com>" → "Anna Yuksel", else email prefix
+  const nameMatch = nameRaw.match(/^([^<]+?)\s*</);
+  const namePart  = (nameMatch ? nameMatch[1].trim() : nameRaw.replace(/<[^>]+>/g,'').trim())
+                    || (isOut ? 'Alıcı' : 'Gönderici');
+  const initials  = namePart.split(/[\s@]+/).filter(Boolean).slice(0,2).map(w => w[0]?.toUpperCase()).join('');
+  const avatarBg  = isOut ? 'linear-gradient(135deg,#6366f1,#4f46e5)' : 'linear-gradient(135deg,#10b981,#059669)';
+  const preview   = (em.text || em.html?.replace(/<[^>]+>/g,'')||'').slice(0,80).replace(/\s+/g,' ').trim();
   return `
   <div class="em-list-item" onclick="emailShowDetail('${esc(em._id)}')">
     <div class="em-avatar" style="background:${avatarBg}">${initials || (isOut ? '→' : '←')}</div>
     <div class="em-item-body">
       <div class="em-item-top">
-        <span class="em-item-subject">${esc(em.subject || '(Konu yok)')}</span>
+        <span class="em-item-name">${esc(namePart)}</span>
         <div class="em-item-meta-right">
           ${_tickHtml(em)}
           <span class="em-item-time">${dt}</span>
@@ -790,10 +794,8 @@ function _renderEmailPageItem(em) {
           </button>
         </div>
       </div>
-      <div class="em-item-sub">
-        <span class="${isOut ? 'em-dir-out' : 'em-dir-in'}">${isOut ? '↑' : '↓'}</span>
-        ${esc(namePart)}${em.createdBy ? ' · ' + esc(em.createdBy) : ''}
-      </div>
+      <div class="em-item-subject-row">${esc(em.subject || '(Konu yok)')}</div>
+      ${preview ? `<div class="em-item-preview">${esc(preview)}</div>` : ''}
     </div>
   </div>`;
 }
