@@ -806,8 +806,13 @@ async function notesLoad(contactId, _silent) {
 
     // ── Sync notes to Aktiviteler timeline ──
     window._cmNotes = notes;
-    if (typeof window._contRenderTimeline === 'function') {
-      window._contRenderTimeline();
+    // In silent mode (background fetch), only trigger the timeline render if
+    // Fuarbot has already finished rendering (flag set in app.js). This prevents
+    // the fast Firestore query from overwriting the timeline before Fuarbot data arrives.
+    if (!_silent || window._fbPanelsRendered) {
+      if (typeof window._contRenderTimeline === 'function') {
+        window._contRenderTimeline();
+      }
     }
 
   } catch (e) {
