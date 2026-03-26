@@ -65,6 +65,14 @@ async function emailInit() {
         _userEmailAddr = f.emailAddress?.stringValue || f.email?.stringValue || (typeof authEmail === 'function' ? authEmail() : '');
         _userSig       = f.emailSignature?.stringValue || '';
         _userCrmRole   = (f.crmRole?.stringValue || 'sales').toLowerCase();
+        // Company & profile fields
+        window._companyName    = f.companyName?.stringValue    || '';
+        window._companyPhone   = f.companyPhone?.stringValue   || '';
+        window._companyEmail   = f.companyEmail?.stringValue   || '';
+        window._companyWebsite = f.companyWebsite?.stringValue || '';
+        window._companyAddress = f.companyAddress?.stringValue || '';
+        window._companyLogo    = f.companyLogo?.stringValue    || '';
+        window._profilePhoto   = f.profilePhoto?.stringValue   || '';
       }
     }
 
@@ -93,7 +101,8 @@ function _updateUserDisplay() {
     badge.textContent = _userCrmRole === 'admin' ? 'Admin' : 'Sales';
     badge.className = `badge ms-1 ${_userCrmRole === 'admin' ? 'bg-danger' : 'bg-primary'}`;
   }
-  // Signatur-Settings initialisieren falls Ayarlar offen
+  // Settings initialisieren falls Ayarlar offen
+  if (document.getElementById('company-settings-container'))   companySettingsInit();
   if (document.getElementById('signature-settings-container')) signatureSettingsInit();
   if (document.getElementById('role-settings-container'))      roleSettingsInit();
 }
@@ -712,25 +721,30 @@ async function loadEmailsPage() {
     const outboundCnt = _emailPageAll.filter(e => e.direction === 'outbound').length;
     const unreadCnt   = _emailPageAll.filter(e => e.direction === 'inbound').length; // all inbound = "unread" for now
 
+    const inboundEmails  = _emailPageAll.filter(e => e.direction === 'inbound');
+    const outboundEmails = _emailPageAll.filter(e => e.direction === 'outbound');
+    const defaultList    = inboundEmails.length ? inboundEmails : _emailPageAll;
+    const defaultTab     = inboundEmails.length ? 'inbound' : 'all';
+
     c.innerHTML = `
     <div class="em-page-header">
       <div class="em-page-tabs" id="em-page-tabs">
-        <button class="em-tab-btn active" onclick="emailPageFilter('all',this)">
-          Tümü <span class="em-tab-badge">${_emailPageAll.length}</span>
-        </button>
-        <button class="em-tab-btn" onclick="emailPageFilter('inbound',this)">
+        <button class="em-tab-btn${defaultTab==='inbound'?' active':''}" onclick="emailPageFilter('inbound',this)">
           <i class="bi bi-arrow-down-left me-1"></i>Gelen
           ${inboundCnt ? `<span class="em-tab-badge em-tab-badge-in">${inboundCnt}</span>` : ''}
         </button>
-        <button class="em-tab-btn" onclick="emailPageFilter('outbound',this)">
+        <button class="em-tab-btn${defaultTab==='outbound'?' active':''}" onclick="emailPageFilter('outbound',this)">
           <i class="bi bi-arrow-up-right me-1"></i>Giden
           ${outboundCnt ? `<span class="em-tab-badge em-tab-badge-out">${outboundCnt}</span>` : ''}
+        </button>
+        <button class="em-tab-btn${defaultTab==='all'?' active':''}" onclick="emailPageFilter('all',this)">
+          Tümü <span class="em-tab-badge">${_emailPageAll.length}</span>
         </button>
       </div>
     </div>
     <div id="em-page-list" class="em-page-list">
-      ${_emailPageAll.length
-        ? _emailPageAll.map(_renderEmailPageItem).join('')
+      ${defaultList.length
+        ? defaultList.map(_renderEmailPageItem).join('')
         : '<div class="em-empty-state"><i class="bi bi-inbox"></i><div>Henüz e-posta yok</div></div>'}
     </div>`;
 
@@ -966,39 +980,125 @@ async function notesDelete(id) {
 // SIGNATUR-EINSTELLUNGEN
 // ══════════════════════════════════════════════════════════════
 
+function companySettingsInit() {
+  const c = document.getElementById('company-settings-container');
+  if (!c) return;
+  const logo = window._companyLogo || '';
+  c.innerHTML = `
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white fw-semibold d-flex align-items-center gap-2 py-3">
+      <i class="bi bi-building text-primary" style="font-size:18px;"></i>
+      <div>
+        <div>Firma Bilgileri</div>
+        <div class="text-muted fw-normal" style="font-size:12px;">E-posta imzasında ve tekliflerde görünür</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="d-flex gap-4 align-items-start mb-4">
+        <!-- Logo upload -->
+        <div class="text-center">
+          <div id="company-logo-wrap" onclick="document.getElementById('company-logo-input').click()"
+               style="width:90px;height:90px;border-radius:12px;border:2px dashed #cbd5e1;display:flex;align-items:center;justify-content:center;cursor:pointer;background:#f8faff;overflow:hidden;transition:border-color .15s;"
+               onmouseover="this.style.borderColor='#6366f1'" onmouseout="this.style.borderColor='#cbd5e1'">
+            ${logo
+              ? `<img id="company-logo-preview" src="${logo}" style="width:100%;height:100%;object-fit:contain;">`
+              : `<div id="company-logo-placeholder" style="text-align:center;color:#94a3b8;font-size:11px;padding:8px;"><i class="bi bi-image" style="font-size:24px;display:block;margin-bottom:4px;"></i>Logo Yükle</div>`}
+          </div>
+          <input type="file" id="company-logo-input" accept="image/*" style="display:none" onchange="settingsUploadLogo(this)">
+          <div class="text-muted mt-1" style="font-size:10px;">PNG, JPG · max 500KB</div>
+        </div>
+        <!-- Fields -->
+        <div class="flex-grow-1">
+          <div class="row g-2">
+            <div class="col-12">
+              <label class="form-label small fw-semibold mb-1">Firma Adı</label>
+              <input type="text" class="form-control form-control-sm" id="comp-name" value="${esc(window._companyName||'')}" placeholder="Windoform GmbH">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold mb-1">Telefon</label>
+              <input type="text" class="form-control form-control-sm" id="comp-phone" value="${esc(window._companyPhone||'')}" placeholder="+49 xxx xxx xxxx">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold mb-1">E-posta</label>
+              <input type="email" class="form-control form-control-sm" id="comp-email" value="${esc(window._companyEmail||'')}" placeholder="info@windoform.de">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold mb-1">Website</label>
+              <input type="text" class="form-control form-control-sm" id="comp-website" value="${esc(window._companyWebsite||'')}" placeholder="www.windoform.de">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold mb-1">Adres</label>
+              <input type="text" class="form-control form-control-sm" id="comp-address" value="${esc(window._companyAddress||'')}" placeholder="Musterstraße 1, 12345 Stadt">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="d-flex gap-2 align-items-center">
+        <button class="btn btn-primary btn-sm" onclick="companySave()"><i class="bi bi-floppy me-1"></i>Firma Bilgilerini Kaydet</button>
+        <span id="comp-save-status" class="text-success small" style="display:none;">✓ Kaydedildi</span>
+      </div>
+    </div>
+  </div>`;
+}
+
 function signatureSettingsInit() {
   const c = document.getElementById('signature-settings-container');
   if (!c) return;
+  const photo = window._profilePhoto || '';
   c.innerHTML = `
   <div class="card border-0 shadow-sm mb-4">
-    <div class="card-header bg-white fw-semibold d-flex align-items-center gap-2">
-      <i class="bi bi-pen text-primary"></i>E-posta İmzası &amp; Profil
+    <div class="card-header bg-white fw-semibold d-flex align-items-center gap-2 py-3">
+      <i class="bi bi-pen text-primary" style="font-size:18px;"></i>
+      <div>
+        <div>Profil &amp; E-posta İmzası</div>
+        <div class="text-muted fw-normal" style="font-size:12px;">Gönderen bilgisi ve e-posta altı imzası</div>
+      </div>
     </div>
     <div class="card-body">
-      <div class="row g-3 mb-3">
-        <div class="col-md-6">
-          <label class="form-label small fw-semibold">Gönderen E-posta Adresi</label>
-          <input type="email" class="form-control" id="sig-email" value="${esc(_userEmailAddr)}" placeholder="siz@firma.com">
-          <div class="form-text">Domain Resend'de doğrulanmış olmalı</div>
+      <div class="d-flex gap-4 align-items-start mb-4">
+        <!-- Profile photo -->
+        <div class="text-center">
+          <div id="profile-photo-wrap" onclick="document.getElementById('profile-photo-input').click()"
+               style="width:72px;height:72px;border-radius:50%;border:2px dashed #cbd5e1;display:flex;align-items:center;justify-content:center;cursor:pointer;background:linear-gradient(135deg,#e0e7ff,#f0f4ff);overflow:hidden;transition:border-color .15s;"
+               onmouseover="this.style.borderColor='#6366f1'" onmouseout="this.style.borderColor='#cbd5e1'">
+            ${photo
+              ? `<img id="profile-photo-preview" src="${photo}" style="width:100%;height:100%;object-fit:cover;">`
+              : `<div id="profile-photo-placeholder" style="text-align:center;color:#6366f1;font-size:11px;padding:4px;"><i class="bi bi-person" style="font-size:28px;display:block;"></i></div>`}
+          </div>
+          <input type="file" id="profile-photo-input" accept="image/*" style="display:none" onchange="settingsUploadPhoto(this)">
+          <div class="text-muted mt-1" style="font-size:10px;">Profil Fotoğrafı</div>
         </div>
-        <div class="col-md-6">
-          <label class="form-label small fw-semibold">Görünen Ad</label>
-          <input type="text" class="form-control" id="sig-name" value="${esc(_userDispName)}" placeholder="Adınız Soyadınız">
+        <!-- Name & email -->
+        <div class="flex-grow-1">
+          <div class="row g-2">
+            <div class="col-12">
+              <label class="form-label small fw-semibold mb-1">Görünen Ad</label>
+              <input type="text" class="form-control form-control-sm" id="sig-name" value="${esc(_userDispName)}" placeholder="Adınız Soyadınız">
+            </div>
+            <div class="col-12">
+              <label class="form-label small fw-semibold mb-1">Gönderen E-posta</label>
+              <input type="email" class="form-control form-control-sm" id="sig-email" value="${esc(_userEmailAddr)}" placeholder="siz@windoform.de">
+              <div class="form-text">Domain Resend'de doğrulanmış olmalı</div>
+            </div>
+          </div>
         </div>
       </div>
       <div class="mb-3">
-        <label class="form-label small fw-semibold">E-posta İmzası <span class="text-muted fw-normal">(HTML desteklenir)</span></label>
-        <div class="btn-group btn-group-sm mb-1" role="group">
-          <button type="button" class="btn btn-outline-secondary" onclick="emailFormat('bold')" title="Kalın"><i class="bi bi-type-bold"></i></button>
-          <button type="button" class="btn btn-outline-secondary" onclick="emailFormat('italic')" title="İtalik"><i class="bi bi-type-italic"></i></button>
-          <button type="button" class="btn btn-outline-secondary" onclick="emailFormat('underline')" title="Altı çizili"><i class="bi bi-type-underline"></i></button>
+        <label class="form-label small fw-semibold">E-posta İmzası</label>
+        <div class="d-flex gap-1 mb-1">
+          <button type="button" class="btn btn-xs btn-outline-secondary px-2 py-0" onclick="document.getElementById('sig-editor').focus();document.execCommand('bold')" title="Kalın"><i class="bi bi-type-bold"></i></button>
+          <button type="button" class="btn btn-xs btn-outline-secondary px-2 py-0" onclick="document.getElementById('sig-editor').focus();document.execCommand('italic')" title="İtalik"><i class="bi bi-type-italic"></i></button>
+          <button type="button" class="btn btn-xs btn-outline-secondary px-2 py-0" onclick="document.getElementById('sig-editor').focus();document.execCommand('underline')" title="Altı çizili"><i class="bi bi-type-underline"></i></button>
+          <button type="button" class="btn btn-xs btn-outline-secondary px-2 py-0 ms-2" onclick="signatureAutoGenerate()" title="Firma bilgilerinden otomatik oluştur">
+            <i class="bi bi-magic me-1"></i>Otomatik Oluştur
+          </button>
         </div>
         <div id="sig-editor" contenteditable="true"
              class="form-control"
              style="min-height:120px;font-family:sans-serif;font-size:14px;line-height:1.6;"
         >${_userSig || '<p><strong>Adınız Soyadınız</strong><br>Ünvan · Windoform<br>Tel: +49 xxx xxx xxxx</p>'}</div>
       </div>
-      <div class="d-flex gap-2 align-items-center">
+      <div class="d-flex gap-2 align-items-center flex-wrap">
         <button class="btn btn-primary btn-sm" onclick="signatureSave()"><i class="bi bi-check-lg me-1"></i>Kaydet</button>
         <button class="btn btn-outline-secondary btn-sm" onclick="signaturePreview()"><i class="bi bi-eye me-1"></i>Önizle</button>
         <span id="sig-save-status" class="text-success small" style="display:none;">✓ Kaydedildi</span>
@@ -1020,6 +1120,7 @@ async function signatureSave() {
   const email = document.getElementById('sig-email')?.value?.trim();
   const name  = document.getElementById('sig-name')?.value?.trim();
   const sig   = document.getElementById('sig-editor')?.innerHTML || '';
+  const photo = window._profilePhotoNew || window._profilePhoto || '';
 
   try {
     const cfg   = loadFbConfig();
@@ -1027,15 +1128,17 @@ async function signatureSave() {
     const token = await authToken();
     if (!uid) throw new Error('Giriş yapılmamış');
 
+    const mask = 'updateMask.fieldPaths=emailAddress&updateMask.fieldPaths=name&updateMask.fieldPaths=emailSignature&updateMask.fieldPaths=profilePhoto';
     await fetch(
-      `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/fuarEmployees/${uid}?updateMask.fieldPaths=emailAddress&updateMask.fieldPaths=name&updateMask.fieldPaths=emailSignature&key=${cfg.apiKey}`,
+      `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/fuarEmployees/${uid}?${mask}&key=${cfg.apiKey}`,
       {
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body:    JSON.stringify({ fields: {
-          emailAddress:   { stringValue: email  || '' },
-          name:           { stringValue: name   || '' },
-          emailSignature: { stringValue: sig    || '' },
+          emailAddress:   { stringValue: email || '' },
+          name:           { stringValue: name  || '' },
+          emailSignature: { stringValue: sig   || '' },
+          profilePhoto:   { stringValue: photo || '' },
         }}),
       }
     );
@@ -1043,11 +1146,126 @@ async function signatureSave() {
     if (email) _userEmailAddr = email;
     if (name)  _userDispName  = name;
     _userSig = sig;
+    if (photo) { window._profilePhoto = photo; window._profilePhotoNew = null; }
 
     const s = document.getElementById('sig-save-status');
     if (s) { s.style.display = ''; setTimeout(() => s.style.display = 'none', 3000); }
-    _emToast('İmza kaydedildi ✓', 'success');
+    _emToast('Profil & imza kaydedildi ✓', 'success');
   } catch (e) { _emToast('Hata: ' + e.message, 'error'); }
+}
+
+async function companySave() {
+  const name    = document.getElementById('comp-name')?.value?.trim()    || '';
+  const phone   = document.getElementById('comp-phone')?.value?.trim()   || '';
+  const email   = document.getElementById('comp-email')?.value?.trim()   || '';
+  const website = document.getElementById('comp-website')?.value?.trim() || '';
+  const address = document.getElementById('comp-address')?.value?.trim() || '';
+  const logo    = window._companyLogoNew || window._companyLogo || '';
+
+  try {
+    const cfg   = loadFbConfig();
+    const uid   = typeof authUid === 'function' ? authUid() : null;
+    const token = await authToken();
+    if (!uid) throw new Error('Giriş yapılmamış');
+
+    const mask = ['companyName','companyPhone','companyEmail','companyWebsite','companyAddress','companyLogo']
+      .map(f => `updateMask.fieldPaths=${f}`).join('&');
+    await fetch(
+      `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/fuarEmployees/${uid}?${mask}&key=${cfg.apiKey}`,
+      {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ fields: {
+          companyName:    { stringValue: name    },
+          companyPhone:   { stringValue: phone   },
+          companyEmail:   { stringValue: email   },
+          companyWebsite: { stringValue: website },
+          companyAddress: { stringValue: address },
+          companyLogo:    { stringValue: logo    },
+        }}),
+      }
+    );
+
+    window._companyName    = name;
+    window._companyPhone   = phone;
+    window._companyEmail   = email;
+    window._companyWebsite = website;
+    window._companyAddress = address;
+    if (logo) { window._companyLogo = logo; window._companyLogoNew = null; }
+
+    const s = document.getElementById('comp-save-status');
+    if (s) { s.style.display = ''; setTimeout(() => s.style.display = 'none', 3000); }
+    _emToast('Firma bilgileri kaydedildi ✓', 'success');
+  } catch (e) { _emToast('Hata: ' + e.message, 'error'); }
+}
+
+// ── Image upload helpers ───────────────────────────────────────
+async function settingsUploadLogo(input) {
+  const file = input.files[0]; if (!file) return;
+  if (file.size > 512 * 1024) { _emToast('Dosya 500KB\'dan küçük olmalı', 'error'); return; }
+  const b64 = await _compressImage(file, 300);
+  window._companyLogoNew = b64;
+  const wrap = document.getElementById('company-logo-wrap');
+  if (wrap) wrap.innerHTML = `<img src="${b64}" style="width:100%;height:100%;object-fit:contain;">`;
+}
+
+async function settingsUploadPhoto(input) {
+  const file = input.files[0]; if (!file) return;
+  if (file.size > 512 * 1024) { _emToast('Dosya 500KB\'dan küçük olmalı', 'error'); return; }
+  const b64 = await _compressImage(file, 200);
+  window._profilePhotoNew = b64;
+  const wrap = document.getElementById('profile-photo-wrap');
+  if (wrap) wrap.innerHTML = `<img src="${b64}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+}
+
+function _compressImage(file, maxW = 300) {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const scale  = Math.min(1, maxW / img.width);
+        const canvas = document.createElement('canvas');
+        canvas.width  = Math.round(img.width  * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function signatureAutoGenerate() {
+  const ed = document.getElementById('sig-editor');
+  if (!ed) return;
+  const name    = document.getElementById('sig-name')?.value?.trim()  || _userDispName || 'Adınız Soyadınız';
+  const company = window._companyName    || 'Windoform';
+  const phone   = window._companyPhone   || '';
+  const email   = window._companyEmail   || _userEmailAddr || '';
+  const website = window._companyWebsite || '';
+  const logo    = window._companyLogo    || '';
+  const photo   = window._profilePhotoNew || window._profilePhoto || '';
+
+  let html = `<table style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:13px;color:#334155;">
+  <tr>`;
+  if (photo) {
+    html += `<td style="padding-right:14px;vertical-align:top;">
+      <img src="${photo}" style="width:52px;height:52px;border-radius:50%;object-fit:cover;">
+    </td>`;
+  }
+  html += `<td style="vertical-align:top;border-left:3px solid #6366f1;padding-left:12px;">
+      <div style="font-weight:700;font-size:14px;color:#1e293b;">${esc(name)}</div>`;
+  if (company) html += `<div style="color:#6366f1;font-size:12px;margin-bottom:6px;">${esc(company)}</div>`;
+  if (phone)   html += `<div><span style="color:#94a3b8;">Tel:</span> ${esc(phone)}</div>`;
+  if (email)   html += `<div><span style="color:#94a3b8;">E-posta:</span> ${esc(email)}</div>`;
+  if (website) html += `<div><span style="color:#94a3b8;">Web:</span> <a href="https://${esc(website)}" style="color:#6366f1;">${esc(website)}</a></div>`;
+  if (logo)    html += `<div style="margin-top:8px;"><img src="${logo}" style="max-height:36px;max-width:120px;object-fit:contain;"></div>`;
+  html += `</td></tr></table>`;
+
+  ed.innerHTML = html;
+  _emToast('İmza oluşturuldu — beğenmezseniz düzenleyebilirsiniz', 'success');
 }
 
 // ══════════════════════════════════════════════════════════════
