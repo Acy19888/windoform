@@ -1718,217 +1718,235 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════
-     KİŞİ DETAY — HubSpot-style Offcanvas
+     KİŞİ DETAY — HubSpot-style Offcanvas (v2 Premium)
 ══════════════════════════════════════════════════════ -->
-<div class="offcanvas offcanvas-end" tabindex="-1" id="contModal"
-     style="width:min(960px,97vw);box-shadow:-8px 0 40px rgba(0,0,0,.14);">
+<div class="offcanvas offcanvas-end" tabindex="-1" id="contModal" style="width:min(1020px,97vw);">
 
-  <!-- ── Header ── -->
-  <div class="offcanvas-header border-bottom py-2 px-4" style="background:#fff;">
-    <div class="d-flex align-items-center gap-3 flex-grow-1 min-w-0">
-      <!-- Avatar -->
-      <div id="cont-avatar" style="width:44px;height:44px;border-radius:50%;background:#6366f1;color:#fff;
-           display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;flex-shrink:0;">?</div>
-      <div class="min-w-0">
-        <div class="d-flex align-items-center gap-2 flex-wrap">
-          <span id="cont-name" class="fw-bold" style="font-size:17px;color:#0f172a;"></span>
-          <span id="cont-quality-badge" class="badge"></span>
-        </div>
-        <div class="d-flex align-items-center gap-2 flex-wrap mt-1">
-          <span id="cont-title-sub" class="text-muted" style="font-size:12px;"></span>
-          <span id="cont-company-badge" style="font-size:12px;"></span>
-        </div>
-      </div>
-    </div>
-    <!-- Action buttons -->
-    <div class="d-flex gap-2 align-items-center ms-3 flex-shrink-0">
-      <button class="btn btn-sm btn-primary" onclick="emailCompose(window._emContactRef)" title="E-posta gönder">
-        <i class="bi bi-envelope me-1"></i>E-posta
-      </button>
-      <button class="btn btn-sm btn-outline-secondary" onclick="contStartEdit()" title="Düzenle">
-        <i class="bi bi-pencil me-1"></i>Düzenle
-      </button>
-      <button class="btn btn-sm btn-outline-danger" onclick="deleteContactModal()" title="Sil">
-        <i class="bi bi-trash"></i>
-      </button>
-      <button type="button" class="btn-close ms-1" data-bs-dismiss="offcanvas"></button>
-    </div>
-  </div>
-
-  <!-- ── Body: two-column ── -->
+  <!-- ── Body: two-column (no separate header — left panel IS the header) ── -->
   <div class="d-flex h-100" style="overflow:hidden;">
 
-    <!-- LEFT: Properties Panel -->
-    <div style="width:270px;min-width:270px;overflow-y:auto;border-right:1px solid #e2e8f0;background:#fafbfc;flex-shrink:0;">
+    <!-- ═══ LEFT SIDEBAR ═══ -->
+    <div class="cont-left-panel" id="cont-left-panel">
 
-      <!-- Quality & Status -->
-      <div class="px-3 pt-3 pb-2 border-bottom">
-        <div class="d-flex justify-content-between align-items-center mb-2">
-          <span class="text-muted" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Kalite</span>
-          <span id="cont-quality-pct" class="fw-bold" style="font-size:13px;color:#6366f1;"></span>
+      <!-- Close button (top-right of left panel) -->
+      <button type="button" class="cont-close-btn" data-bs-dismiss="offcanvas" title="Kapat">
+        <i class="bi bi-x-lg"></i>
+      </button>
+
+      <!-- ── Hero section (dark) ── -->
+      <div class="cont-hero">
+        <!-- Avatar -->
+        <div id="cont-avatar" class="cont-avatar-ring">VS</div>
+
+        <!-- Name & subtitle -->
+        <div id="cont-name" class="cont-hero-name">Yükleniyor…</div>
+        <div id="cont-title-sub" class="cont-hero-sub"></div>
+
+        <!-- Quality bar -->
+        <div class="cont-quality-wrap">
+          <div class="cont-quality-label">
+            <span>Profil Kalitesi</span>
+            <span id="cont-quality-pct" class="cont-quality-pct-val">—</span>
+          </div>
+          <div class="cont-quality-track">
+            <div id="cont-quality-bar" class="cont-quality-fill" style="width:0%"></div>
+          </div>
         </div>
-        <div style="background:#e2e8f0;border-radius:4px;height:6px;">
-          <div id="cont-quality-bar" style="background:#6366f1;height:6px;border-radius:4px;width:0%;transition:width .5s;"></div>
+
+        <!-- Action buttons -->
+        <div class="cont-hero-actions">
+          <button class="cont-action-btn cont-action-primary" onclick="emailCompose(window._emContactRef)">
+            <i class="bi bi-envelope-fill"></i><span>E-posta</span>
+          </button>
+          <button class="cont-action-btn" onclick="editContactModal()" title="Düzenle">
+            <i class="bi bi-pencil-fill"></i><span>Düzenle</span>
+          </button>
+          <button class="cont-action-btn cont-action-danger" onclick="deleteContactModal()" title="Sil">
+            <i class="bi bi-trash3-fill"></i>
+          </button>
         </div>
       </div>
 
-      <!-- Contact Info group -->
-      <div class="px-3 py-2 border-bottom">
-        <div class="text-muted mb-2" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;">İletişim Bilgileri</div>
+      <!-- ── Properties (scrollable) ── -->
+      <div class="cont-props-scroll">
 
-        <div class="cont-prop-row" id="cprop-name">
-          <div class="cont-prop-label">Ad Soyad</div>
-          <div class="cont-prop-val" data-field="name" data-type="text" onclick="contFieldEdit(this)">
-            <span class="cont-prop-text"></span><i class="bi bi-pencil cont-edit-pen"></i>
-          </div>
-        </div>
-        <div class="cont-prop-row" id="cprop-title">
-          <div class="cont-prop-label">Unvan</div>
-          <div class="cont-prop-val" data-field="title" data-type="text" onclick="contFieldEdit(this)">
-            <span class="cont-prop-text"></span><i class="bi bi-pencil cont-edit-pen"></i>
-          </div>
-        </div>
-        <div class="cont-prop-row" id="cprop-phone">
-          <div class="cont-prop-label">Telefon</div>
-          <div class="cont-prop-val" data-field="phone" data-type="tel" onclick="contFieldEdit(this)">
-            <span class="cont-prop-text" id="cont-phone-wrap"></span><i class="bi bi-pencil cont-edit-pen"></i>
-          </div>
-        </div>
-        <div class="cont-prop-row" id="cprop-email">
-          <div class="cont-prop-label">E-posta</div>
-          <div class="cont-prop-val" data-field="email" data-type="email" onclick="contFieldEdit(this)">
-            <span class="cont-prop-text" id="cont-email-wrap"></span><i class="bi bi-pencil cont-edit-pen"></i>
-          </div>
-        </div>
-      </div>
+        <!-- İletişim -->
+        <div class="cont-props-section">
+          <div class="cont-props-section-title"><i class="bi bi-person-lines-fill"></i> İletişim</div>
 
-      <!-- Company & Status -->
-      <div class="px-3 py-2 border-bottom">
-        <div class="text-muted mb-2" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;">Firma & Durum</div>
-        <div class="cont-prop-row">
-          <div class="cont-prop-label">Firma</div>
-          <div class="cont-prop-val" data-field="company" data-type="company" onclick="contFieldEdit(this)">
-            <span class="cont-prop-text"></span><i class="bi bi-pencil cont-edit-pen"></i>
+          <div class="cont-prop-row2">
+            <i class="bi bi-person cont-prop-icon"></i>
+            <div class="cont-prop-body">
+              <div class="cont-prop-label2">Ad Soyad</div>
+              <div class="cont-prop-val" data-field="name" data-type="text" onclick="contFieldEdit(this)">
+                <span class="cont-prop-text"></span><i class="bi bi-pencil cont-edit-pen"></i>
+              </div>
+            </div>
+          </div>
+
+          <div class="cont-prop-row2">
+            <i class="bi bi-briefcase cont-prop-icon"></i>
+            <div class="cont-prop-body">
+              <div class="cont-prop-label2">Unvan</div>
+              <div class="cont-prop-val" data-field="title" data-type="text" onclick="contFieldEdit(this)">
+                <span class="cont-prop-text"></span><i class="bi bi-pencil cont-edit-pen"></i>
+              </div>
+            </div>
+          </div>
+
+          <div class="cont-prop-row2">
+            <i class="bi bi-telephone cont-prop-icon"></i>
+            <div class="cont-prop-body">
+              <div class="cont-prop-label2">Telefon</div>
+              <div class="cont-prop-val" data-field="phone" data-type="tel" onclick="contFieldEdit(this)">
+                <span class="cont-prop-text" id="cont-phone-wrap"></span><i class="bi bi-pencil cont-edit-pen"></i>
+              </div>
+            </div>
+          </div>
+
+          <div class="cont-prop-row2">
+            <i class="bi bi-envelope cont-prop-icon"></i>
+            <div class="cont-prop-body">
+              <div class="cont-prop-label2">E-posta</div>
+              <div class="cont-prop-val" data-field="email" data-type="email" onclick="contFieldEdit(this)">
+                <span class="cont-prop-text" id="cont-email-wrap"></span><i class="bi bi-pencil cont-edit-pen"></i>
+              </div>
+            </div>
           </div>
         </div>
-        <div class="cont-prop-row">
-          <div class="cont-prop-label">Durum</div>
-          <div class="cont-prop-val" data-field="status" data-type="select" onclick="contFieldEdit(this)">
-            <span class="cont-prop-text" id="cont-status"></span><i class="bi bi-pencil cont-edit-pen"></i>
+
+        <!-- Firma & Durum -->
+        <div class="cont-props-section">
+          <div class="cont-props-section-title"><i class="bi bi-building"></i> Firma & Durum</div>
+
+          <div class="cont-prop-row2">
+            <i class="bi bi-building cont-prop-icon"></i>
+            <div class="cont-prop-body">
+              <div class="cont-prop-label2">Firma</div>
+              <div class="cont-prop-val" data-field="company" data-type="company" onclick="contFieldEdit(this)">
+                <span class="cont-prop-text"></span><i class="bi bi-pencil cont-edit-pen"></i>
+              </div>
+            </div>
+          </div>
+
+          <div class="cont-prop-row2">
+            <i class="bi bi-circle-fill cont-prop-icon cont-status-dot" id="cont-status-icon"></i>
+            <div class="cont-prop-body">
+              <div class="cont-prop-label2">Durum</div>
+              <div class="cont-prop-val" data-field="status" data-type="select" onclick="contFieldEdit(this)">
+                <span class="cont-prop-text" id="cont-status"></span><i class="bi bi-pencil cont-edit-pen"></i>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Notlar (Ek notlar alanı) -->
-      <div class="px-3 py-2 border-bottom">
-        <div class="text-muted mb-2" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;">Açıklama / Notlar</div>
-        <div class="cont-prop-val w-100" data-field="notes" data-type="textarea" onclick="contFieldEdit(this)"
-             style="display:block;padding:6px 8px;min-height:60px;">
-          <span class="cont-prop-text" id="cont-notes" style="white-space:pre-wrap;font-size:12px;color:#475569;display:block;"></span>
-          <i class="bi bi-pencil cont-edit-pen" style="position:absolute;top:6px;right:6px;"></i>
+        <!-- Açıklama -->
+        <div class="cont-props-section">
+          <div class="cont-props-section-title"><i class="bi bi-card-text"></i> Açıklama / Notlar</div>
+          <div class="cont-prop-val" data-field="notes" data-type="textarea" onclick="contFieldEdit(this)"
+               style="display:block;min-height:52px;padding:8px 10px;border-radius:8px;position:relative;">
+            <span class="cont-prop-text" id="cont-notes" style="white-space:pre-wrap;font-size:12.5px;color:#475569;display:block;line-height:1.5;"></span>
+            <i class="bi bi-pencil cont-edit-pen" style="position:absolute;top:8px;right:8px;"></i>
+          </div>
         </div>
-      </div>
 
-      <!-- Metadata -->
-      <div class="px-3 py-2">
-        <div class="text-muted mb-2" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;">Sistem</div>
-        <div class="cont-prop-row">
-          <div class="cont-prop-label">Oluşturma</div>
-          <div class="cont-prop-val no-edit"><span id="cont-created-at" class="cont-prop-text"></span></div>
+        <!-- Sistem -->
+        <div class="cont-props-section" style="border-bottom:none;">
+          <div class="cont-props-section-title"><i class="bi bi-info-circle"></i> Sistem</div>
+          <div class="cont-prop-row2">
+            <i class="bi bi-calendar3 cont-prop-icon"></i>
+            <div class="cont-prop-body">
+              <div class="cont-prop-label2">Oluşturma</div>
+              <div class="cont-prop-val no-edit"><span id="cont-created-at" class="cont-prop-text"></span></div>
+            </div>
+          </div>
+          <div class="cont-prop-row2">
+            <i class="bi bi-geo-alt cont-prop-icon"></i>
+            <div class="cont-prop-body">
+              <div class="cont-prop-label2">Kaynak</div>
+              <div class="cont-prop-val no-edit"><span id="cont-source" class="cont-prop-text"></span></div>
+            </div>
+          </div>
         </div>
-        <div class="cont-prop-row">
-          <div class="cont-prop-label">Kaynak</div>
-          <div class="cont-prop-val no-edit"><span id="cont-source" class="cont-prop-text"></span></div>
-        </div>
-      </div>
-    </div>
 
-    <!-- RIGHT: Activity / Tabs -->
-    <div class="d-flex flex-column flex-grow-1" style="overflow:hidden;min-width:0;">
+      </div><!-- /cont-props-scroll -->
+    </div><!-- /LEFT SIDEBAR -->
+
+    <!-- ═══ RIGHT CONTENT ═══ -->
+    <div class="cont-right-panel">
 
       <!-- Tab bar -->
-      <div style="background:#fff;border-bottom:1px solid #e2e8f0;flex-shrink:0;">
-        <ul class="nav nav-tabs border-0 px-3 pt-2" style="gap:4px;">
-          <li class="nav-item">
-            <a class="nav-link active" id="cont-tab-timeline" href="#" style="font-size:13px;" onclick="contSwitchTab('timeline');return false;">
-              <i class="bi bi-clock-history me-1"></i>Aktiviteler
-              <span id="cont-timeline-badge" class="badge bg-secondary ms-1" style="display:none;font-size:9px;"></span>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" id="cont-tab-emails" href="#" style="font-size:13px;" onclick="contSwitchTab('emails');return false;">
-              <i class="bi bi-envelope me-1"></i>E-postalar
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" id="cont-tab-quotes" href="#" style="font-size:13px;" onclick="contSwitchTab('quotes');return false;">
-              <i class="bi bi-file-earmark-text me-1"></i>Teklifler
-              <span id="cont-quotes-badge" class="badge bg-warning text-dark ms-1" style="display:none;font-size:9px;"></span>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" id="cont-tab-notes" href="#" style="font-size:13px;" onclick="contSwitchTab('notes');return false;">
-              <i class="bi bi-sticky me-1"></i>Notlar
-            </a>
-          </li>
-        </ul>
+      <div class="cont-tab-bar">
+        <button class="cont-tab-btn active" id="cont-tab-timeline" onclick="contSwitchTab('timeline')">
+          <i class="bi bi-activity"></i> Aktiviteler
+          <span id="cont-timeline-badge" class="cont-tab-badge" style="display:none;"></span>
+        </button>
+        <button class="cont-tab-btn" id="cont-tab-emails" onclick="contSwitchTab('emails')">
+          <i class="bi bi-envelope"></i> E-postalar
+        </button>
+        <button class="cont-tab-btn" id="cont-tab-quotes" onclick="contSwitchTab('quotes')">
+          <i class="bi bi-file-earmark-bar-graph"></i> Teklifler
+          <span id="cont-quotes-badge" class="cont-tab-badge cont-tab-badge-amber" style="display:none;"></span>
+        </button>
+        <button class="cont-tab-btn" id="cont-tab-notes" onclick="contSwitchTab('notes')">
+          <i class="bi bi-sticky"></i> Notlar
+        </button>
       </div>
 
       <!-- Tab panels -->
-      <div class="flex-grow-1" style="overflow-y:auto;">
+      <div class="cont-panel-scroll">
 
         <!-- Aktiviteler / Timeline -->
-        <div id="cont-panel-timeline" class="p-3">
+        <div id="cont-panel-timeline" class="cont-panel-inner">
           <div id="cont-timeline-content">
-            <div class="text-muted small text-center py-5"><span class="spinner-border spinner-border-sm me-2"></span>Yükleniyor…</div>
+            <div class="cont-empty-state"><span class="spinner-border spinner-border-sm me-2 text-muted"></span>Yükleniyor…</div>
           </div>
         </div>
 
         <!-- E-postalar -->
-        <div id="cont-panel-emails" style="display:none;">
-          <div class="text-muted small text-center py-5"><span class="spinner-border spinner-border-sm me-1"></span>Yükleniyor…</div>
-        </div>
+        <div id="cont-panel-emails" style="display:none;"></div>
 
         <!-- Teklifler -->
-        <div id="cont-panel-quotes" style="display:none;" class="p-3">
+        <div id="cont-panel-quotes" style="display:none;" class="cont-panel-inner">
           <div id="cont-quotes-content">
-            <div class="text-muted small text-center py-5"><span class="spinner-border spinner-border-sm me-2"></span>Yükleniyor…</div>
+            <div class="cont-empty-state"><span class="spinner-border spinner-border-sm me-2 text-muted"></span>Yükleniyor…</div>
           </div>
         </div>
 
         <!-- Notlar -->
-        <div id="cont-panel-notes" style="display:none;" class="p-3">
-          <div class="mb-3 p-3 bg-light rounded border">
-            <textarea id="note-new-text" class="form-control mb-2" rows="2"
-                      placeholder="Yeni not ekle…" style="font-size:13px;resize:vertical;"></textarea>
-            <div class="d-flex gap-2 align-items-center">
-              <select id="note-new-color" class="form-select form-select-sm" style="width:auto;">
+        <div id="cont-panel-notes" style="display:none;" class="cont-panel-inner">
+          <!-- Add note card -->
+          <div class="cont-note-add-card">
+            <textarea id="note-new-text" placeholder="Yeni bir not ekle…" rows="3"></textarea>
+            <div class="cont-note-add-footer">
+              <select id="note-new-color" class="cont-note-color-select">
                 <option value="yellow">🟡 Sarı</option>
                 <option value="blue">🔵 Mavi</option>
                 <option value="green">🟢 Yeşil</option>
                 <option value="red">🔴 Kırmızı</option>
                 <option value="purple">🟣 Mor</option>
               </select>
-              <button class="btn btn-primary btn-sm" onclick="notesAdd()">
-                <i class="bi bi-plus-lg me-1"></i>Ekle
+              <button onclick="notesAdd()" class="cont-note-add-btn">
+                <i class="bi bi-plus-circle-fill me-1"></i>Not Ekle
               </button>
             </div>
           </div>
+          <!-- Notes list -->
           <div id="cont-panel-notes-list">
-            <div class="text-muted small text-center py-3"><span class="spinner-border spinner-border-sm me-1"></span>Yükleniyor…</div>
+            <div class="cont-empty-state text-muted"><i class="bi bi-sticky me-2 opacity-25"></i>Henüz not yok</div>
           </div>
         </div>
 
-      </div>
-    </div>
+      </div><!-- /cont-panel-scroll -->
+    </div><!-- /RIGHT CONTENT -->
   </div>
 </div>
 
 <!-- Inline edit save indicator -->
-<div id="cont-save-toast" style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
-     background:#1e293b;color:#fff;padding:8px 18px;border-radius:20px;font-size:13px;z-index:9999;
-     box-shadow:0 4px 16px rgba(0,0,0,.2);">
-  <i class="bi bi-check-circle-fill text-success me-2"></i>Kaydedildi
+<div id="cont-save-toast" style="display:none;position:fixed;bottom:28px;left:50%;transform:translateX(-50%);
+     background:#0f172a;color:#fff;padding:9px 20px;border-radius:24px;font-size:13px;z-index:99999;
+     box-shadow:0 8px 24px rgba(0,0,0,.25);display:none;align-items:center;gap:8px;">
+  <i class="bi bi-check-circle-fill" style="color:#4ade80;"></i> Kaydedildi
 </div>
 
 <div class="modal fade" id="editCompModal" tabindex="-1">

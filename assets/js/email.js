@@ -749,7 +749,7 @@ const _NOTE_COLORS = {
 };
 
 async function notesLoad(contactId) {
-  _notesContactId = contactId;
+  _notesContactId = String(contactId);
   const c = document.getElementById('cont-panel-notes-list');
   if (!c) return;
   c.innerHTML = '<div class="text-center py-3"><span class="spinner-border spinner-border-sm text-muted"></span></div>';
@@ -764,7 +764,7 @@ async function notesLoad(contactId) {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body:    JSON.stringify({ structuredQuery: {
           from:    [{ collectionId: _NOTES_COL }],
-          where:   { fieldFilter: { field: { fieldPath: 'contactId' }, op: 'EQUAL', value: { stringValue: contactId } } },
+          where:   { fieldFilter: { field: { fieldPath: 'contactId' }, op: 'EQUAL', value: { stringValue: String(contactId) } } },
           orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'DESCENDING' }],
           limit:   100,
         }}),
@@ -819,7 +819,11 @@ async function notesAdd() {
   const colorSel = document.getElementById('note-new-color');
   const text     = textarea?.value?.trim();
   const color    = colorSel?.value || 'yellow';
-  if (!text || !_notesContactId) return;
+  if (!text) return;
+  if (!_notesContactId && typeof currentModalContactId !== 'undefined' && currentModalContactId) {
+    _notesContactId = String(currentModalContactId);
+  }
+  if (!_notesContactId) { _emToast('Kontakt ID bulunamadı', 'error'); return; }
 
   try {
     const cfg   = loadFbConfig();
@@ -830,7 +834,7 @@ async function notesAdd() {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body:    JSON.stringify({ fields: {
-          contactId:    { stringValue: _notesContactId },
+          contactId:    { stringValue: String(_notesContactId) },
           text:         { stringValue: text },
           color:        { stringValue: color },
           pinned:       { booleanValue: false },

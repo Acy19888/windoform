@@ -1524,6 +1524,17 @@ async function showContactModal(id) {
   const avatarEl = document.getElementById('cont-avatar');
   if (avatarEl) avatarEl.textContent = initials;
 
+  // ── Hero name (large) ──
+  const heroNameEl = document.getElementById('cont-name');
+  if (heroNameEl) heroNameEl.textContent = c.name || '—';
+
+  // ── Status dot color ──
+  const statusDotEl = document.getElementById('cont-status-icon');
+  if (statusDotEl) {
+    const statusColors = { 'Aktif':'#4ade80', 'VIP':'#f59e0b', 'Pasif':'#94a3b8', 'Soğuk':'#60a5fa', 'Potansiyel':'#a78bfa' };
+    statusDotEl.style.color = statusColors[c.status] || '#94a3b8';
+  }
+
   // ── Subtitle: title · company ──
   const subtitleEl = document.getElementById('cont-title-sub');
   if (subtitleEl) {
@@ -1656,6 +1667,9 @@ function contSwitchTab(tab) {
     if (panel) panel.style.display = t === tab ? '' : 'none';
     if (navEl) navEl.classList.toggle('active', t === tab);
   });
+  // Scroll tab into view on mobile
+  const activeTab = document.getElementById(`cont-tab-${tab}`);
+  if (activeTab && activeTab.scrollIntoView) activeTab.scrollIntoView({ block:'nearest', inline:'nearest', behavior:'smooth' });
   // Lazy-load E-postalar und Notizen beim ersten Öffnen
   if (tab === 'emails' && currentModalContactId && typeof emailLoadContactEmails === 'function') {
     emailLoadContactEmails(currentModalContactId);
@@ -1786,6 +1800,8 @@ async function contFieldSave(field, value) {
       const initials = value.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2);
       const avatarEl = document.getElementById('cont-avatar');
       if (avatarEl) avatarEl.textContent = initials;
+      const heroNameEl = document.getElementById('cont-name');
+      if (heroNameEl) heroNameEl.textContent = value;
       // Update subtitle
       const subtitleEl = document.getElementById('cont-title-sub');
       if (subtitleEl) {
