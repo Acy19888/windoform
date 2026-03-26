@@ -695,10 +695,11 @@ async function emailDelete(emailId) {
 // ══════════════════════════════════════════════════════════════
 
 async function loadEmailsPage() {
-  const c = document.getElementById('emails-page-content');
+  const c      = document.getElementById('emails-page-content');
+  const refBtn = document.getElementById('em-refresh-btn');
   if (!c) return;
   c.innerHTML = '<div class="text-center py-5"><span class="spinner-border"></span></div>';
-
+  if (refBtn) refBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
   try {
     const cfg   = loadFbConfig();
     const token = await authToken();
@@ -750,6 +751,8 @@ async function loadEmailsPage() {
 
   } catch (e) {
     c.innerHTML = `<div class="alert alert-danger">Hata: ${esc(e.message)}</div>`;
+  } finally {
+    if (refBtn) refBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i>';
   }
 }
 
