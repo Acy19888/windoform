@@ -1519,6 +1519,20 @@ async function showContactModal(id) {
   if (typeof window !== 'undefined') window._emContactRef = c;
   const co = c.companyId ? await dbGet('companies', c.companyId) : null;
 
+  // ── Call / WhatsApp buttons ──
+  const rawPhone = c.phoneNormalized || c.phone || '';
+  const waPhone  = rawPhone.replace(/\D/g, '');
+  const callBtn  = document.getElementById('cont-call-btn');
+  const waBtn    = document.getElementById('cont-wa-btn');
+  if (callBtn) {
+    callBtn.href = rawPhone ? `tel:${rawPhone}` : '#';
+    callBtn.classList.toggle('cont-act-disabled', !rawPhone);
+  }
+  if (waBtn) {
+    waBtn.href = waPhone ? `https://wa.me/${waPhone}` : '#';
+    waBtn.classList.toggle('cont-act-disabled', !waPhone);
+  }
+
   // ── Avatar initials ──
   const initials = (c.name || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
   const avatarEl = document.getElementById('cont-avatar');

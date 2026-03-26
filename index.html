@@ -1754,15 +1754,27 @@
         </div>
 
         <!-- Action buttons -->
+        <!-- Action icon grid -->
         <div class="cont-hero-actions">
-          <button class="cont-action-btn cont-action-primary" onclick="emailCompose(window._emContactRef)">
-            <i class="bi bi-envelope-fill"></i><span>E-posta</span>
+          <button class="cont-act-icon cont-act-email" onclick="emailCompose(window._emContactRef)" title="E-posta gönder">
+            <i class="bi bi-envelope-fill"></i>
+            <span>E-posta</span>
           </button>
-          <button class="cont-action-btn" onclick="editContactModal()" title="Düzenle">
-            <i class="bi bi-pencil-fill"></i><span>Düzenle</span>
+          <a class="cont-act-icon cont-act-call" id="cont-call-btn" href="tel:" title="Ara">
+            <i class="bi bi-telephone-fill"></i>
+            <span>Ara</span>
+          </a>
+          <a class="cont-act-icon cont-act-wa" id="cont-wa-btn" href="https://wa.me/" target="_blank" title="WhatsApp">
+            <i class="bi bi-whatsapp"></i>
+            <span>WhatsApp</span>
+          </a>
+          <button class="cont-act-icon cont-act-edit" onclick="editContactModal()" title="Düzenle">
+            <i class="bi bi-pencil-fill"></i>
+            <span>Düzenle</span>
           </button>
-          <button class="cont-action-btn cont-action-danger" onclick="deleteContactModal()" title="Sil">
+          <button class="cont-act-icon cont-act-del" onclick="deleteContactModal()" title="Sil">
             <i class="bi bi-trash3-fill"></i>
+            <span>Sil</span>
           </button>
         </div>
       </div>
