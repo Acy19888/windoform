@@ -650,7 +650,7 @@
       <h1><i class="bi bi-bar-chart-line-fill me-2" style="color:#6366f1;"></i>Eleman Performansları</h1>
     </div>
     <div class="page-topbar-right d-flex gap-2 align-items-center">
-      <select id="perf-period-sel" class="form-select form-select-sm" style="width:auto;" onchange="performansLoad()">
+      <select id="perf-period-sel" class="form-select form-select-sm" style="width:auto;" onchange="if(typeof perfClearCache==='function')perfClearCache();performansLoad()">
         <option value="30">Son 30 Gün</option>
         <option value="90" selected>Son 90 Gün</option>
         <option value="180">Son 6 Ay</option>

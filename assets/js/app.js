@@ -193,6 +193,8 @@ async function _appStart() {
     if (typeof _autoRegisterCurrentUser === 'function') setTimeout(_autoRegisterCurrentUser, 2000);
     // E-Mail / Rollen / Signatur initialisieren
     if (typeof emailInit === 'function') setTimeout(emailInit, 2500);
+    // Performans verilerini arka planda önceden yükle
+    if (typeof performansPreload === 'function') setTimeout(performansPreload, 4000);
   } catch (err) {
     console.error('Başlangıç hatası:', err);
     toast('Veritabanı başlatılamadı: ' + err.message + ' — Tarayıcı izinlerini kontrol edin.', 'error');
