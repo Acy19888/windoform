@@ -418,8 +418,9 @@
         <div class="col-md-3"><input type="text" id="contact-search" class="form-control form-control-sm" placeholder="&#x1f50d;  Ad, unvan, telefon ara&#x2026;"></div>
         <div class="col-md-3"><select id="contact-company-filter" class="form-select form-select-sm"><option value="">T&#x00fc;m Firmalar</option></select></div>
         <div class="col-md-2"><select id="contact-status-filter" class="form-select form-select-sm"><option value="">T&#x00fc;m Durumlar</option><option>Aktif</option><option>Pasif</option><option>Aday</option></select></div>
-        <div class="col-md-3"><select id="contact-date-filter" class="form-select form-select-sm" onchange="loadContacts()"><option value="">T&#x00fc;m Tarihler</option><option value="today">Bug&#x00fc;n Eklenen</option><option value="week">Bu Hafta</option><option value="month">Bu Ay</option></select></div>
-        <div class="col-md-1"><button class="btn btn-sm btn-outline-secondary w-100" onclick="clearContactFilters()" title="Temizle"><i class="bi bi-x-circle"></i></button></div>
+        <div class="col-md-2"><select id="contact-date-filter" class="form-select form-select-sm" onchange="loadContacts()"><option value="">T&#x00fc;m Tarihler</option><option value="today">Bug&#x00fc;n Eklenen</option><option value="week">Bu Hafta</option><option value="month">Bu Ay</option></select></div>
+        <div class="col-md-2"><select id="contact-creator-filter" class="form-select form-select-sm" onchange="loadContacts()"><option value="">T&#x00fc;m Ekleyenler</option></select></div>
+        <div class="col-md-auto"><button class="btn btn-sm btn-outline-secondary" onclick="clearContactFilters()" title="Temizle"><i class="bi bi-x-circle"></i></button></div>
       </div>
     </div>
     <div class="table-wrapper">

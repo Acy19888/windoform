@@ -851,6 +851,8 @@ function clearContactFilters() {
   document.getElementById('contact-status-filter').value = '';
   const dtEl = document.getElementById('contact-date-filter');
   if (dtEl) dtEl.value = '';
+  const crEl = document.getElementById('contact-creator-filter');
+  if (crEl) crEl.value = '';
   loadContacts();
 }
 
@@ -1448,6 +1450,19 @@ async function loadContacts() {
   const cf  = document.getElementById('contact-company-filter')?.value || '';
   const st  = document.getElementById('contact-status-filter')?.value || '';
   const dtf = document.getElementById('contact-date-filter')?.value || '';
+  const crf = document.getElementById('contact-creator-filter')?.value || '';
+
+  // Dynamically populate creator filter dropdown from all contacts
+  const creatorSel = document.getElementById('contact-creator-filter');
+  if (creatorSel) {
+    const allCreators = [...new Set(cons.map(c => c.createdBy).filter(Boolean))].sort();
+    const curVal = creatorSel.value;
+    creatorSel.innerHTML = '<option value="">Tüm Ekleyenler</option>' +
+      allCreators.map(cr => {
+        const label = cr.includes('@') ? cr.split('@')[0] : cr;
+        return `<option value="${esc(cr)}" ${cr === curVal ? 'selected' : ''}>${esc(label)}</option>`;
+      }).join('');
+  }
 
   // Date range for filter
   const now = new Date();
@@ -1462,6 +1477,7 @@ async function loadContacts() {
     if (cf && (!co || co.name !== cf)) return false;
     if (st && c.status !== st) return false;
     if (dateFrom && c.createdAt && new Date(c.createdAt) < dateFrom) return false;
+    if (crf && c.createdBy !== crf) return false;
     return true;
   });
 
