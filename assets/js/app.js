@@ -1508,7 +1508,10 @@ async function loadContacts() {
           <small style="font-size:11px;color:#9ca3af;">${q}</small>
         </div>
       </td>
-      <td onclick="showContactModal(${c.id})" style="font-size:11px;color:#9ca3af;white-space:nowrap;">${c.createdAt ? new Date(c.createdAt).toLocaleDateString('tr-TR') : '-'}</td>
+      <td onclick="showContactModal(${c.id})" style="font-size:11px;color:#9ca3af;white-space:nowrap;">
+        <div>${c.createdAt ? new Date(c.createdAt).toLocaleDateString('tr-TR') : '-'}</div>
+        ${c.createdBy ? `<div style="color:#6366f1;font-weight:500;">${esc(c.createdBy.includes('@') ? c.createdBy.split('@')[0] : c.createdBy)}</div>` : ''}
+      </td>
       <td><button class="icon-btn" onclick="showContactModal(${c.id})" title="Görüntüle"><i class="bi bi-eye"></i></button></td>`;
     frag.appendChild(tr);
   });
@@ -1930,6 +1933,7 @@ async function saveContact(e) {
   const cid = cn ? (cos.find(c => trLow(c.name) === trLow(cn))?.id || null) : null;
   const c = buildContactObj('act', null, pd, ph, cid);
   c.createdAt = new Date().toISOString();
+  c.createdBy = (typeof authEmail === 'function' ? authEmail() : '') || '';
   c.qualityScore = calculateContactQuality(c);
   await dbAdd('contacts', c);
   toast('Kişi eklendi');
@@ -1946,6 +1950,7 @@ async function saveEditedContact() {
   const existing = await dbGet('contacts', oldId);
   const c = buildContactObj('ect', oldId, pd, ph, cid);
   c.createdAt  = existing?.createdAt || new Date().toISOString();
+  c.createdBy  = existing?.createdBy || (typeof authEmail === 'function' ? authEmail() : '') || '';
   c.sourceFile = existing?.sourceFile || null;
   c.qualityScore = calculateContactQuality(c);
   await dbPut('contacts', c);
@@ -2385,6 +2390,7 @@ async function doImportPreCheck() {
             errors:          [],
             createdAt:       now,
             updatedAt:       now,
+            createdBy:       (typeof authEmail === 'function' ? authEmail() : '') || '',
             sourceFile:      'Excel İçe Aktarım'
           }
         });
