@@ -109,7 +109,7 @@ let importDuplicates = [];
 let importPendingNonDupes = [];
 let importPendingContacts = [];
 let compSort = { field: 'name', asc: true };
-let contSort = { field: 'name', asc: true };
+let contSort = { field: 'createdAt', asc: false }; // default: newest first
 
 /* ===================== BAŞLANGIÇ ===================== */
 document.addEventListener('DOMContentLoaded', async () => {
@@ -849,6 +849,8 @@ function clearContactFilters() {
   document.getElementById('contact-search').value = '';
   document.getElementById('contact-company-filter').value = '';
   document.getElementById('contact-status-filter').value = '';
+  const dtEl = document.getElementById('contact-date-filter');
+  if (dtEl) dtEl.value = '';
   loadContacts();
 }
 
@@ -1442,23 +1444,34 @@ async function loadContacts() {
   const [cons, cos] = await Promise.all([dbAll('contacts'), dbAll('companies')]);
   const compMap = new Map(cos.map(c => [c.id, c]));
 
-  const s  = trLow(document.getElementById('contact-search')?.value || '');
-  const cf = document.getElementById('contact-company-filter')?.value || '';
-  const st = document.getElementById('contact-status-filter')?.value || '';
+  const s   = trLow(document.getElementById('contact-search')?.value || '');
+  const cf  = document.getElementById('contact-company-filter')?.value || '';
+  const st  = document.getElementById('contact-status-filter')?.value || '';
+  const dtf = document.getElementById('contact-date-filter')?.value || '';
+
+  // Date range for filter
+  const now = new Date();
+  const dateFrom = dtf === 'today' ? new Date(now.getFullYear(), now.getMonth(), now.getDate())
+                 : dtf === 'week'  ? new Date(now - 7 * 86400000)
+                 : dtf === 'month' ? new Date(now.getFullYear(), now.getMonth(), 1)
+                 : null;
 
   let f = cons.filter(c => {
     if (s && !trLow(c.name||'').includes(s) && !trLow(c.title||'').includes(s) && !trLow(c.phone||'').includes(s)) return false;
     const co = compMap.get(c.companyId);
     if (cf && (!co || co.name !== cf)) return false;
     if (st && c.status !== st) return false;
+    if (dateFrom && c.createdAt && new Date(c.createdAt) < dateFrom) return false;
     return true;
   });
 
   // Sıralama
   const { field, asc } = contSort;
   f.sort((a,b) => {
-    let av = field === 'quality' ? (a.qualityScore||0) : trLow(a.name||'');
-    let bv = field === 'quality' ? (b.qualityScore||0) : trLow(b.name||'');
+    let av, bv;
+    if (field === 'quality')   { av = a.qualityScore||0; bv = b.qualityScore||0; }
+    else if (field === 'createdAt') { av = a.createdAt||''; bv = b.createdAt||''; }
+    else                       { av = trLow(a.name||''); bv = trLow(b.name||''); }
     if (av < bv) return asc ? -1 : 1;
     if (av > bv) return asc ? 1 : -1;
     return 0;
@@ -1468,7 +1481,7 @@ async function loadContacts() {
   const b = document.getElementById('contacts-table-body');
 
   if (f.length === 0) {
-    b.innerHTML = `<tr><td colspan="7"><div class="empty-state"><i class="bi bi-people"></i>${s||cf||st?'Arama sonucu bulunamadı':'Henüz kişi eklenmedi'}</div></td></tr>`;
+    b.innerHTML = `<tr><td colspan="8"><div class="empty-state"><i class="bi bi-people"></i>${s||cf||st||dtf?'Arama sonucu bulunamadı':'Henüz kişi eklenmedi'}</div></td></tr>`;
     return;
   }
 
@@ -1495,6 +1508,7 @@ async function loadContacts() {
           <small style="font-size:11px;color:#9ca3af;">${q}</small>
         </div>
       </td>
+      <td onclick="showContactModal(${c.id})" style="font-size:11px;color:#9ca3af;white-space:nowrap;">${c.createdAt ? new Date(c.createdAt).toLocaleDateString('tr-TR') : '-'}</td>
       <td><button class="icon-btn" onclick="showContactModal(${c.id})" title="Görüntüle"><i class="bi bi-eye"></i></button></td>`;
     frag.appendChild(tr);
   });
@@ -1666,12 +1680,16 @@ async function showContactModal(id) {
 
   // Expose so email.js can refresh timeline when notes change
   window._contRenderTimeline = _renderFbPanels;
-  window._cmNotes = []; // reset for this contact
+  window._cmNotes = [];         // reset notes cache for this contact
+  window._fbPanelsRendered = false; // flag: true once Fuarbot data has rendered
 
   // ── Render cached data immediately, then async fetch ──
   _renderFbPanels();
 
-  // ── Load CRM notes in background so they appear in Aktiviteler timeline ──
+  // ── Load CRM notes silently in background ──
+  // notesLoad will set window._cmNotes; if Fuarbot has already rendered it
+  // calls _contRenderTimeline to merge notes in. If not yet rendered, the
+  // Fuarbot callback below will call _renderFbPanels (which reads _cmNotes).
   if (typeof notesLoad === 'function') {
     notesLoad(id, true).catch(() => {});
   }
@@ -1688,7 +1706,10 @@ async function showContactModal(id) {
             fbAllCustomersRaw.push(fbCust);
           }
           // Show whatever cached activities exist already
-          if (currentModalContactId === id) _renderFbPanels();
+          if (currentModalContactId === id) {
+            window._fbPanelsRendered = true;
+            _renderFbPanels();
+          }
         }
       } catch(e) {}
     }
@@ -1696,8 +1717,16 @@ async function showContactModal(id) {
     if (fbCust?._id && typeof fbFetchContactData === 'function') {
       try {
         await fbFetchContactData(fbCust._id);
-        if (currentModalContactId === id) _renderFbPanels();
+        if (currentModalContactId === id) {
+          window._fbPanelsRendered = true;
+          _renderFbPanels();
+        }
       } catch(e) {}
+    }
+    // If no Fuarbot data found at all, still render with just notes
+    if (!fbCust && currentModalContactId === id) {
+      window._fbPanelsRendered = true;
+      _renderFbPanels();
     }
   })();
 
