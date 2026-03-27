@@ -1614,6 +1614,12 @@ async function showContactModal(id) {
     sourceEl.textContent = src || '-';
   }
 
+  const createdByEl = document.getElementById('cont-created-by');
+  if (createdByEl) {
+    const cb = c.createdBy || '';
+    createdByEl.textContent = cb ? (cb.includes('@') ? cb.split('@')[0] + ' (' + cb + ')' : cb) : '-';
+  }
+
   // Reset to Timeline tab
   contSwitchTab('timeline');
 
