@@ -96,8 +96,9 @@
     </div>
   </div>
   <nav>
+    <a href="#" data-page="home"       onclick="showPage('home');return false;"><i class="bi bi-house-fill"></i>Home</a>
     <a href="#" data-page="dashboard"  onclick="showPage('dashboard');return false;"><i class="bi bi-graph-up"></i>Dashboard</a>
-    <a href="#" data-page="companies"  onclick="showPage('companies');return false;" class="active"><i class="bi bi-building"></i>Firmalar</a>
+    <a href="#" data-page="companies"  onclick="showPage('companies');return false;"><i class="bi bi-building"></i>Firmalar</a>
     <a href="#" data-page="contacts"   onclick="showPage('contacts');return false;"><i class="bi bi-people"></i>&#x4b;i&#x15f;iler</a>
   </nav>
   <div class="divider"></div>
@@ -209,6 +210,351 @@
 </div>
 
 <!-- DASHBOARD -->
+<!-- ══════════════════════════════════════════════════════
+     HOME PAGE
+════════════════════════════════════════════════════════ -->
+<div id="home" class="page">
+<style>
+/* ── Home Page Styles ────────────────────────────────── */
+#home {
+  background: #f0f4f8;
+  min-height: 100vh;
+  padding-bottom: 40px;
+}
+.home-hero {
+  background: linear-gradient(135deg, #2B5597 0%, #1a3a6e 60%, #0f2549 100%);
+  padding: 28px 24px 80px;
+  position: relative;
+  overflow: hidden;
+}
+.home-hero::before {
+  content: '';
+  position: absolute;
+  top: -40px; right: -40px;
+  width: 220px; height: 220px;
+  background: rgba(255,255,255,.06);
+  border-radius: 50%;
+}
+.home-hero::after {
+  content: '';
+  position: absolute;
+  bottom: -60px; left: 30%;
+  width: 300px; height: 300px;
+  background: rgba(255,255,255,.04);
+  border-radius: 50%;
+}
+.home-hero-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  position: relative; z-index: 1;
+}
+.home-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.home-logo img {
+  width: 38px; height: 38px;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
+}
+.home-logo-text {
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -.3px;
+}
+.home-logo-sub {
+  color: rgba(255,255,255,.6);
+  font-size: 11px;
+}
+.home-weather-widget {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255,255,255,.12);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,.15);
+  border-radius: 12px;
+  padding: 8px 12px;
+  min-width: 130px;
+}
+.home-weather-icon { font-size: 26px; line-height: 1; }
+.home-weather-info {}
+.home-weather-temp { color: #fff; font-size: 18px; font-weight: 700; line-height: 1.2; }
+.home-weather-city { color: rgba(255,255,255,.7); font-size: 10px; white-space: nowrap; }
+.home-weather-meta { color: rgba(255,255,255,.6); font-size: 10px; display: flex; gap: 8px; margin-top: 2px; }
+
+.home-greeting-area {
+  position: relative; z-index: 1;
+  color: #fff;
+}
+.home-greeting { font-size: 22px; font-weight: 700; margin-bottom: 3px; }
+.home-date     { font-size: 13px; color: rgba(255,255,255,.65); }
+
+/* Stat row floating over hero */
+.home-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin: -44px 16px 0;
+  position: relative; z-index: 2;
+}
+@media (max-width: 600px) {
+  .home-stats-row { grid-template-columns: repeat(2, 1fr); }
+}
+.home-stat-card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 14px 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.1);
+  text-align: center;
+  cursor: pointer;
+  transition: transform .15s, box-shadow .15s;
+}
+.home-stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.14); }
+.home-stat-icon {
+  width: 38px; height: 38px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px;
+  margin: 0 auto 8px;
+}
+.home-stat-icon.blue   { background: #dbeafe; color: #2563eb; }
+.home-stat-icon.green  { background: #d1fae5; color: #059669; }
+.home-stat-icon.amber  { background: #fef3c7; color: #d97706; }
+.home-stat-icon.purple { background: #ede9fe; color: #7c3aed; }
+.home-stat-val   { font-size: 20px; font-weight: 700; color: #0f172a; line-height: 1.1; }
+.home-stat-label { font-size: 10px; color: #94a3b8; margin-top: 2px; font-weight: 500; text-transform: uppercase; letter-spacing: .5px; }
+
+/* Content area */
+.home-content { padding: 20px 16px 0; }
+
+/* Section cards */
+.home-section {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(0,0,0,.06);
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+.home-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.home-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+}
+.home-section-icon {
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+}
+.home-section-link {
+  font-size: 12px;
+  color: #2B5597;
+  text-decoration: none;
+  font-weight: 500;
+}
+.home-section-link:hover { text-decoration: underline; }
+
+/* List items */
+.home-list-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #f8fafc;
+  cursor: pointer;
+  transition: background .1s;
+}
+.home-list-item:last-child { border-bottom: none; }
+.home-list-item:hover { background: #f8fafc; }
+.home-list-icon {
+  width: 30px; height: 30px; flex-shrink: 0;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700;
+}
+.home-list-icon.in   { background: #d1fae5; color: #059669; }
+.home-list-icon.out  { background: #dbeafe; color: #2563eb; }
+.home-list-icon.task { flex-shrink: 0; }
+.home-list-icon.prod { background: #f1f5f9; color: #475569; }
+.home-list-body  { flex: 1; min-width: 0; }
+.home-list-title { font-size: 13px; font-weight: 500; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.home-list-sub   { font-size: 11px; color: #94a3b8; margin-top: 1px; }
+.home-list-sub.overdue { color: #ef4444; }
+.home-list-time  { font-size: 11px; color: #94a3b8; flex-shrink: 0; }
+.home-list-badge { font-size: 12px; font-weight: 600; color: #2B5597; flex-shrink: 0; background: #eff6ff; padding: 2px 8px; border-radius: 99px; }
+.home-empty { padding: 16px; text-align: center; color: #94a3b8; font-size: 13px; }
+
+/* Revenue cards */
+.home-rev-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.home-rev-card { text-align: center; }
+.home-rev-val   { font-size: 16px; font-weight: 700; color: #2B5597; }
+.home-rev-label { font-size: 10px; color: #94a3b8; margin-top: 2px; text-transform: uppercase; letter-spacing: .4px; }
+
+/* Chart */
+.home-chart-wrap { padding: 12px 16px; height: 160px; }
+
+/* 2-col grid for larger screens */
+.home-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+@media (max-width: 700px) {
+  .home-grid-2 { grid-template-columns: 1fr; }
+  .home-stats-row { margin: -44px 12px 0; }
+  .home-hero { padding: 24px 16px 72px; }
+}
+</style>
+
+  <!-- ── HERO ── -->
+  <div class="home-hero">
+    <div class="home-hero-top">
+      <div class="home-logo">
+        <img src="./assets/img/windoform-logo.png" onerror="this.style.display='none'" alt="W">
+        <div>
+          <div class="home-logo-text">Windoform</div>
+          <div class="home-logo-sub">CRM System</div>
+        </div>
+      </div>
+      <div id="home-weather" class="home-weather-widget">
+        <div class="home-weather-icon">🌤️</div>
+        <div class="home-weather-info">
+          <div class="home-weather-temp">…</div>
+          <div class="home-weather-city">Wird geladen</div>
+        </div>
+      </div>
+    </div>
+    <div class="home-greeting-area">
+      <div class="home-greeting" id="home-greeting">Willkommen 👋</div>
+      <div class="home-date" id="home-date"></div>
+    </div>
+  </div>
+
+  <!-- ── STAT CARDS ── -->
+  <div class="home-stats-row">
+    <div class="home-stat-card" onclick="showPage('contacts')">
+      <div class="home-stat-icon blue"><i class="bi bi-people-fill"></i></div>
+      <div class="home-stat-val" id="home-stat-contacts">—</div>
+      <div class="home-stat-label">Kontakte</div>
+    </div>
+    <div class="home-stat-card" onclick="showPage('emails')">
+      <div class="home-stat-icon green"><i class="bi bi-envelope-fill"></i></div>
+      <div class="home-stat-val" id="home-stat-emails-today">—</div>
+      <div class="home-stat-label">E-Mails heute</div>
+    </div>
+    <div class="home-stat-card" onclick="showPage('uretim')">
+      <div class="home-stat-icon amber"><i class="bi bi-gear-fill"></i></div>
+      <div class="home-stat-val" id="home-stat-prod">—</div>
+      <div class="home-stat-label">Prod. heute</div>
+    </div>
+    <div class="home-stat-card" onclick="showPage('companies')">
+      <div class="home-stat-icon purple"><i class="bi bi-building"></i></div>
+      <div class="home-stat-val" id="home-stat-companies">—</div>
+      <div class="home-stat-label">Firmen</div>
+    </div>
+  </div>
+
+  <!-- ── MAIN CONTENT ── -->
+  <div class="home-content">
+
+    <!-- Revenue (Admin only) -->
+    <div id="home-revenue-area" class="home-section" style="display:none;">
+      <div class="home-section-header">
+        <div class="home-section-title">
+          <div class="home-section-icon" style="background:#dbeafe;color:#2B5597;">💶</div>
+          Umsatz – letzte 6 Monate
+        </div>
+        <a href="#" class="home-section-link" onclick="showPage('teklifler');return false;">Alle →</a>
+      </div>
+      <div class="home-rev-cards">
+        <div class="home-rev-card">
+          <div class="home-rev-val" id="home-rev-total">—</div>
+          <div class="home-rev-label">Gesamt</div>
+        </div>
+        <div class="home-rev-card">
+          <div class="home-rev-val" id="home-rev-month">—</div>
+          <div class="home-rev-label">Dieser Monat</div>
+        </div>
+        <div class="home-rev-card">
+          <div class="home-rev-val" id="home-rev-count">—</div>
+          <div class="home-rev-label">Angebote</div>
+        </div>
+      </div>
+      <div class="home-chart-wrap">
+        <canvas id="home-rev-chart"></canvas>
+      </div>
+    </div>
+
+    <div class="home-grid-2">
+
+      <!-- Emails -->
+      <div class="home-section">
+        <div class="home-section-header">
+          <div class="home-section-title">
+            <div class="home-section-icon" style="background:#d1fae5;color:#059669;">✉️</div>
+            Letzte E-Mails
+          </div>
+          <a href="#" class="home-section-link" onclick="showPage('emails');return false;">Alle →</a>
+        </div>
+        <div id="home-email-list">
+          <div class="home-empty"><span class="spinner-border spinner-border-sm text-muted"></span></div>
+        </div>
+      </div>
+
+      <!-- Tasks -->
+      <div class="home-section">
+        <div class="home-section-header">
+          <div class="home-section-title">
+            <div class="home-section-icon" style="background:#fef3c7;color:#d97706;">✅</div>
+            Offene Aufgaben
+            <span id="home-stat-tasks" style="background:#fee2e2;color:#dc2626;font-size:11px;padding:1px 7px;border-radius:99px;font-weight:600;"></span>
+          </div>
+        </div>
+        <div id="home-task-list">
+          <div class="home-empty"><span class="spinner-border spinner-border-sm text-muted"></span></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Production -->
+    <div class="home-section">
+      <div class="home-section-header">
+        <div class="home-section-title">
+          <div class="home-section-icon" style="background:#f1f5f9;color:#475569;">⚙️</div>
+          Produktion – Top Produkte
+        </div>
+        <a href="#" class="home-section-link" onclick="showPage('uretim');return false;">Details →</a>
+      </div>
+      <div id="home-prod-list">
+        <div class="home-empty"><span class="spinner-border spinner-border-sm text-muted"></span></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 <div id="dashboard" class="page">
   <div class="page-topbar">
     <div class="page-topbar-left"><h1>Dashboard</h1></div>
@@ -2084,6 +2430,7 @@
 <script src="./assets/js/leads.js"></script>
 <script src="./assets/js/email.js?v=20260326c"></script>
 <script src="./assets/js/performans.js?v=20260325a"></script>
+<script src="./assets/js/home.js?v=20260330a"></script>
 <script>document.addEventListener('DOMContentLoaded', () => { initChatbot(); });</script>
 
 <!-- ══════════════════════════════════════════

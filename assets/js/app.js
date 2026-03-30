@@ -185,9 +185,10 @@ async function _appStart() {
 
   try {
     await initDB();
+    // Show home dashboard immediately
+    showPage('home');
     // Pull data from Firestore if local is empty (new browser)
     if (typeof syncFromFirestore === 'function') await syncFromFirestore();
-    await loadCompanies();
     // Start Fuarbot background sync so activities/quotes are always fresh
     if (typeof fbBackgroundSync === 'function') setTimeout(fbBackgroundSync, 1500);
     if (typeof _autoRegisterCurrentUser === 'function') setTimeout(_autoRegisterCurrentUser, 2000);
@@ -752,6 +753,7 @@ function showPage(name) {
 
   // Firestore-only pages — kein IndexedDB nötig, immer ausführen
   if (name === 'emails') { if (typeof loadEmailsPage === 'function') loadEmailsPage(); return; }
+  if (name === 'home')           { if (typeof loadHome === 'function') loadHome(); return; }
   if (name === 'ayarlar') { loadAyarlar(); if(typeof signatureSettingsInit==='function') signatureSettingsInit(); if(typeof roleSettingsInit==='function') roleSettingsInit(); return; }
   if (name === 'fuarbot')        { loadFuarbotPage(); return; }
   if (name === 'fuar-dashboard') { loadFuarDashboard(); return; }
