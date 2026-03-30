@@ -446,6 +446,20 @@ async function emailSend() {
     _emToast('✓ E-posta gönderildi', 'success');
     bootstrap.Modal.getOrCreateInstance(document.getElementById('emailComposeModal')).hide();
 
+    // Check if recipient is already a CRM contact — if not, prompt to add
+    try {
+      if (typeof dbAll === 'function') {
+        const allContacts = await dbAll('contacts');
+        const toEmail = to.trim().toLowerCase();
+        const exists  = allContacts.some(c => c.email?.trim().toLowerCase() === toEmail);
+        if (!exists) {
+          // Extract name from display: "Name <email>" or just email
+          const nameGuess = (_emContact?.name && _emContact.name !== to) ? _emContact.name : '';
+          _emShowAddContactPrompt(to, nameGuess);
+        }
+      }
+    } catch (_) {}
+
     // Inbox neu laden falls offen
     if (contactId) emailLoadContactEmails(contactId);
     // Globale E-Posta Seite neu laden
@@ -1312,4 +1326,39 @@ function signatureAutoGenerate() {
 function _emToast(msg, type = 'info') {
   if (typeof toast === 'function') toast(msg, type === 'error' ? 'danger' : type);
   else alert(msg);
+}
+
+function _emShowAddContactPrompt(email, nameGuess) {
+  // Remove any existing prompt
+  document.getElementById('_em-add-contact-prompt')?.remove();
+
+  const banner = document.createElement('div');
+  banner.id = '_em-add-contact-prompt';
+  banner.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9999;background:#fff;border:1.5px solid #6366f1;border-radius:12px;box-shadow:0 4px 24px rgba(99,102,241,.18);padding:14px 18px;max-width:340px;display:flex;align-items:center;gap:12px;';
+  banner.innerHTML = `
+    <i class="bi bi-person-plus-fill" style="font-size:1.4rem;color:#6366f1;flex-shrink:0;"></i>
+    <div style="flex:1;min-width:0;">
+      <div style="font-weight:600;font-size:13px;color:#1e293b;">CRM'de kayıtlı değil</div>
+      <div style="font-size:12px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(email)}</div>
+    </div>
+    <button onclick="_emQuickAddContact('${esc(email)}','${esc(nameGuess)}')" style="background:#6366f1;color:#fff;border:none;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">+ Ekle</button>
+    <button onclick="document.getElementById('_em-add-contact-prompt')?.remove()" style="background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;line-height:1;padding:0 2px;">×</button>
+  `;
+  document.body.appendChild(banner);
+  // Auto-dismiss after 12 seconds
+  setTimeout(() => banner.remove(), 12000);
+}
+
+function _emQuickAddContact(email, nameGuess) {
+  document.getElementById('_em-add-contact-prompt')?.remove();
+  // Navigate to add-contact page and pre-fill email/name
+  if (typeof showPage === 'function') showPage('add-contact');
+  setTimeout(() => {
+    const emailEl = document.getElementById('act-email');
+    const nameEl  = document.getElementById('act-name');
+    if (emailEl) emailEl.value = email;
+    if (nameEl && nameGuess) nameEl.value = nameGuess;
+    // Focus on name field
+    (nameEl || emailEl)?.focus();
+  }, 350);
 }
