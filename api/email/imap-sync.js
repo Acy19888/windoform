@@ -45,8 +45,8 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, saved: 0, skipped: 0 });
       }
 
-      // Fetch last 50 messages (most recent)
-      const start = Math.max(1, total - 49);
+      // Fetch last 20 messages (most recent) — keep short to avoid Vercel timeout
+      const start = Math.max(1, total - 19);
       const range = `${start}:${total}`;
 
       console.log(`[imap-sync] Fetching seq ${range} (total=${total})`);

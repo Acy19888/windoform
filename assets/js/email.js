@@ -702,8 +702,19 @@ async function loadEmailsPage() {
   c.innerHTML = '<div class="text-center py-5"><span class="spinner-border"></span></div>';
   if (refBtn) refBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
   try {
-    // Sync latest emails from Gmail IMAP first (errors ignored — still shows cached)
-    try { await fetch('/api/email/imap-sync'); } catch (_) {}
+    // Sync latest emails from Gmail IMAP first
+    try {
+      const syncRes  = await fetch('/api/email/imap-sync');
+      const syncData = await syncRes.json().catch(() => ({}));
+      if (!syncData.ok && syncData.error) {
+        console.warn('[imap-sync] error:', syncData.error);
+        _emToast(`IMAP Sync Hatası: ${syncData.error}`, 'danger');
+      } else if (syncData.ok && syncData.saved > 0) {
+        _emToast(`${syncData.saved} yeni e-posta alındı`, 'success');
+      }
+    } catch (syncErr) {
+      console.warn('[imap-sync] fetch error:', syncErr.message);
+    }
 
     const cfg   = loadFbConfig();
     const token = await authToken();
