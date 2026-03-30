@@ -15,8 +15,9 @@ let _userEmailAddr  = '';
 let _userDispName   = '';
 let _rolePerms      = {};
 let _notesContactId = null;
-let _emailPageAll   = [];
+let _emailPageAll    = [];
 let _emailContactMap = {}; // email → display name cache
+let _emailPageFilter = 'inbound'; // current active tab filter
 
 const _DEFAULT_PERMS = {
   admin: ['dashboard','companies','contacts','fuarbot','fuar-dashboard','fuar-users',
@@ -717,19 +718,19 @@ async function loadEmailsPage() {
   c.innerHTML = '<div class="text-center py-5"><span class="spinner-border"></span></div>';
   if (refBtn) refBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
   try {
-    // Sync latest emails from Gmail IMAP first
-    try {
-      const syncRes  = await fetch('/api/email/imap-sync');
-      const syncData = await syncRes.json().catch(() => ({}));
-      if (!syncData.ok && syncData.error) {
-        console.warn('[imap-sync] error:', syncData.error);
-        _emToast(`IMAP Sync Hatası: ${syncData.error}`, 'danger');
-      } else if (syncData.ok && syncData.saved > 0) {
-        _emToast(`${syncData.saved} yeni e-posta alındı`, 'success');
-      }
-    } catch (syncErr) {
-      console.warn('[imap-sync] fetch error:', syncErr.message);
-    }
+    // Start IMAP sync in background — don't wait for it before rendering
+    fetch('/api/email/imap-sync')
+      .then(r => r.json()).catch(() => ({}))
+      .then(syncData => {
+        if (!syncData.ok && syncData.error) {
+          console.warn('[imap-sync] error:', syncData.error);
+          _emToast(`IMAP Sync Hatası: ${syncData.error}`, 'danger');
+        } else if (syncData.ok && syncData.saved > 0) {
+          _emToast(`${syncData.saved} yeni e-posta alındı`, 'success');
+          // Silently refresh the list with new emails
+          _refreshEmailListSilent();
+        }
+      });
 
     const cfg   = loadFbConfig();
     const token = await authToken();
@@ -797,7 +798,47 @@ async function loadEmailsPage() {
   }
 }
 
+// Silently reload email list after background IMAP sync completes
+async function _refreshEmailListSilent() {
+  try {
+    const cfg   = loadFbConfig();
+    const token = await authToken();
+    const res   = await fetch(
+      `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents:runQuery?key=${cfg.apiKey}`,
+      {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ structuredQuery: {
+          from:    [{ collectionId: _EM_COL }],
+          orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'DESCENDING' }],
+          limit:   200,
+        }}),
+      }
+    );
+    const rows = await res.json();
+    _emailPageAll = _parseEmailRows(rows);
+    // Re-render whichever tab is active
+    const list = document.getElementById('em-page-list');
+    if (!list) return;
+    let data = _emailPageAll;
+    if (_emailPageFilter === 'inbound')  data = data.filter(e => e.direction === 'inbound');
+    if (_emailPageFilter === 'outbound') data = data.filter(e => e.direction === 'outbound');
+    list.innerHTML = data.length
+      ? data.map(_renderEmailPageItem).join('')
+      : '<div class="em-empty-state"><i class="bi bi-inbox"></i><div>Henüz e-posta yok</div></div>';
+    // Update counts
+    const inboundCnt  = _emailPageAll.filter(e => e.direction === 'inbound').length;
+    const outboundCnt = _emailPageAll.filter(e => e.direction === 'outbound').length;
+    document.querySelectorAll('#em-page-tabs .em-tab-btn').forEach(btn => {
+      const f = btn.dataset?.filter || 'all';
+      const badge = btn.querySelector('.badge');
+      if (badge) badge.textContent = f === 'inbound' ? inboundCnt : f === 'outbound' ? outboundCnt : _emailPageAll.length;
+    });
+  } catch (_) {}
+}
+
 function emailPageFilter(f, el) {
+  _emailPageFilter = f;
   document.querySelectorAll('#em-page-tabs .em-tab-btn').forEach(l => l.classList.remove('active'));
   el.classList.add('active');
   const list = document.getElementById('em-page-list');
