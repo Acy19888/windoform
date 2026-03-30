@@ -736,19 +736,34 @@ async function loadEmailsPage() {
 
     const cfg   = loadFbConfig();
     const token = await authToken();
-    const res   = await fetch(
-      `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents:runQuery?key=${cfg.apiKey}`,
-      {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ structuredQuery: {
-          from:    [{ collectionId: _EM_COL }],
-          orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'DESCENDING' }],
-          limit:   200,
-        }}),
-      }
-    );
-    const rows   = await res.json();
+
+    // Try with auth token first, then fallback to API-key-only if permission denied
+    let rows;
+    const queryBody = JSON.stringify({ structuredQuery: {
+      from:    [{ collectionId: _EM_COL }],
+      orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'DESCENDING' }],
+      limit:   200,
+    }});
+    const fsUrl = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents:runQuery?key=${cfg.apiKey}`;
+
+    const res1 = await fetch(fsUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: queryBody,
+    });
+    rows = await res1.json();
+
+    // If result is an error object (permission denied etc), try without auth header
+    if (!Array.isArray(rows) || rows[0]?.error) {
+      console.warn('[emails] Auth query failed, trying without token:', rows);
+      const res2 = await fetch(fsUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: queryBody,
+      });
+      rows = await res2.json();
+    }
+
     _emailPageAll = _parseEmailRows(rows);
 
     // Build email→name lookup from contacts (for display names)
@@ -805,19 +820,20 @@ async function _refreshEmailListSilent() {
   try {
     const cfg   = loadFbConfig();
     const token = await authToken();
-    const res   = await fetch(
-      `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents:runQuery?key=${cfg.apiKey}`,
-      {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ structuredQuery: {
-          from:    [{ collectionId: _EM_COL }],
-          orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'DESCENDING' }],
-          limit:   200,
-        }}),
-      }
-    );
-    const rows = await res.json();
+    const qBody = JSON.stringify({ structuredQuery: {
+      from:    [{ collectionId: _EM_COL }],
+      orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'DESCENDING' }],
+      limit:   200,
+    }});
+    const fsUrl = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents:runQuery?key=${cfg.apiKey}`;
+    let rows = await (await fetch(fsUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: qBody,
+    })).json();
+    if (!Array.isArray(rows) || rows[0]?.error) {
+      rows = await (await fetch(fsUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: qBody })).json();
+    }
     _emailPageAll = _parseEmailRows(rows);
     // Re-render whichever tab is active
     const list = document.getElementById('em-page-list');
