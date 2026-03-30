@@ -24,13 +24,14 @@ let _emailCacheTs    = 0;          // timestamp of last Firestore fetch (ms)
 const _EMAIL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 const _DEFAULT_PERMS = {
-  admin: ['dashboard','companies','contacts','fuarbot','fuar-dashboard','fuar-users',
+  admin: ['home','dashboard','companies','contacts','fuarbot','fuar-dashboard','fuar-users',
           'leads','teklifler','fatura','urunler','uretim','import','reports',
           'duplicates','add-company','add-contact','ayarlar','emails'],
-  sales: ['dashboard','companies','contacts','teklifler','fatura','leads','emails'],
+  sales: ['home','dashboard','companies','contacts','teklifler','fatura','leads','emails'],
 };
 
 const _ALL_PAGES = [
+  { id:'home',          label:'Home',               icon:'bi-house-fill' },
   { id:'dashboard',     label:'Dashboard',          icon:'bi-graph-up' },
   { id:'companies',     label:'Firmalar',            icon:'bi-building' },
   { id:'contacts',      label:'Kişiler',             icon:'bi-people' },
