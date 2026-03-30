@@ -750,6 +750,9 @@ let fbDashDateFilter = 'month'; // 'today'|'week'|'month'|'year'|'all'|'custom'
 let fbDashDateFrom = '', fbDashDateTo = '';
 
 function loadFuarDashboard() {
+  // Also trigger main dashboard's Fuarbot stats (fb-stat-* + fb-dash-recent)
+  if (typeof loadDashboard === 'function') loadDashboard();
+
   const cfg = loadFbConfig();
   if (!cfg?.apiKey) {
     document.getElementById('fuar-dash-nodata').style.display = '';

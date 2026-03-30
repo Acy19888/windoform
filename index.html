@@ -290,62 +290,6 @@
         </div>
       </div>
     </div>
-    <!-- Fuarbot Canlı Özet -->
-    <div class="row mb-2" id="fuarbot-dash-section">
-      <div class="col-12 mb-2">
-        <div class="d-flex align-items-center gap-2">
-          <span class="fw-semibold" style="font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;"><i class="bi bi-qr-code-scan me-1"></i>Fuarbot Canlı</span>
-          <span id="fuarbot-dash-badge" class="badge bg-success" style="display:none;font-size:11px;">CANLI</span>
-          <button class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:11px;" onclick="loadDashboard()"><i class="bi bi-arrow-clockwise"></i></button>
-        </div>
-      </div>
-      <div class="col-6 col-md-3 mb-3">
-        <div class="stat-card" style="cursor:pointer;" onclick="showPage('fuarbot')">
-          <div class="stat-card-icon green"><i class="bi bi-qr-code-scan"></i></div>
-          <div>
-            <div class="number" id="fb-stat-today">—</div>
-            <div class="label">Bugün Tarama</div>
-          </div>
-        </div>
-      </div>
-      <div class="col-6 col-md-3 mb-3">
-        <div class="stat-card" style="cursor:pointer;" onclick="showPage('fuarbot')">
-          <div class="stat-card-icon blue"><i class="bi bi-people-fill"></i></div>
-          <div>
-            <div class="number" id="fb-stat-total">—</div>
-            <div class="label">Toplam Tarama</div>
-          </div>
-        </div>
-      </div>
-      <div class="col-6 col-md-3 mb-3">
-        <div class="stat-card" style="cursor:pointer;" onclick="showPage('teklifler')">
-          <div class="stat-card-icon amber"><i class="bi bi-file-earmark-text-fill"></i></div>
-          <div>
-            <div class="number" id="fb-stat-quotes">—</div>
-            <div class="label">Toplam Teklif</div>
-          </div>
-        </div>
-      </div>
-      <div class="col-6 col-md-3 mb-3">
-        <div class="stat-card" style="cursor:pointer;" onclick="showPage('teklifler')">
-          <div class="stat-card-icon purple"><i class="bi bi-currency-euro"></i></div>
-          <div>
-            <div class="number" id="fb-stat-revenue">—</div>
-            <div class="label">Teklif Tutarı</div>
-          </div>
-        </div>
-      </div>
-      <!-- Son taramalar -->
-      <div class="col-12 mb-3">
-        <div class="card p-3">
-          <div class="d-flex justify-content-between align-items-center mb-2">
-            <span class="fw-semibold small text-muted text-uppercase"><i class="bi bi-clock-history me-1"></i>Son Taramalar</span>
-            <a href="#" onclick="showPage('fuarbot');return false;" class="small text-primary">Tümünü gör →</a>
-          </div>
-          <div id="fb-dash-recent" class="small text-muted">Yükleniyor…</div>
-        </div>
-      </div>
-    </div>
     <div class="row">
       <div class="col-lg-6 mb-4"><div class="card p-4"><h5><i class="bi bi-bar-chart-fill me-2 text-primary"></i>Aylık Ciro — Son 6 Ay</h5><div class="chart-container"><canvas id="chart-revenue-monthly"></canvas></div></div></div>
       <div class="col-lg-6 mb-4"><div class="card p-4"><h5>&#x130;llere G&#x00f6;re Firma</h5><div class="chart-container"><canvas id="chart-cities"></canvas></div></div></div>
@@ -984,6 +928,57 @@
     </div>
   </div>
   <div class="page-content">
+
+    <!-- Fuarbot Canlı Özet -->
+    <div class="row mb-2" id="fuarbot-dash-section">
+      <div class="col-6 col-md-3 mb-3">
+        <div class="stat-card" style="cursor:pointer;" onclick="showPage('fuarbot')">
+          <div class="stat-card-icon green"><i class="bi bi-qr-code-scan"></i></div>
+          <div>
+            <div class="number" id="fb-stat-today">—</div>
+            <div class="label">Bugün Tarama</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3 mb-3">
+        <div class="stat-card" style="cursor:pointer;" onclick="showPage('fuarbot')">
+          <div class="stat-card-icon blue"><i class="bi bi-people-fill"></i></div>
+          <div>
+            <div class="number" id="fb-stat-total">—</div>
+            <div class="label">Toplam Tarama</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3 mb-3">
+        <div class="stat-card" style="cursor:pointer;" onclick="showPage('teklifler')">
+          <div class="stat-card-icon amber"><i class="bi bi-file-earmark-text-fill"></i></div>
+          <div>
+            <div class="number" id="fb-stat-quotes">—</div>
+            <div class="label">Toplam Teklif</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3 mb-3">
+        <div class="stat-card" style="cursor:pointer;" onclick="showPage('teklifler')">
+          <div class="stat-card-icon purple"><i class="bi bi-currency-euro"></i></div>
+          <div>
+            <div class="number" id="fb-stat-revenue">—</div>
+            <div class="label">Teklif Tutarı</div>
+          </div>
+        </div>
+      </div>
+      <!-- Son taramalar -->
+      <div class="col-12 mb-3">
+        <div class="card p-3">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="fw-semibold small text-muted text-uppercase"><i class="bi bi-clock-history me-1"></i>Son Taramalar</span>
+            <span id="fuarbot-dash-badge" class="badge bg-success ms-2" style="display:none;font-size:11px;">CANLI</span>
+            <a href="#" onclick="showPage('fuarbot');return false;" class="small text-primary ms-auto">Tümünü gör →</a>
+          </div>
+          <div id="fb-dash-recent" class="small text-muted">Yükleniyor…</div>
+        </div>
+      </div>
+    </div>
 
     <!-- Date filter bar -->
     <div class="fbd-filter-bar mb-4">
