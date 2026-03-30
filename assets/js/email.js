@@ -545,7 +545,7 @@ function _parseEmailRows(rows) {
         _id:       r.document.name.split('/').pop(),
         direction: f.direction?.stringValue || 'outbound',
         contactId: f.contactId?.stringValue || '',
-        from:      f.from?.stringValue || '',
+        from:      f.fromRaw?.stringValue || f.from?.stringValue || '',
         to:        f.to?.stringValue   || '',
         subject:   f.subject?.stringValue || '(Konu yok)',
         html:      f.html?.stringValue || '',
