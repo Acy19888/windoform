@@ -356,7 +356,12 @@ function renderTimeline(acts) {
       <div id="${uid}" class="fb-tl-body"><p style="white-space:pre-wrap;">${esc(a.message)}</p></div>`;
     }
 
-    return `<div class="fb-tl-item type-${esc(type)}">
+    // E-Mail Timeline-Items: Klick öffnet E-Mail-Tab
+    const emailClick = (type === 'email' && a._emailId)
+      ? `onclick="if(typeof contSwitchTab==='function'){contSwitchTab('emails');if(typeof emailShowDetail==='function')setTimeout(()=>emailShowDetail('${esc(a._emailId)}'),300);}" style="cursor:pointer;"`
+      : '';
+
+    return `<div class="fb-tl-item type-${esc(type)}" ${emailClick}>
       <div class="fb-tl-label"><i class="bi bi-${TYPE_ICON[type]||'circle'} me-1"></i>${esc(displayText)}</div>
       <div class="fb-tl-time">${time}${a.createdBy?' · '+esc(a.createdBy):''}</div>
       ${bodyHtml}

@@ -129,6 +129,10 @@ async function _authRefresh() {
 }
 
 function _authSignOut(clearStorage = true) {
+  // Profil-Cache des Users löschen
+  if (clearStorage && _authUser?.uid) {
+    try { localStorage.removeItem(`_wf_profile_${_authUser.uid}`); } catch(e) {}
+  }
   _authUser = null;
   if (clearStorage) localStorage.removeItem(_AUTH_KEY);
 }

@@ -1711,7 +1711,19 @@ async function showContactModal(id) {
       _notePinned: n.pinned,
     }));
 
-    const allTlItems = [...fbActs, ...qtAsActs, ...notesAsActs]
+    // E-Mails aus dem Kontakt-E-Mail-Tab als Timeline-Einträge
+    const crmEmails = Array.isArray(window._cmEmails) ? window._cmEmails : [];
+    const emailsAsActs = crmEmails.map(em => ({
+      type:      'email',
+      createdAt: em.sentAt || em.createdAt || '',
+      text:      (em.direction === 'outbound' ? '↑ ' : '↓ ') + (em.subject || '(Konu yok)'),
+      createdBy: em.direction === 'outbound' ? (em.createdBy || '') : '',
+      message:   (em.html || '').replace(/<[^>]+>/g, '').trim().slice(0, 300),
+      _emailId:  em._id,
+      _emailDir: em.direction,
+    }));
+
+    const allTlItems = [...fbActs, ...qtAsActs, ...notesAsActs, ...emailsAsActs]
       .sort((a,b) => (b.createdAt||'') > (a.createdAt||'') ? 1 : -1);
 
     if (allTlItems.length && typeof renderTimeline === 'function') {
@@ -1734,18 +1746,21 @@ async function showContactModal(id) {
 
   // Expose so email.js can refresh timeline when notes change
   window._contRenderTimeline = _renderFbPanels;
-  window._cmNotes = [];         // reset notes cache for this contact
+  window._cmNotes  = [];        // reset notes cache for this contact
+  window._cmEmails = [];        // reset emails cache for this contact
   window._fbPanelsRendered = false; // flag: true once Fuarbot data has rendered
 
   // ── Render cached data immediately, then async fetch ──
   _renderFbPanels();
 
   // ── Load CRM notes silently in background ──
-  // notesLoad will set window._cmNotes; if Fuarbot has already rendered it
-  // calls _contRenderTimeline to merge notes in. If not yet rendered, the
-  // Fuarbot callback below will call _renderFbPanels (which reads _cmNotes).
   if (typeof notesLoad === 'function') {
     notesLoad(id, true).catch(() => {});
+  }
+
+  // ── Load emails silently in background (for timeline integration) ──
+  if (typeof emailLoadContactEmailsSilent === 'function') {
+    emailLoadContactEmailsSilent(id).catch(() => {});
   }
 
   // ── Async: Firestore fallback lookup + fresh data fetch ─

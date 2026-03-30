@@ -62,6 +62,30 @@ async function emailInit() {
 
     // Benutzer-Profil aus fuarEmployees laden
     if (uid) {
+      // Cache-Key pro UID, damit mehrere Nutzer auf demselben Gerät korrekt funktionieren
+      const _PROFILE_CACHE_KEY = `_wf_profile_${uid}`;
+
+      // Zuerst gecachte Rolle laden (sofort, ohne Wartezeit)
+      try {
+        const cached = JSON.parse(localStorage.getItem(_PROFILE_CACHE_KEY) || 'null');
+        if (cached) {
+          _userDispName  = cached.name  || '';
+          _userEmailAddr = cached.email || (typeof authEmail === 'function' ? authEmail() : '');
+          _userSig       = cached.sig   || '';
+          _userCrmRole   = cached.role  || 'sales';
+          window._companyName    = cached.companyName    || '';
+          window._companyPhone   = cached.companyPhone   || '';
+          window._companyEmail   = cached.companyEmail   || '';
+          window._companyWebsite = cached.companyWebsite || '';
+          window._companyAddress = cached.companyAddress || '';
+          window._companyLogo    = cached.companyLogo    || '';
+          window._profilePhoto   = cached.profilePhoto   || '';
+          // Sofort Tabs rendern mit gecachten Werten
+          _applyRolePerms();
+          _updateUserDisplay();
+        }
+      } catch(e) {}
+
       const url = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/fuarEmployees/${uid}?key=${cfg.apiKey}`;
       const res = await fetch(url, token ? { headers: { Authorization: `Bearer ${token}` } } : {});
       if (res.ok) {
@@ -79,6 +103,16 @@ async function emailInit() {
         window._companyAddress = f.companyAddress?.stringValue || '';
         window._companyLogo    = f.companyLogo?.stringValue    || '';
         window._profilePhoto   = f.profilePhoto?.stringValue   || '';
+        // Profil im localStorage cachen für Offline/Quota-Fälle
+        try {
+          localStorage.setItem(_PROFILE_CACHE_KEY, JSON.stringify({
+            name: _userDispName, email: _userEmailAddr, sig: _userSig, role: _userCrmRole,
+            companyName: window._companyName, companyPhone: window._companyPhone,
+            companyEmail: window._companyEmail, companyWebsite: window._companyWebsite,
+            companyAddress: window._companyAddress, companyLogo: window._companyLogo,
+            profilePhoto: window._profilePhoto
+          }));
+        } catch(e) {}
       }
     }
 
@@ -548,6 +582,10 @@ async function emailLoadContactEmails(contactId) {
 
     c.innerHTML = emails.map(_renderEmailItem).join('');
 
+    // E-Mails für Timeline-Integration cachen
+    window._cmEmails = emails;
+    if (typeof window._contRenderTimeline === 'function') window._contRenderTimeline();
+
   } catch (e) {
     c.innerHTML = `<div class="alert alert-warning small m-2">E-postalar yüklenemedi: ${esc(e.message)}</div>`;
   }
@@ -555,6 +593,32 @@ async function emailLoadContactEmails(contactId) {
 
 // Expose für onclick im HTML
 window._emContactRef = null;
+
+// ── Emails für Timeline laden (ohne Panel zu rendern) ────────
+async function emailLoadContactEmailsSilent(contactId) {
+  try {
+    const cfg   = loadFbConfig();
+    const token = await authToken();
+    const res   = await fetch(
+      `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents:runQuery?key=${cfg.apiKey}`,
+      {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ structuredQuery: {
+          from:    [{ collectionId: _EM_COL }],
+          where:   { fieldFilter: { field: { fieldPath: 'contactId' }, op: 'EQUAL', value: { stringValue: contactId } } },
+          orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'DESCENDING' }],
+          limit:   30,
+        }}),
+      }
+    );
+    if (!res.ok) return;
+    const rows = await res.json();
+    const emails = _parseEmailRows(rows);
+    window._cmEmails = emails;
+    if (typeof window._contRenderTimeline === 'function') window._contRenderTimeline();
+  } catch (_) {}
+}
 
 function _parseEmailRows(rows) {
   return (Array.isArray(rows) ? rows : [])
