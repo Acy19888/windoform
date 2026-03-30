@@ -656,7 +656,14 @@
     <div class="page-topbar-left">
       <h1><i class="bi bi-envelope-fill me-2" style="color:#475569;"></i>E-postalar</h1>
     </div>
-    <div class="page-topbar-right d-flex gap-2">
+    <div class="page-topbar-right d-flex gap-2 align-items-center">
+      <div class="input-group input-group-sm" style="width:220px;">
+        <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+        <input type="text" id="em-search-input" class="form-control border-start-0 ps-0"
+          placeholder="Ara… (konu, gönderici)"
+          oninput="emailPageSearch(this.value)"
+          onkeydown="if(event.key==='Escape'){this.value='';emailPageSearch('')}">
+      </div>
       <button class="btn btn-outline-secondary btn-sm" onclick="loadEmailsPage()" id="em-refresh-btn" title="Yenile">
         <i class="bi bi-arrow-clockwise"></i>
       </button>

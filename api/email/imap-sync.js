@@ -1,6 +1,7 @@
 // Vercel Serverless Function — Gmail IMAP → Firestore sync
 // Fetches latest emails from Gmail and saves new ones to Firestore crm_emails
 // Required env vars: GMAIL_USER, GMAIL_APP_PASSWORD, FB_API_KEY, FB_PROJECT_ID
+// Optional query param: ?q=searchterm  → IMAP server-side search
 
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
@@ -21,6 +22,8 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: false, error: 'Firebase env vars fehlen' });
   }
 
+  const searchQuery = (req.query?.q || '').trim();
+
   const client = new ImapFlow({
     host: 'imap.gmail.com',
     port: 993,
@@ -38,48 +41,60 @@ export default async function handler(req, res) {
     const lock = await client.getMailboxLock('INBOX');
 
     try {
-      // Get total message count
-      const status = await client.status('INBOX', { messages: true });
-      const total  = status.messages || 0;
-      if (total === 0) {
-        return res.status(200).json({ ok: true, saved: 0, skipped: 0 });
+      // Determine which messages to fetch
+      let fetchRange = null;
+      let fetchUids  = null;
+
+      if (searchQuery) {
+        // IMAP server-side search across subject, from, body
+        console.log(`[imap-sync] Searching IMAP for: "${searchQuery}"`);
+        const matchedUids = await client.search(
+          { or: [{ subject: searchQuery }, { from: searchQuery }, { body: searchQuery }] },
+          { uid: true }
+        );
+        if (!matchedUids || matchedUids.length === 0) {
+          return res.status(200).json({ ok: true, saved: 0, skipped: 0, searched: true });
+        }
+        // Fetch last 20 matches to avoid timeout
+        fetchUids = matchedUids.slice(-20);
+        console.log(`[imap-sync] Search matched ${matchedUids.length}, fetching last ${fetchUids.length}`);
+      } else {
+        // Normal sync: last 20 messages by sequence number
+        const status = await client.status('INBOX', { messages: true });
+        const total  = status.messages || 0;
+        if (total === 0) {
+          return res.status(200).json({ ok: true, saved: 0, skipped: 0 });
+        }
+        fetchRange = `${Math.max(1, total - 19)}:${total}`;
+        console.log(`[imap-sync] Fetching seq ${fetchRange} (total=${total})`);
       }
 
-      // Fetch last 20 messages (most recent) — keep short to avoid Vercel timeout
-      const start = Math.max(1, total - 19);
-      const range = `${start}:${total}`;
+      // Fetch by UID list or sequence range
+      const fetchIterable = fetchUids
+        ? client.fetch(fetchUids, { source: true, uid: true, flags: true }, { uid: true })
+        : client.fetch(fetchRange, { source: true, uid: true, flags: true });
 
-      console.log(`[imap-sync] Fetching seq ${range} (total=${total})`);
-
-      for await (const msg of client.fetch(range, { source: true, uid: true, flags: true })) {
+      for await (const msg of fetchIterable) {
         try {
           const parsed = await simpleParser(msg.source);
 
           const messageId = (parsed.messageId || `uid-${msg.uid}`).trim();
-          // Sanitize for use as Firestore doc ID
-          const docId = messageId.replace(/[<>@./: ]+/g, '_').slice(0, 200);
+          const docId     = messageId.replace(/[<>@./: ]+/g, '_').slice(0, 200);
 
-          const fromRaw  = parsed.from?.text || '';
-          const fromAddr = parsed.from?.value?.[0]?.address || fromRaw;
+          const fromAddr = parsed.from?.value?.[0]?.address || parsed.from?.text || '';
           const fromName = parsed.from?.value?.[0]?.name || '';
+          const toAddr   = process.env.RECIPIENT_EMAIL || GMAIL_USER;
+          const subject  = parsed.subject || '(Konu yok)';
+          const html     = parsed.html    || '';
+          const text     = parsed.text    || '';
+          const sentAt   = parsed.date?.toISOString() || new Date().toISOString();
 
-          const toRaw  = parsed.to?.text || process.env.RECIPIENT_EMAIL || GMAIL_USER;
-          const toAddr = process.env.RECIPIENT_EMAIL || GMAIL_USER;
-
-          const subject = parsed.subject || '(Konu yok)';
-          const html    = parsed.html    || '';
-          const text    = parsed.text    || '';
-          const sentAt  = parsed.date?.toISOString() || new Date().toISOString();
-
-          // Check if already exists in Firestore
+          // Skip if already in Firestore
           const checkUrl = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents/crm_emails/${docId}?key=${FB_API_KEY}`;
           const checkRes = await fetch(checkUrl);
-          if (checkRes.ok) {
-            skipped++;
-            continue; // Already saved
-          }
+          if (checkRes.ok) { skipped++; continue; }
 
-          // Save to Firestore using docId as document name (deduplication)
+          // Save to Firestore
           const doc = {
             fields: {
               direction:  { stringValue: 'inbound' },
@@ -99,19 +114,16 @@ export default async function handler(req, res) {
             }
           };
 
-          const saveUrl = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents/crm_emails/${docId}?key=${FB_API_KEY}`;
-          const saveRes = await fetch(saveUrl, {
-            method:  'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify(doc),
-          });
+          const saveRes = await fetch(
+            `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents/crm_emails/${docId}?key=${FB_API_KEY}`,
+            { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(doc) }
+          );
 
           if (saveRes.ok) {
             saved++;
             console.log(`[imap-sync] ✓ Saved: ${subject} from ${fromAddr}`);
           } else {
-            const err = await saveRes.json().catch(() => ({}));
-            console.error('[imap-sync] Firestore save error:', JSON.stringify(err));
+            console.error('[imap-sync] Firestore error:', await saveRes.text().catch(() => ''));
           }
         } catch (msgErr) {
           console.error('[imap-sync] Message parse error:', msgErr.message);
@@ -121,7 +133,7 @@ export default async function handler(req, res) {
       lock.release();
     }
 
-    console.log(`[imap-sync] Done — saved: ${saved}, skipped (already exist): ${skipped}`);
+    console.log(`[imap-sync] Done — saved: ${saved}, skipped: ${skipped}`);
     return res.status(200).json({ ok: true, saved, skipped });
 
   } catch (e) {

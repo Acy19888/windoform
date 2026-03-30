@@ -18,6 +18,8 @@ let _notesContactId = null;
 let _emailPageAll    = [];
 let _emailContactMap = {}; // email → display name cache
 let _emailPageFilter = 'inbound'; // current active tab filter
+let _emailSearchQ    = '';         // current search query
+let _emailSearchTimer = null;      // debounce timer for IMAP search
 
 const _DEFAULT_PERMS = {
   admin: ['dashboard','companies','contacts','fuarbot','fuar-dashboard','fuar-users',
@@ -843,12 +845,60 @@ function emailPageFilter(f, el) {
   el.classList.add('active');
   const list = document.getElementById('em-page-list');
   if (!list) return;
-  let data = _emailPageAll;
-  if (f === 'inbound')  data = data.filter(e => e.direction === 'inbound');
-  if (f === 'outbound') data = data.filter(e => e.direction === 'outbound');
+  const data = _getFilteredEmails();
   list.innerHTML = data.length
     ? data.map(_renderEmailPageItem).join('')
     : '<div class="text-muted text-center py-5">Sonuç yok</div>';
+}
+
+function _getFilteredEmails() {
+  let data = _emailPageAll;
+  if (_emailPageFilter === 'inbound')  data = data.filter(e => e.direction === 'inbound');
+  if (_emailPageFilter === 'outbound') data = data.filter(e => e.direction === 'outbound');
+  if (_emailSearchQ) {
+    const q = _emailSearchQ.toLowerCase();
+    data = data.filter(e =>
+      (e.subject || '').toLowerCase().includes(q) ||
+      (e.from    || '').toLowerCase().includes(q) ||
+      (e.to      || '').toLowerCase().includes(q) ||
+      (e.text    || '').toLowerCase().includes(q)
+    );
+  }
+  return data;
+}
+
+function emailPageSearch(val) {
+  _emailSearchQ = val.trim();
+  const list = document.getElementById('em-page-list');
+  if (!list) return;
+
+  // Instant local filter
+  const data = _getFilteredEmails();
+  list.innerHTML = data.length
+    ? data.map(_renderEmailPageItem).join('')
+    : `<div class="text-muted text-center py-5"><i class="bi bi-search d-block mb-2" style="font-size:2rem;opacity:.3;"></i>${_emailSearchQ ? 'Sonuç bulunamadı' : 'Henüz e-posta yok'}</div>`;
+
+  // After 600ms, also search IMAP for results not yet cached
+  clearTimeout(_emailSearchTimer);
+  if (_emailSearchQ.length >= 2) {
+    _emailSearchTimer = setTimeout(async () => {
+      try {
+        const searchIcon = document.getElementById('em-search-input');
+        if (searchIcon) searchIcon.style.background = 'linear-gradient(90deg,#f0f0ff,#fff)';
+        const res  = await fetch(`/api/email/imap-sync?q=${encodeURIComponent(_emailSearchQ)}`);
+        const data = await res.json().catch(() => ({}));
+        if (searchIcon) searchIcon.style.background = '';
+        if (data.ok && data.saved > 0) {
+          // New results found on IMAP — reload and re-filter
+          await _refreshEmailListSilent();
+          const updated = _getFilteredEmails();
+          list.innerHTML = updated.length
+            ? updated.map(_renderEmailPageItem).join('')
+            : '<div class="text-muted text-center py-5">Sonuç bulunamadı</div>';
+        }
+      } catch (_) {}
+    }, 600);
+  }
 }
 
 function _renderEmailPageItem(em) {
