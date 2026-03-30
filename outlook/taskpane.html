@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Windoform CRM</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 13px;
+      color: #1e293b;
+      background: #f8fafc;
+      min-height: 100vh;
+    }
+
+    /* ── Login ── */
+    #login-panel {
+      padding: 20px 16px;
+    }
+    #login-panel h2 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    #login-panel p {
+      color: #64748b;
+      font-size: 12px;
+      margin-bottom: 16px;
+    }
+    .field { margin-bottom: 10px; }
+    .field label { display: block; font-size: 11px; color: #64748b; margin-bottom: 3px; font-weight: 500; }
+    .field input {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .field input:focus { border-color: #6366f1; }
+    .btn-primary {
+      width: 100%;
+      padding: 8px;
+      background: #6366f1;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-primary:hover { background: #4f46e5; }
+    .btn-primary:disabled { background: #a5b4fc; cursor: not-allowed; }
+    #login-error {
+      color: #dc2626;
+      font-size: 12px;
+      margin-top: 8px;
+      display: none;
+    }
+
+    /* ── Main Panel ── */
+    #main-panel { display: none; }
+
+    /* Header */
+    .crm-header {
+      background: #6366f1;
+      color: #fff;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .crm-header-title { font-weight: 600; font-size: 13px; }
+    .crm-header-user  { font-size: 11px; opacity: .85; }
+    .btn-logout {
+      background: none;
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      font-size: 11px;
+      opacity: .7;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .btn-logout:hover { opacity: 1; background: rgba(255,255,255,.15); }
+
+    /* Contact Card */
+    #contact-area { padding: 12px 14px; }
+
+    .loading {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #64748b;
+      padding: 16px 0;
+      font-size: 12px;
+    }
+    .spinner {
+      width: 14px; height: 14px;
+      border: 2px solid #e2e8f0;
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .contact-card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .contact-name {
+      font-weight: 600;
+      font-size: 14px;
+      color: #1e293b;
+      margin-bottom: 2px;
+    }
+    .contact-company {
+      color: #64748b;
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+    .contact-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .contact-meta-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #475569;
+    }
+    .contact-meta-row .icon { color: #94a3b8; font-size: 11px; width: 14px; text-align: center; }
+
+    .badge-status {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 500;
+      background: #e0f2fe;
+      color: #0369a1;
+    }
+
+    .no-contact {
+      text-align: center;
+      padding: 20px 10px;
+      color: #94a3b8;
+    }
+    .no-contact .icon-big { font-size: 28px; margin-bottom: 8px; }
+    .no-contact p { font-size: 12px; }
+
+    /* Save Button */
+    #save-area { padding: 0 14px 14px; }
+    .btn-save {
+      width: 100%;
+      padding: 8px;
+      background: #10b981;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: background .15s;
+    }
+    .btn-save:hover  { background: #059669; }
+    .btn-save:disabled { background: #6ee7b7; cursor: not-allowed; }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      bottom: 12px; left: 12px; right: 12px;
+      background: #1e293b;
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      display: none;
+      z-index: 999;
+      animation: fadeIn .2s;
+    }
+    #toast.success { background: #059669; }
+    #toast.error   { background: #dc2626; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Recent emails list */
+    #recent-area { padding: 0 14px 10px; display: none; }
+    .recent-header { font-size: 11px; color: #94a3b8; margin-bottom: 5px; font-weight: 500; }
+    .recent-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 0;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 12px;
+    }
+    .recent-item:last-child { border-bottom: none; }
+    .recent-dir  { font-size: 11px; color: #94a3b8; flex-shrink: 0; }
+    .recent-subj { flex: 1; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .recent-dt   { font-size: 11px; color: #94a3b8; flex-shrink: 0; }
+
+    /* Multi-recipient selector */
+    .recipient-list { margin-bottom: 10px; }
+    .recipient-pill {
+      display: inline-block;
+      padding: 3px 10px;
+      margin: 2px;
+      background: #f1f5f9;
+      border: 1px solid #e2e8f0;
+      border-radius: 99px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .recipient-pill:hover  { background: #e2e8f0; }
+    .recipient-pill.active { background: #e0e7ff; border-color: #6366f1; color: #4338ca; }
+
+    .divider { border: none; border-top: 1px solid #f1f5f9; margin: 8px 0; }
+
+    /* Config setup area */
+    #config-area { padding: 14px; display: none; }
+    #config-area h3 { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+    #config-area p  { font-size: 11px; color: #64748b; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+
+<!-- ── LOGIN ───────────────────────────────── -->
+<div id="login-panel">
+  <h2>🔐 Windoform CRM</h2>
+  <p>Mit deinem CRM-Konto anmelden</p>
+
+  <div id="config-area">
+    <h3>⚙️ Firebase Konfiguration</h3>
+    <p>Einmalig eingeben (wird gespeichert)</p>
+    <div class="field">
+      <label>Project ID</label>
+      <input id="cfg-project" type="text" placeholder="fuarbot" autocomplete="off"/>
+    </div>
+    <div class="field">
+      <label>API Key</label>
+      <input id="cfg-apikey" type="text" placeholder="AIzaSy..." autocomplete="off"/>
+    </div>
+    <button class="btn-primary" onclick="saveConfig()">Speichern</button>
+    <hr style="margin: 12px 0; border-color: #f1f5f9;">
+  </div>
+
+  <div class="field">
+    <label>E-Mail</label>
+    <input id="login-email" type="email" placeholder="name@firma.com" autocomplete="email"/>
+  </div>
+  <div class="field">
+    <label>Passwort</label>
+    <input id="login-pass" type="password" placeholder="••••••••" autocomplete="current-password"
+           onkeydown="if(event.key==='Enter')doLogin()"/>
+  </div>
+  <button class="btn-primary" id="login-btn" onclick="doLogin()">Anmelden</button>
+  <div id="login-error"></div>
+  <div style="text-align:center; margin-top:10px;">
+    <a href="#" onclick="toggleConfig()" style="font-size:11px; color:#94a3b8; text-decoration:none;">⚙️ Firebase Konfiguration</a>
+  </div>
+</div>
+
+<!-- ── MAIN ────────────────────────────────── -->
+<div id="main-panel">
+
+  <div class="crm-header">
+    <div>
+      <div class="crm-header-title">Windoform CRM</div>
+      <div class="crm-header-user" id="header-user"></div>
+    </div>
+    <button class="btn-logout" onclick="doLogout()">Abmelden</button>
+  </div>
+
+  <!-- Empfänger-Auswahl (bei mehreren) -->
+  <div id="contact-area">
+    <div id="recipients-bar" style="display:none; padding: 6px 0 2px;">
+      <div style="font-size:11px; color:#94a3b8; margin-bottom:4px;">Empfänger wählen:</div>
+      <div id="recipient-pills" class="recipient-list"></div>
+      <hr class="divider">
+    </div>
+
+    <div id="contact-loading" class="loading" style="display:none;">
+      <div class="spinner"></div>
+      <span>Kontakt wird gesucht…</span>
+    </div>
+
+    <div id="contact-found" style="display:none;">
+      <div class="contact-card">
+        <div class="contact-name" id="c-name"></div>
+        <div class="contact-company" id="c-company"></div>
+        <div class="contact-meta">
+          <div class="contact-meta-row">
+            <span class="icon">✉</span>
+            <span id="c-email"></span>
+          </div>
+          <div class="contact-meta-row" id="c-phone-row" style="display:none;">
+            <span class="icon">📞</span>
+            <span id="c-phone"></span>
+          </div>
+          <div class="contact-meta-row" id="c-status-row" style="display:none;">
+            <span class="icon">●</span>
+            <span class="badge-status" id="c-status"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="contact-notfound" class="no-contact" style="display:none;">
+      <div class="icon-big">👤</div>
+      <p id="c-nf-email" style="font-weight:500; color:#475569; margin-bottom:4px;"></p>
+      <p>Kein Kontakt gefunden</p>
+    </div>
+
+    <div id="contact-none" class="no-contact" style="display:none;">
+      <div class="icon-big">✉️</div>
+      <p>Empfänger eingeben um<br>Kontakt zu sehen</p>
+    </div>
+  </div>
+
+  <!-- Letzte E-Mails -->
+  <div id="recent-area">
+    <div class="recent-header">Letzte E-Mails</div>
+    <div id="recent-list"></div>
+  </div>
+
+  <!-- Speichern Button -->
+  <div id="save-area" style="display:none;">
+    <button class="btn-save" id="save-btn" onclick="saveEmailToCRM()">
+      <span>💾</span>
+      <span id="save-btn-text">E-Mail ins CRM speichern</span>
+    </button>
+    <div style="font-size:11px; color:#94a3b8; text-align:center; margin-top:6px;" id="save-hint"></div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script src="taskpane.js"></script>
+</body>
+</html>
