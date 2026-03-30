@@ -791,6 +791,8 @@ function setupEventListeners() {
   bind('contact-search',         'input',  debounce(loadContacts, 280));
   bind('contact-company-filter', 'change', loadContacts);
   bind('contact-status-filter',  'change', loadContacts);
+  bind('contact-date-filter',    'change', loadContacts);
+  bind('contact-creator-filter', 'change', loadContacts);
 }
 
 function populateSelects() {
@@ -1452,16 +1454,43 @@ async function loadContacts() {
   const dtf = document.getElementById('contact-date-filter')?.value || '';
   const crf = document.getElementById('contact-creator-filter')?.value || '';
 
-  // Dynamically populate creator filter dropdown from all contacts
+  // Populate creator filter from fuarEmployees Firestore collection
   const creatorSel = document.getElementById('contact-creator-filter');
-  if (creatorSel) {
-    const allCreators = [...new Set(cons.map(c => c.createdBy).filter(Boolean))].sort();
-    const curVal = creatorSel.value;
-    creatorSel.innerHTML = '<option value="">Tüm Ekleyenler</option>' +
-      allCreators.map(cr => {
-        const label = cr.includes('@') ? cr.split('@')[0] : cr;
-        return `<option value="${esc(cr)}" ${cr === curVal ? 'selected' : ''}>${esc(label)}</option>`;
-      }).join('');
+  if (creatorSel && creatorSel.dataset.loaded !== 'true') {
+    try {
+      const cfg = (typeof loadFbConfig === 'function') ? loadFbConfig() : null;
+      if (cfg?.apiKey && cfg?.projectId) {
+        const url = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/fuarEmployees?key=${cfg.apiKey}&pageSize=100`;
+        const resp = await fetch(url);
+        if (resp.ok) {
+          const data = await resp.json();
+          const docs = data.documents || [];
+          const curVal = creatorSel.value;
+          const employees = docs.map(d => {
+            const f = d.fields || {};
+            const email = f.email?.stringValue || f.emailAddress?.stringValue || '';
+            const name  = f.name?.stringValue || f.displayName?.stringValue || '';
+            return { email, name };
+          }).filter(e => e.email);
+          employees.sort((a,b) => (a.name||a.email).localeCompare(b.name||b.email));
+          creatorSel.innerHTML = '<option value="">Tüm Ekleyenler</option>' +
+            employees.map(e => {
+              const label = e.name || e.email.split('@')[0];
+              return `<option value="${esc(e.email)}" ${e.email === curVal ? 'selected' : ''}>${esc(label)}</option>`;
+            }).join('');
+          creatorSel.dataset.loaded = 'true';
+        }
+      }
+    } catch (_) {
+      // Fallback: populate from existing contacts
+      const allCreators = [...new Set(cons.map(c => c.createdBy).filter(Boolean))].sort();
+      const curVal = creatorSel.value;
+      creatorSel.innerHTML = '<option value="">Tüm Ekleyenler</option>' +
+        allCreators.map(cr => {
+          const label = cr.includes('@') ? cr.split('@')[0] : cr;
+          return `<option value="${esc(cr)}" ${cr === curVal ? 'selected' : ''}>${esc(label)}</option>`;
+        }).join('');
+    }
   }
 
   // Date range for filter
