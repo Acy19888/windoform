@@ -130,7 +130,14 @@ function startFuarbotSync(apiKey, projectId) {
   setFbStatus('Bağlanıyor…', 'warning');
   if (fbPollInterval) clearInterval(fbPollInterval);
   fetchAllData(apiKey, projectId, false);
-  fbPollInterval = setInterval(() => fetchAllData(apiKey, projectId, true), 30000);
+  // Poll every 5 minutes instead of 30 seconds to stay within Firestore free quota
+  fbPollInterval = setInterval(() => {
+    // Only fetch if the fuarbot page is currently visible
+    const fbPage = document.getElementById('fuarbot');
+    if (fbPage && fbPage.style.display !== 'none') {
+      fetchAllData(apiKey, projectId, true);
+    }
+  }, 5 * 60 * 1000);
 }
 
 // ── Main tab switching ────────────────────────────────────

@@ -162,7 +162,14 @@ function startFuarbotSync(apiKey, projectId) {
   setFbStatus('Bağlanıyor…', 'warning');
   if (fbPollInterval) clearInterval(fbPollInterval);
   fetchAllData(apiKey, projectId, false);
-  fbPollInterval = setInterval(() => fetchAllData(apiKey, projectId, true), 3 * 60 * 1000); // 3 min
+  // Poll every 10 minutes and only when Fuarbot/Fuar-Dashboard page is visible
+  fbPollInterval = setInterval(() => {
+    const fbPage  = document.getElementById('fuarbot');
+    const fbDash  = document.getElementById('fuar-dashboard');
+    const visible = (fbPage && fbPage.style.display !== 'none') ||
+                    (fbDash && fbDash.style.display !== 'none');
+    if (visible) fetchAllData(apiKey, projectId, true);
+  }, 10 * 60 * 1000);
 }
 
 // ── Targeted fetch: fresh activities + quotes for ONE contact ──
