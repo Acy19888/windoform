@@ -664,7 +664,7 @@
           oninput="emailPageSearch(this.value)"
           onkeydown="if(event.key==='Escape'){this.value='';emailPageSearch('')}">
       </div>
-      <button class="btn btn-outline-secondary btn-sm" onclick="loadEmailsPage()" id="em-refresh-btn" title="Yenile">
+      <button class="btn btn-outline-secondary btn-sm" onclick="loadEmailsPage(true)" id="em-refresh-btn" title="Yenile">
         <i class="bi bi-arrow-clockwise"></i>
       </button>
       <button class="btn btn-primary btn-sm" onclick="emailCompose(null)">

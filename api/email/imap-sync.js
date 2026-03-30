@@ -69,17 +69,41 @@ export default async function handler(req, res) {
         console.log(`[imap-sync] Fetching seq ${fetchRange} (total=${total})`);
       }
 
-      // Fetch by UID list or sequence range
+      // Fetch by UID list or sequence range — first pass: parse all messages
       const fetchIterable = fetchUids
         ? client.fetch(fetchUids, { source: true, uid: true, flags: true }, { uid: true })
         : client.fetch(fetchRange, { source: true, uid: true, flags: true });
 
+      const parsedMsgs = [];
       for await (const msg of fetchIterable) {
         try {
           const parsed = await simpleParser(msg.source);
-
           const messageId = (parsed.messageId || `uid-${msg.uid}`).trim();
           const docId     = messageId.replace(/[<>@./: ]+/g, '_').slice(0, 200);
+          parsedMsgs.push({ parsed, messageId, docId, uid: msg.uid });
+        } catch (e) { console.error('[imap-sync] parse error:', e.message); }
+      }
+
+      // Batch-check which docIds already exist (1 request instead of N)
+      const base = `projects/${FB_PROJECT}/databases/(default)/documents`;
+      const batchRes = await fetch(
+        `https://firestore.googleapis.com/v1/${base}:batchGet?key=${FB_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ documents: parsedMsgs.map(m => `${base}/crm_emails/${m.docId}`) }),
+        }
+      );
+      const batchData = await batchRes.json().catch(() => []);
+      const existingIds = new Set(
+        (Array.isArray(batchData) ? batchData : [])
+          .filter(r => r.found)
+          .map(r => r.found.name.split('/').pop())
+      );
+
+      for (const { parsed, messageId, docId } of parsedMsgs) {
+        try {
+          if (existingIds.has(docId)) { skipped++; continue; }
 
           const fromAddr = parsed.from?.value?.[0]?.address || parsed.from?.text || '';
           const fromName = parsed.from?.value?.[0]?.name || '';
@@ -88,11 +112,6 @@ export default async function handler(req, res) {
           const html     = parsed.html    || '';
           const text     = parsed.text    || '';
           const sentAt   = parsed.date?.toISOString() || new Date().toISOString();
-
-          // Skip if already in Firestore
-          const checkUrl = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents/crm_emails/${docId}?key=${FB_API_KEY}`;
-          const checkRes = await fetch(checkUrl);
-          if (checkRes.ok) { skipped++; continue; }
 
           // Save to Firestore
           const doc = {

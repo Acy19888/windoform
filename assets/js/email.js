@@ -20,6 +20,8 @@ let _emailContactMap = {}; // email → display name cache
 let _emailPageFilter = 'inbound'; // current active tab filter
 let _emailSearchQ    = '';         // current search query
 let _emailSearchTimer = null;      // debounce timer for IMAP search
+let _emailCacheTs    = 0;          // timestamp of last Firestore fetch (ms)
+const _EMAIL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 const _DEFAULT_PERMS = {
   admin: ['dashboard','companies','contacts','fuarbot','fuar-dashboard','fuar-users',
@@ -713,26 +715,72 @@ async function emailDelete(emailId) {
 // GLOBALE E-POSTA SEITE
 // ══════════════════════════════════════════════════════════════
 
-async function loadEmailsPage() {
+function _renderEmailPage(c) {
+  const inboundCnt  = _emailPageAll.filter(e => e.direction === 'inbound').length;
+  const outboundCnt = _emailPageAll.filter(e => e.direction === 'outbound').length;
+  const inboundEmails = _emailPageAll.filter(e => e.direction === 'inbound');
+  const defaultTab    = inboundEmails.length ? 'inbound' : 'all';
+  const defaultList   = inboundEmails.length ? inboundEmails : _emailPageAll;
+  _emailPageFilter    = defaultTab;
+
+  c.innerHTML = `
+  <div class="em-page-header">
+    <div class="em-page-tabs" id="em-page-tabs">
+      <button class="em-tab-btn${defaultTab==='inbound'?' active':''}" onclick="emailPageFilter('inbound',this)">
+        <i class="bi bi-arrow-down-left me-1"></i>Gelen
+        ${inboundCnt ? `<span class="em-tab-badge em-tab-badge-in">${inboundCnt}</span>` : ''}
+      </button>
+      <button class="em-tab-btn${defaultTab==='outbound'?' active':''}" onclick="emailPageFilter('outbound',this)">
+        <i class="bi bi-arrow-up-right me-1"></i>Giden
+        ${outboundCnt ? `<span class="em-tab-badge em-tab-badge-out">${outboundCnt}</span>` : ''}
+      </button>
+      <button class="em-tab-btn${defaultTab==='all'?' active':''}" onclick="emailPageFilter('all',this)">
+        Tümü <span class="em-tab-badge">${_emailPageAll.length}</span>
+      </button>
+    </div>
+  </div>
+  <div id="em-page-list" class="em-page-list">
+    ${defaultList.length
+      ? defaultList.map(_renderEmailPageItem).join('')
+      : '<div class="em-empty-state"><i class="bi bi-inbox"></i><div>Henüz e-posta yok</div></div>'}
+  </div>`;
+}
+
+async function loadEmailsPage(forceRefresh = false) {
   const c      = document.getElementById('emails-page-content');
   const refBtn = document.getElementById('em-refresh-btn');
   if (!c) return;
-  c.innerHTML = '<div class="text-center py-5"><span class="spinner-border"></span></div>';
+
+  const cacheValid = !forceRefresh && _emailPageAll.length > 0 && (Date.now() - _emailCacheTs) < _EMAIL_CACHE_TTL;
+
+  if (!cacheValid) {
+    c.innerHTML = '<div class="text-center py-5"><span class="spinner-border"></span></div>';
+  }
   if (refBtn) refBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
   try {
-    // Start IMAP sync in background — don't wait for it before rendering
-    fetch('/api/email/imap-sync')
-      .then(r => r.json()).catch(() => ({}))
-      .then(syncData => {
-        if (!syncData.ok && syncData.error) {
-          console.warn('[imap-sync] error:', syncData.error);
-          _emToast(`IMAP Sync Hatası: ${syncData.error}`, 'danger');
-        } else if (syncData.ok && syncData.saved > 0) {
-          _emToast(`${syncData.saved} yeni e-posta alındı`, 'success');
-          // Silently refresh the list with new emails
-          _refreshEmailListSilent();
-        }
-      });
+    // Only sync IMAP when explicitly refreshing or first load
+    if (forceRefresh || _emailCacheTs === 0) {
+      fetch('/api/email/imap-sync')
+        .then(r => r.json()).catch(() => ({}))
+        .then(syncData => {
+          if (!syncData.ok && syncData.error) {
+            console.warn('[imap-sync] error:', syncData.error);
+            _emToast(`IMAP Sync Hatası: ${syncData.error}`, 'danger');
+          } else if (syncData.ok && syncData.saved > 0) {
+            _emToast(`${syncData.saved} yeni e-posta alındı`, 'success');
+            _emailCacheTs = 0; // invalidate cache so refresh fetches fresh
+            _refreshEmailListSilent();
+          }
+        });
+    }
+
+    // Use cache if still valid
+    if (cacheValid) {
+      _renderEmailPage(c);
+      if (refBtn) refBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i>';
+      return;
+    }
 
     const cfg   = loadFbConfig();
     const token = await authToken();
@@ -742,7 +790,7 @@ async function loadEmailsPage() {
     const queryBody = JSON.stringify({ structuredQuery: {
       from:    [{ collectionId: _EM_COL }],
       orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'DESCENDING' }],
-      limit:   200,
+      limit:   100,  // reduced from 200 to save Firestore quota
     }});
     const fsUrl = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents:runQuery?key=${cfg.apiKey}`;
 
@@ -765,6 +813,7 @@ async function loadEmailsPage() {
     }
 
     _emailPageAll = _parseEmailRows(rows);
+    _emailCacheTs = Date.now(); // update cache timestamp
 
     // Build email→name lookup from contacts (for display names)
     try {
@@ -777,36 +826,7 @@ async function loadEmailsPage() {
       }
     } catch (_) { /* ignore */ }
 
-    const inboundCnt  = _emailPageAll.filter(e => e.direction === 'inbound').length;
-    const outboundCnt = _emailPageAll.filter(e => e.direction === 'outbound').length;
-    const unreadCnt   = _emailPageAll.filter(e => e.direction === 'inbound').length; // all inbound = "unread" for now
-
-    const inboundEmails  = _emailPageAll.filter(e => e.direction === 'inbound');
-    const outboundEmails = _emailPageAll.filter(e => e.direction === 'outbound');
-    const defaultList    = inboundEmails.length ? inboundEmails : _emailPageAll;
-    const defaultTab     = inboundEmails.length ? 'inbound' : 'all';
-
-    c.innerHTML = `
-    <div class="em-page-header">
-      <div class="em-page-tabs" id="em-page-tabs">
-        <button class="em-tab-btn${defaultTab==='inbound'?' active':''}" onclick="emailPageFilter('inbound',this)">
-          <i class="bi bi-arrow-down-left me-1"></i>Gelen
-          ${inboundCnt ? `<span class="em-tab-badge em-tab-badge-in">${inboundCnt}</span>` : ''}
-        </button>
-        <button class="em-tab-btn${defaultTab==='outbound'?' active':''}" onclick="emailPageFilter('outbound',this)">
-          <i class="bi bi-arrow-up-right me-1"></i>Giden
-          ${outboundCnt ? `<span class="em-tab-badge em-tab-badge-out">${outboundCnt}</span>` : ''}
-        </button>
-        <button class="em-tab-btn${defaultTab==='all'?' active':''}" onclick="emailPageFilter('all',this)">
-          Tümü <span class="em-tab-badge">${_emailPageAll.length}</span>
-        </button>
-      </div>
-    </div>
-    <div id="em-page-list" class="em-page-list">
-      ${defaultList.length
-        ? defaultList.map(_renderEmailPageItem).join('')
-        : '<div class="em-empty-state"><i class="bi bi-inbox"></i><div>Henüz e-posta yok</div></div>'}
-    </div>`;
+    _renderEmailPage(c);
 
   } catch (e) {
     c.innerHTML = `<div class="alert alert-danger">Hata: ${esc(e.message)}</div>`;
