@@ -734,7 +734,7 @@ async function importFuarbotContact(id) {
 
 async function importAllFuarbotContacts() {
   if (!fbCustomers.length) { toast('Aktarılacak kişi yok', 'error'); return; }
-  let imported = 0, skipped = 0, errors = 0;
+  let imported = 0, skipped = 0, errors = 0, firstError = null;
   const snapshot = [...fbCustomers]; // freeze list before we start modifying it
 
   for (const c of snapshot) {
@@ -766,21 +766,17 @@ async function importAllFuarbotContacts() {
 
     } catch(e) {
       console.error('[importAll] Fehler bei', c.name, e);
+      if (!firstError) firstError = e.message || String(e);
       errors++;
     }
   }
 
   // Remove successfully imported contacts from the list
-  const importedNames = new Set();
-  snapshot.forEach((c, i) => { if (i < imported + skipped) importedNames.add(c._id); });
-  fbCustomers = fbCustomers.filter(c => {
-    const dup = snapshot.find(s => s._id === c._id);
-    return !dup || errors > 0; // keep if had error
-  });
+  fbCustomers = fbCustomers.filter(c => !snapshot.find(s => s._id === c._id && !errors));
   renderCustomerList(fbCustomers);
   setFbStatus('Bağlı · ' + fbCustomers.length + ' kişi', 'success');
 
-  if (errors > 0) toast(`⚠ ${imported} aktarıldı · ${skipped} mevcut · ${errors} hata — Console'u kontrol et`, 'error');
+  if (errors > 0) toast(`⚠ ${imported} aktarıldı · ${skipped} mevcut · ${errors} hata: ${firstError}`, 'error');
   else if (skipped > 0) toast(`✓ ${imported} aktarıldı · ${skipped} zaten mevcut (atlandı)`, 'info');
   else toast(`✓ ${imported} kişi aktarıldı`, 'success');
 
