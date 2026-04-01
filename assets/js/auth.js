@@ -180,7 +180,9 @@ async function syncToFirestore(stores = ['companies','contacts']) {
   }
 }
 
-// ── Pull Firestore → IndexedDB (on login from new browser) ─
+// ── Pull Firestore → IndexedDB ─────────────────────────────
+// Always merges: Firestore rows that don't exist locally get added.
+// If local is completely empty, all Firestore rows are inserted.
 async function syncFromFirestore() {
   if (!authIsLoggedIn()) return;
   const cfg = loadFbConfig();
@@ -194,15 +196,17 @@ async function syncFromFirestore() {
       const rows = JSON.parse(doc.json || '[]');
       if (!rows.length) continue;
 
-      // Only import if local is empty (avoid overwriting newer local data)
-      const local = await dbAll(store);
-      if (local.length > 0) continue;  // local wins
+      const local    = await dbAll(store);
+      const localIds = new Set(local.map(r => String(r.id)));
 
-      // Bulk insert into IndexedDB
+      let added = 0;
       for (const row of rows) {
-        if (row.id) await dbPut(store, row).catch(() => dbAdd(store, row).catch(() => {}));
+        if (!row.id) continue;
+        if (localIds.has(String(row.id))) continue; // already exists locally
+        await dbPut(store, row).catch(() => dbAdd(store, row).catch(() => {}));
+        added++;
       }
-      console.log(`[Sync] ${store}: ${rows.length} kayıt Firestore'dan yüklendi`);
+      if (added > 0) console.log(`[Sync] ${store}: ${added} yeni kayıt Firestore'dan yüklendi`);
     } catch(e) {
       console.warn(`[Sync] ${store} pull failed:`, e);
     }
