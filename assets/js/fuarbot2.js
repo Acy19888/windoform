@@ -15,7 +15,19 @@ let fbMainTabActive = 'contacts'; // 'contacts' | 'quotes'
 
 // ── Config ────────────────────────────────────────────────
 function loadFbConfig() {
-  try { return JSON.parse(localStorage.getItem(FB_CFG_KEY) || 'null'); } catch { return null; }
+  try {
+    const cfg = JSON.parse(localStorage.getItem(FB_CFG_KEY) || 'null');
+    if (cfg?.apiKey && cfg?.projectId) return cfg;
+    // Fallback: migrate from old separate keys
+    const ak = localStorage.getItem('fb_api_key');
+    const pid = localStorage.getItem('fb_project_id');
+    if (ak && pid) {
+      const migrated = { apiKey: ak, projectId: pid, authDomain: pid + '.firebaseapp.com' };
+      localStorage.setItem(FB_CFG_KEY, JSON.stringify(migrated));
+      return migrated;
+    }
+    return null;
+  } catch { return null; }
 }
 function saveFbConfig(cfg) { localStorage.setItem(FB_CFG_KEY, JSON.stringify(cfg)); }
 

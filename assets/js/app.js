@@ -134,9 +134,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         const ak = document.getElementById('auth-fb-apikey')?.value.trim();
         const pid = document.getElementById('auth-fb-projid')?.value.trim();
         if (ak && pid) {
-          localStorage.setItem('fb_api_key',    ak);
-          localStorage.setItem('fb_project_id', pid);
-          localStorage.setItem('fb_auth_domain', pid + '.firebaseapp.com');
+          // Use saveFbConfig() so loadFbConfig() finds it (crm_fuarbot_firebase_config)
+          if (typeof saveFbConfig === 'function') {
+            saveFbConfig({ apiKey: ak, projectId: pid, authDomain: pid + '.firebaseapp.com' });
+          } else {
+            localStorage.setItem('fb_api_key', ak);
+            localStorage.setItem('fb_project_id', pid);
+          }
         }
         await _origLogin();
       };
@@ -144,9 +148,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         const ak = document.getElementById('auth-fb-apikey')?.value.trim();
         const pid = document.getElementById('auth-fb-projid')?.value.trim();
         if (ak && pid) {
-          localStorage.setItem('fb_api_key',    ak);
-          localStorage.setItem('fb_project_id', pid);
-          localStorage.setItem('fb_auth_domain', pid + '.firebaseapp.com');
+          if (typeof saveFbConfig === 'function') {
+            saveFbConfig({ apiKey: ak, projectId: pid, authDomain: pid + '.firebaseapp.com' });
+          } else {
+            localStorage.setItem('fb_api_key', ak);
+            localStorage.setItem('fb_project_id', pid);
+          }
         }
         const fn = (await import('./auth.js').catch(()=>null))?.authSubmitRegister;
         // fallback: call the real function
