@@ -25,6 +25,30 @@
       "headers": [
         { "key": "Content-Type", "value": "application/xml" }
       ]
+    },
+    {
+      "source": "/assets/js/(.*)\\.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=3600, stale-while-revalidate=86400" }
+      ]
+    },
+    {
+      "source": "/assets/css/(.*)\\.css",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=3600, stale-while-revalidate=86400" }
+      ]
+    },
+    {
+      "source": "/assets/img/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=2592000, stale-while-revalidate=604800" }
+      ]
+    },
+    {
+      "source": "/index.html",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+      ]
     }
   ]
 }

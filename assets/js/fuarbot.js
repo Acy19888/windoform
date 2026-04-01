@@ -9,6 +9,10 @@ let fbQuotes       = {};
 let fbSelectedId   = null;
 let fbMainTabActive = 'contacts'; // 'contacts' | 'quotes'
 
+// ── Read cache: skip Firestore if data is fresher than 5 min ──
+let _fbLastFetchAt = 0;
+const _FB_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 // ── Config ────────────────────────────────────────────────
 function loadFbConfig() {
   try { return JSON.parse(localStorage.getItem(FB_CFG_KEY) || 'null'); } catch { return null; }
@@ -74,12 +78,16 @@ function setFbStatus(text, type) {
 }
 
 async function fetchAllData(apiKey, projectId, silent) {
+  // If called silently (by poll) and data is still fresh, skip the read
+  if (silent && (Date.now() - _fbLastFetchAt) < _FB_CACHE_TTL) return;
+
   try {
     const [rawCustomers, activities, quotes] = await Promise.all([
       fsFetch(apiKey, projectId, 'crm_customers'),
       fsFetch(apiKey, projectId, 'crm_activities').catch(()=>[]),
       fsFetch(apiKey, projectId, 'crm_quotes').catch(()=>[]),
     ]);
+    _fbLastFetchAt = Date.now();
 
     // ── Deduplicate crm_customers by name + email ──────────
     // Same person may have been scanned multiple times at the fair.
@@ -405,7 +413,8 @@ async function importFuarbotContact(id) {
       const all = await new Promise((res,rej) => { const tx=db.transaction(['companies'],'readonly'); const r=tx.objectStore('companies').getAll(); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); });
       const match = all.find(co => (co.name||'').toLowerCase().trim() === c.company.toLowerCase().trim());
       if (match) { companyId = match.id; } else {
-        const nc = { name:c.company.trim(), phone:c.phone||'', email:'', website:c.website||'', address:c.address||'', city:'', notes:'Fuarbot: '+(c.source||'Fuarbot'), marketingStatus:'Aranacak', qualityScore:0, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
+        const _addrParsed = (typeof _geoParseAddress === 'function') ? _geoParseAddress(c.address||'') : {city:null,country:null};
+        const nc = { name:c.company.trim(), phone:c.phone||'', email:'', website:c.website||'', address:c.address||'', city:_addrParsed.city||'', country:_addrParsed.country||'Türkiye', notes:'Fuarbot: '+(c.source||'Fuarbot'), marketingStatus:'Aranacak', qualityScore:0, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
         nc.qualityScore = calculateCompanyQuality(nc);
         companyId = await new Promise((res,rej) => { const tx2=db.transaction(['companies'],'readwrite'); const r2=tx2.objectStore('companies').add(nc); r2.onsuccess=()=>res(r2.result); r2.onerror=()=>rej(r2.error); });
       }
@@ -413,7 +422,8 @@ async function importFuarbotContact(id) {
 
     // ── Add contact ──────────────────────────────────────
     const phone = c.phone||c.mobile||'';
-    const ct = { name:c.name||'', title:c.position||'', phone, phoneNormalized:phone.replace(/\D/g,''), phoneValid:/^0[0-9]{10}$/.test(phone.replace(/[\s\-()]/g,'')), email:c.email||'', companyId, status:'Aktif', notes:'Fuarbot: '+(c.source||'Fuarbot')+(c.notes?'\n'+c.notes:''), createdAt:new Date().toISOString(), updatedAt:new Date().toISOString(), createdBy:c.scannedBy||'' };
+    const _ctAddrParsed = (typeof _geoParseAddress === 'function') ? _geoParseAddress(c.address||'') : {city:null,country:null};
+    const ct = { name:c.name||'', title:c.position||'', phone, phoneNormalized:phone.replace(/\D/g,''), phoneValid:/^0[0-9]{10}$/.test(phone.replace(/[\s\-()]/g,'')), email:c.email||'', address:c.address||null, city:_ctAddrParsed.city||null, country:_ctAddrParsed.country||null, companyId, status:'Aktif', notes:'Fuarbot: '+(c.source||'Fuarbot')+(c.notes?'\n'+c.notes:''), createdAt:new Date().toISOString(), updatedAt:new Date().toISOString(), createdBy:c.scannedBy||'' };
     ct.qualityScore = calculateContactQuality(ct);
     await new Promise((res,rej) => { const tx3=db.transaction(['contacts'],'readwrite'); const r3=tx3.objectStore('contacts').add(ct); r3.onsuccess=()=>res(r3.result); r3.onerror=()=>rej(r3.error); });
     toast('✓ ' + c.name + ' CRM\'e aktarıldı', 'success');

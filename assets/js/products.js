@@ -1,14 +1,35 @@
 // ══════════════════════════════════════════════════════════════
 // ÜRÜNLER  (Products catalog + CSV import)
 // ══════════════════════════════════════════════════════════════
-const PR_COL = 'products';
-const UR_COL = 'production_entries';
+const PR_COL       = 'products';
+const UR_COL       = 'production_entries';
+const PR_PAGE_SIZE = 50;              // rows per page
+const PR_SWR_KEY   = '_wf_swr_products';
+const PR_SWR_TTL   = 10 * 60 * 1000; // 10 min cache
 
 let prProducts   = [];   // all products
-let prFiltered   = [];   // currently displayed
+let prFiltered   = [];   // after search/filter
+let prPage       = 0;    // current page index
 let prCatFilter  = '';
 let prSearchQ    = '';
 let _csvParsed   = [];   // CSV preview buffer
+
+// ── Simple SWR helpers (localStorage) ───────────────────────
+function _prSwrGet() {
+  try {
+    const raw = localStorage.getItem(PR_SWR_KEY);
+    if (!raw) return null;
+    const { data, ts } = JSON.parse(raw);
+    if (Date.now() - ts > PR_SWR_TTL * 3) { localStorage.removeItem(PR_SWR_KEY); return null; }
+    return data;
+  } catch { return null; }
+}
+function _prSwrSet(data) {
+  try { localStorage.setItem(PR_SWR_KEY, JSON.stringify({ data, ts: Date.now() })); } catch {}
+}
+function _prSwrInvalidate() {
+  try { localStorage.removeItem(PR_SWR_KEY); } catch {}
+}
 
 // ── Load & Render ──────────────────────────────────────────────
 async function loadProducts() {
@@ -18,14 +39,30 @@ async function loadProducts() {
     el.innerHTML = `<div class="alert alert-warning"><i class="bi bi-exclamation-triangle me-2"></i>Önce Fuarbot Sync sayfasında Firebase bağlantısını kurun.</div>`;
     return;
   }
-  el.innerHTML = '<div class="text-muted p-3"><span class="spinner-border spinner-border-sm me-2"></span>Ürünler yükleniyor…</div>';
-  try {
-    prProducts = await fsFetch(cfg.apiKey, cfg.projectId, PR_COL);
+
+  // Show cached data instantly (SWR)
+  const cached = _prSwrGet();
+  if (cached) {
+    prProducts = cached;
     prProducts.sort((a,b) => (a.sku||'').localeCompare(b.sku||''));
     _prRefreshCategoryDropdown();
+    prPage = 0;
+    prApplyFilters();
+  } else {
+    el.innerHTML = '<div class="text-muted p-3"><span class="spinner-border spinner-border-sm me-2"></span>Ürünler yükleniyor…</div>';
+  }
+
+  // Always fetch fresh in background
+  try {
+    const fresh = await fsFetch(cfg.apiKey, cfg.projectId, PR_COL);
+    fresh.sort((a,b) => (a.sku||'').localeCompare(b.sku||''));
+    _prSwrSet(fresh);
+    prProducts = fresh;
+    _prRefreshCategoryDropdown();
+    prPage = 0;
     prApplyFilters();
   } catch(e) {
-    el.innerHTML = `<div class="alert alert-danger">Hata: ${esc(e.message)}</div>`;
+    if (!cached) el.innerHTML = `<div class="alert alert-danger">Hata: ${esc(e.message)}</div>`;
   }
 }
 
@@ -40,8 +77,9 @@ function _prRefreshCategoryDropdown() {
   if (dl) dl.innerHTML = cats.map(c => `<option value="${esc(c)}">`).join('');
 }
 
-function prSetCategory(cat) { prCatFilter = cat; prApplyFilters(); }
-function prSearch(q)        { prSearchQ   = q.toLowerCase().trim(); prApplyFilters(); }
+function prSetCategory(cat) { prCatFilter = cat; prPage = 0; prApplyFilters(); }
+function prSearch(q)        { prSearchQ   = q.toLowerCase().trim(); prPage = 0; prApplyFilters(); }
+function prGoPage(n)        { prPage = n; renderProducts(); }
 
 function prApplyFilters() {
   prFiltered = prProducts.filter(p => {
@@ -58,14 +96,35 @@ function prApplyFilters() {
 function renderProducts() {
   const el = document.getElementById('urunler-content');
 
-  const totalVal   = prProducts.reduce((s,p) => s + (Number(p.priceNet||0) * Number(p.stock||0)), 0);
-  const lowStock   = prProducts.filter(p => Number(p.stock||0) <= Number(p.minStock||5) && Number(p.stock||0) > 0).length;
-  const zeroStock  = prProducts.filter(p => Number(p.stock||0) <= 0).length;
+  const totalVal  = prProducts.reduce((s,p) => s + (Number(p.priceNet||0) * Number(p.stock||0)), 0);
+  const lowStock  = prProducts.filter(p => Number(p.stock||0) <= Number(p.minStock||5) && Number(p.stock||0) > 0).length;
+  const zeroStock = prProducts.filter(p => Number(p.stock||0) <= 0).length;
 
   if (!prProducts.length) {
     el.innerHTML = `<div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>Henüz ürün eklenmemiş. <strong>Ürün Ekle</strong> veya <strong>CSV İçe Aktar</strong> butonunu kullanın.</div>`;
     return;
   }
+
+  // Pagination slice
+  const totalPages = Math.max(1, Math.ceil(prFiltered.length / PR_PAGE_SIZE));
+  if (prPage >= totalPages) prPage = totalPages - 1;
+  const pageStart  = prPage * PR_PAGE_SIZE;
+  const pageRows   = prFiltered.slice(pageStart, pageStart + PR_PAGE_SIZE);
+
+  // Pagination controls
+  const paginationHtml = totalPages <= 1 ? '' : `
+    <div class="d-flex align-items-center gap-2 px-3 py-2 border-top">
+      <button class="btn btn-sm btn-outline-secondary" onclick="prGoPage(${prPage-1})" ${prPage===0?'disabled':''}>‹</button>
+      <span class="text-muted small">Seite ${prPage+1} / ${totalPages} · ${prFiltered.length} Ergebnisse</span>
+      <button class="btn btn-sm btn-outline-secondary" onclick="prGoPage(${prPage+1})" ${prPage>=totalPages-1?'disabled':''}>›</button>
+      ${totalPages > 5 ? `
+        <div class="ms-2 d-flex gap-1">
+          ${[...Array(Math.min(totalPages,7))].map((_,i) => {
+            const pg = totalPages <= 7 ? i : (prPage < 4 ? i : (prPage > totalPages-5 ? totalPages-7+i : prPage-3+i));
+            return pg>=0 && pg<totalPages ? `<button class="btn btn-sm ${pg===prPage?'btn-primary':'btn-outline-secondary'}" onclick="prGoPage(${pg})">${pg+1}</button>` : '';
+          }).join('')}
+        </div>` : ''}
+    </div>`;
 
   el.innerHTML = `
     <div class="d-flex gap-3 mb-3 flex-wrap">
@@ -88,7 +147,7 @@ function renderProducts() {
     </div>
     <div class="card">
       <div class="card-header py-2 px-3 d-flex align-items-center justify-content-between">
-        <span class="text-muted small">${prFiltered.length} / ${prProducts.length} ürün gösteriliyor</span>
+        <span class="text-muted small">${pageStart+1}–${Math.min(pageStart+PR_PAGE_SIZE, prFiltered.length)} / ${prFiltered.length} ürün (toplam ${prProducts.length})</span>
       </div>
       <div class="table-responsive">
         <table class="table table-hover mb-0" style="font-size:13px;">
@@ -101,10 +160,11 @@ function renderProducts() {
             </tr>
           </thead>
           <tbody>
-            ${prFiltered.map(p => prRenderRow(p)).join('')}
+            ${pageRows.map(p => prRenderRow(p)).join('')}
           </tbody>
         </table>
       </div>
+      ${paginationHtml}
     </div>`;
 }
 
@@ -217,6 +277,7 @@ async function saveProduct() {
 
     bootstrap.Modal.getInstance(document.getElementById('productEditModal'))?.hide();
     toast(id ? '✓ Ürün güncellendi' : '✓ Ürün eklendi', 'success');
+    _prSwrInvalidate(); // cache invalidieren nach Änderung
     _prRefreshCategoryDropdown();
     prApplyFilters();
   } catch(e) { toast('Hata: '+e.message, 'error'); }
@@ -234,6 +295,7 @@ async function deleteProduct(id) {
     );
     if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error?.message||'HTTP '+res.status); }
     prProducts = prProducts.filter(x => x._id !== id);
+    _prSwrInvalidate(); // cache invalidieren nach Löschung
     toast('✓ Ürün silindi', 'success');
     prApplyFilters();
   } catch(e) { toast('Hata: '+e.message, 'error'); }

@@ -196,6 +196,8 @@ async function _appStart() {
     if (typeof emailInit === 'function') setTimeout(emailInit, 2500);
     // Performans verilerini arka planda önceden yükle
     if (typeof performansPreload === 'function') setTimeout(performansPreload, 4000);
+    // Home-Daten vorausladen → Home-Dashboard erscheint sofort beim nächsten Klick
+    if (typeof homePreload === 'function') setTimeout(() => homePreload(loadFbConfig()), 3000);
   } catch (err) {
     console.error('Başlangıç hatası:', err);
     toast('Veritabanı başlatılamadı: ' + err.message + ' — Tarayıcı izinlerini kontrol edin.', 'error');
@@ -743,11 +745,13 @@ function showPage(name) {
   // 3. Form sıfırla (form sayfaları için)
   if (name === 'add-company') {
     const f = document.getElementById('add-company-form'); if (f) f.reset();
+    setTimeout(() => initAddressAutocomplete('ac-address','ac-city','ac-postcode','ac-country'), 100);
     return;
   }
   if (name === 'add-contact') {
     const f = document.getElementById('add-contact-form'); if (f) f.reset();
     refreshCompanyDatalist().catch(console.error);
+    setTimeout(() => initAddressAutocomplete('act-address','act-city','act-postcode','act-country'), 100);
     return;
   }
 
@@ -764,6 +768,7 @@ function showPage(name) {
   if (name === 'urunler')        { loadProducts(); return; }
   if (name === 'uretim')         { loadUretim(); return; }
   if (name === 'performans')     { if (typeof performansLoad === 'function') performansLoad(); return; }
+  if (name === 'musteri-geo')   { if (typeof loadMusteriGeo === 'function') loadMusteriGeo(); return; }
 
   // 4. IndexedDB-abhängige Seiten
   if (!db) { console.warn('showPage: DB henüz hazır değil, içerik yüklenemedi'); return; }
@@ -840,6 +845,111 @@ function autoDetectLocation(formId) {
   const loc = parseAddressForLocation(addr);
   if (loc.city && !cityEl.value) cityEl.value = loc.city;
   if (loc.district && !distEl.value) distEl.value = loc.district;
+}
+
+// ── Nominatim address autocomplete ───────────────────────────
+// Call initAddressAutocomplete(addrInputId, cityInputId, postcodeInputId, countrySelectId)
+// to wire up a live address search on any form
+let _nomAcTimer = null;
+let _nomAcCache = {};
+
+function initAddressAutocomplete(addrId, cityId, postcodeId, countryId) {
+  const addrEl = document.getElementById(addrId);
+  if (!addrEl || addrEl._nomAcInit) return;
+  addrEl._nomAcInit = true;
+
+  // Create dropdown container
+  const wrap = addrEl.parentElement;
+  wrap.style.position = 'relative';
+  const drop = document.createElement('ul');
+  drop.className = 'nom-ac-drop';
+  wrap.appendChild(drop);
+
+  addrEl.addEventListener('input', () => {
+    clearTimeout(_nomAcTimer);
+    const q = addrEl.value.trim();
+    if (q.length < 3) { drop.innerHTML = ''; drop.style.display = 'none'; return; }
+    _nomAcTimer = setTimeout(() => _nomAcSearch(q, drop, addrEl, cityId, postcodeId, countryId), 400);
+  });
+  addrEl.addEventListener('blur', () => setTimeout(() => { drop.style.display='none'; }, 200));
+  addrEl.addEventListener('focus', () => { if (drop.children.length) drop.style.display='block'; });
+}
+
+async function _nomAcSearch(q, drop, addrEl, cityId, postcodeId, countryId) {
+  const cacheKey = q.toLowerCase();
+  let results = _nomAcCache[cacheKey];
+  if (!results) {
+    try {
+      const r = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&addressdetails=1&limit=5&accept-language=de,tr,en`,
+        { headers: { 'User-Agent': 'WindoformCRM/1.0' } }
+      );
+      results = await r.json();
+      _nomAcCache[cacheKey] = results;
+    } catch { return; }
+  }
+  drop.innerHTML = '';
+  if (!results || !results.length) { drop.style.display='none'; return; }
+
+  results.forEach(item => {
+    const li = document.createElement('li');
+    li.className = 'nom-ac-item';
+    li.textContent = item.display_name;
+    li.addEventListener('mousedown', () => {
+      const a = item.address || {};
+      // Fill address field with street + number
+      const street = [a.road, a.house_number].filter(Boolean).join(' ');
+      addrEl.value = street || item.display_name.split(',')[0];
+      // Fill city
+      const cityEl = document.getElementById(cityId);
+      if (cityEl) cityEl.value = a.city || a.town || a.village || a.county || a.state || '';
+      // Fill postcode
+      const postEl = document.getElementById(postcodeId);
+      if (postEl) postEl.value = a.postcode || '';
+      // Fill country (as select or input)
+      const countryEl = document.getElementById(countryId);
+      if (countryEl && a.country) {
+        // Try to match to canonical name
+        const raw = a.country;
+        const canonical = _nomAcCanonicalCountry(raw);
+        if (countryEl.tagName === 'SELECT') {
+          // Find matching option
+          for (const opt of countryEl.options) {
+            if (opt.value === canonical || opt.value === raw || opt.text === canonical) {
+              countryEl.value = opt.value; break;
+            }
+          }
+        } else {
+          countryEl.value = canonical || raw;
+        }
+      }
+      drop.style.display = 'none';
+    });
+    drop.appendChild(li);
+  });
+  drop.style.display = 'block';
+}
+
+// Map Nominatim country name → canonical CRM name
+function _nomAcCanonicalCountry(raw) {
+  if (!raw) return '';
+  const map = {
+    'Germany':'Deutschland','Deutschland':'Deutschland',
+    'Turkey':'Türkiye','Türkiye':'Türkiye','Turkiye':'Türkiye',
+    'Austria':'Österreich','Österreich':'Österreich',
+    'Switzerland':'Schweiz','France':'Frankreich','Italy':'Italien',
+    'Spain':'Spanien','Netherlands':'Niederlande','Belgium':'Belgien',
+    'Poland':'Polen','Czech Republic':'Tschechien','Slovakia':'Slowakei',
+    'Hungary':'Ungarn','Romania':'Rumänien','Bulgaria':'Bulgarien',
+    'Croatia':'Kroatien','Serbia':'Serbien','Greece':'Griechenland',
+    'United Kingdom':'Vereinigtes Königreich','Russia':'Russland',
+    'United States':'USA','United States of America':'USA',
+    'Canada':'Kanada','Australia':'Australien','Brazil':'Brasilien',
+    'Mexico':'Mexiko','India':'Indien','China':'China','Japan':'Japan',
+    'Saudi Arabia':'Saudi-Arabien',
+    'United Arab Emirates':'Vereinigte Arabische Emirate',
+  };
+  return map[raw] || raw;
 }
 
 function clearCompanyFilters() {
@@ -1207,6 +1317,8 @@ function editCompanyModal() {
     document.getElementById('ec-city').value            = c.city || '';
     document.getElementById('ec-district').value        = c.district || '';
     document.getElementById('ec-postcode').value        = c.postcode || '';
+    document.getElementById('ec-country').value         = c.country || 'Türkiye';
+    initAddressAutocomplete('ec-address','ec-city','ec-postcode','ec-country');
     document.getElementById('ec-lat').value             = c.lat || '';
     document.getElementById('ec-lon').value             = c.lon || '';
     document.getElementById('ec-employees').value       = c.employees || '';
@@ -1437,7 +1549,7 @@ function buildCompanyObj(pre, id, pd, ph) {
     description:      _getVal(`${pre}-description`),
     notes:            _getVal(`${pre}-notes`),
     marketingStatus:  _getVal(`${pre}-marketing-status`) || 'Aranacak',
-    country:          'Türkiye',
+    country:          _getVal(`${pre}-country`) || 'Türkiye',
     updatedAt:        new Date().toISOString(),
     errors:           []
   };
@@ -1638,6 +1750,33 @@ async function showContactModal(id) {
   _setPropText('status', c.status);
   _setPropText('notes', c.notes);
 
+  // ── Address section ──
+  const addrSection = document.getElementById('cont-address-section');
+  const addrRow     = document.getElementById('cont-address-row');
+  const cityRow     = document.getElementById('cont-city-row');
+  const addrText    = document.getElementById('cont-address-text');
+  const cityText    = document.getElementById('cont-city-country-text');
+  // Resolve address from contact or fall back to linked company
+  const resolvedAddr    = c.address    || co?.address    || null;
+  const resolvedCity    = c.city       || co?.city       || null;
+  const resolvedCountry = c.country    || co?.country    || null;
+  const resolvedPostcode= c.postcode   || co?.postcode   || null;
+  const hasAddr = resolvedAddr || resolvedCity || resolvedCountry;
+  if (addrSection) addrSection.style.display = hasAddr ? '' : 'none';
+  if (addrRow && addrText) {
+    if (resolvedAddr) {
+      addrRow.style.display = '';
+      addrText.textContent  = resolvedAddr;
+    } else { addrRow.style.display = 'none'; }
+  }
+  if (cityRow && cityText) {
+    const cityParts = [resolvedCity, resolvedPostcode ? `(${resolvedPostcode})` : '', resolvedCountry].filter(Boolean).join(' · ');
+    if (cityParts) {
+      cityRow.style.display = '';
+      cityText.textContent  = cityParts;
+    } else { cityRow.style.display = 'none'; }
+  }
+
   // Phone / email use innerHTML for links
   const phoneWrap = document.getElementById('cont-phone-wrap');
   if (phoneWrap) phoneWrap.innerHTML = phoneLink(c.phone, c.phoneNormalized) || c.phone || '-';
@@ -1835,8 +1974,13 @@ function editContactModal() {
     document.getElementById('ect-phone').value   = c.phone || '';
     document.getElementById('ect-email').value   = c.email || '';
     document.getElementById('ect-company').value = co?.name || '';
+    document.getElementById('ect-address').value  = c.address  || '';
+    document.getElementById('ect-city').value     = c.city     || '';
+    document.getElementById('ect-postcode').value = c.postcode || '';
+    document.getElementById('ect-country').value  = c.country  || '';
     document.getElementById('ect-status').value  = c.status || 'Aktif';
     document.getElementById('ect-notes').value   = c.notes || '';
+    initAddressAutocomplete('ect-address','ect-city','ect-postcode','ect-country');
     bootstrap.Offcanvas.getOrCreateInstance(document.getElementById('contModal')).hide();
     new bootstrap.Modal(document.getElementById('editContModal')).show();
   })();
@@ -2037,6 +2181,10 @@ function buildContactObj(pre, id, pd, ph, cid) {
     phoneValid:      pd.valid,
     phoneType:       pd.type || null,
     email:           document.getElementById(`${pre}-email`).value.trim() || null,
+    address:         document.getElementById(`${pre}-address`)?.value.trim() || null,
+    city:            document.getElementById(`${pre}-city`)?.value.trim() || null,
+    postcode:        document.getElementById(`${pre}-postcode`)?.value.trim() || null,
+    country:         document.getElementById(`${pre}-country`)?.value.trim() || null,
     notes:           document.getElementById(`${pre}-notes`).value.trim() || null,
     status:          document.getElementById(`${pre}-status`).value || 'Aktif',
     updatedAt:       new Date().toISOString(),

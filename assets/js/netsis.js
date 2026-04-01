@@ -212,33 +212,51 @@ async function netsisStockSync() {
       return;
     }
 
-    // Map Netsis items to our Firestore products schema
-    const fbBase = `https://firestore.googleapis.com/v1/projects/${fbCfg.projectId}/databases/(default)/documents`;
-    let synced = 0, errors = 0;
+    // Map Netsis items to Firestore products schema
+    // Use batchWrite (max 500/batch) → 5.000 items = 10 requests instead of 5.000
+    const dbPath  = `projects/${fbCfg.projectId}/databases/(default)/documents`;
+    const batchUrl = `https://firestore.googleapis.com/v1/${dbPath}:batchWrite?key=${fbCfg.apiKey}`;
+    const token   = typeof authToken === 'function' ? await authToken() : null;
+    const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
 
+    // Build all writes first
+    const writes = [];
     for (const item of allItems) {
-      try {
-        const fields = _netsisItemToFirestore(item);
-        const code   = item.STOK_KODU || item.id;
-        if (!code) continue;
+      const code = item.STOK_KODU || item.id;
+      if (!code) continue;
+      writes.push({
+        update: {
+          name:   `${dbPath}/products/${encodeURIComponent(code)}`,
+          fields: _netsisItemToFirestore(item),
+        },
+      });
+    }
 
-        // Try to find existing product in Firestore by STOK_KODU
-        // Use PATCH with document name = STOK_KODU as doc ID
-        const docUrl = `${fbBase}/products/${encodeURIComponent(code)}?key=${fbCfg.apiKey}`;
-        await fetch(docUrl, {
-          method:  'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ fields }),
+    // Send in chunks of 500 (Firestore batchWrite limit)
+    const CHUNK = 500;
+    let synced = 0, errors = 0;
+    for (let i = 0; i < writes.length; i += CHUNK) {
+      const chunk = writes.slice(i, i + CHUNK);
+      if (statEl) statEl.innerHTML = `<span class="text-muted small">Senkronize ediliyor… ${Math.min(i+CHUNK, writes.length)} / ${writes.length}</span>`;
+      try {
+        const res = await fetch(batchUrl, {
+          method: 'POST', headers,
+          body: JSON.stringify({ writes: chunk }),
         });
-        synced++;
-      } catch { errors++; }
+        if (!res.ok) { errors += chunk.length; continue; }
+        const result = await res.json();
+        // writeResults array – count successes
+        const results = result.writeResults || [];
+        synced += results.length || chunk.length;
+      } catch { errors += chunk.length; }
     }
 
     const msg = `✓ ${synced} ürün senkronize edildi${errors ? `, ${errors} hata` : ''}.`;
     if (statEl) statEl.innerHTML = `<span class="${errors?'text-warning':'text-success'} small">${msg}</span>`;
     toast(msg, errors ? 'warning' : 'success');
 
-    // Refresh products view if open
+    // Cache invalidieren und Produktseite neu laden
+    if (typeof _prSwrInvalidate === 'function') _prSwrInvalidate();
     if (typeof loadProducts === 'function') loadProducts().catch(()=>{});
 
   } catch(e) {
