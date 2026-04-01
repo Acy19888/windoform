@@ -26,8 +26,8 @@ const _EMAIL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const _DEFAULT_PERMS = {
   admin: ['home','dashboard','companies','contacts','fuarbot','fuar-dashboard','fuar-users',
           'leads','teklifler','fatura','urunler','uretim','import','reports',
-          'duplicates','musteri-geo','add-company','add-contact','ayarlar','emails'],
-  sales: ['home','dashboard','companies','contacts','teklifler','fatura','leads','emails'],
+          'duplicates','musteri-geo','gorevler','add-company','add-contact','ayarlar','emails'],
+  sales: ['home','dashboard','companies','contacts','teklifler','fatura','leads','emails','gorevler'],
 };
 
 const _ALL_PAGES = [
@@ -36,6 +36,7 @@ const _ALL_PAGES = [
   { id:'companies',     label:'Firmalar',            icon:'bi-building' },
   { id:'contacts',      label:'Kişiler',             icon:'bi-people' },
   { id:'emails',        label:'E-postalar',          icon:'bi-envelope' },
+  { id:'gorevler',      label:'Aufgaben',            icon:'bi-check2-square' },
   { id:'leads',         label:'Leads & Pipeline',    icon:'bi-funnel-fill' },
   { id:'teklifler',     label:'Teklifler',           icon:'bi-file-earmark-text-fill' },
   { id:'fatura',        label:'Fatura',              icon:'bi-receipt' },
@@ -894,7 +895,22 @@ async function loadEmailsPage(forceRefresh = false) {
       rows = await res2.json();
     }
 
-    _emailPageAll = _parseEmailRows(rows);
+    let allEmails = _parseEmailRows(rows);
+
+    // Sales-User: nur eigene Emails anzeigen
+    if (_userCrmRole !== 'admin') {
+      const myUid   = typeof authUid   === 'function' ? authUid()   : null;
+      const myEmail = typeof authEmail === 'function' ? (authEmail() || '').toLowerCase() : '';
+      if (myUid || myEmail) {
+        allEmails = allEmails.filter(e =>
+          e.createdByUid === myUid ||
+          (myEmail && (e.from||'').toLowerCase().includes(myEmail)) ||
+          (myEmail && (e.to  ||'').toLowerCase().includes(myEmail))
+        );
+      }
+    }
+
+    _emailPageAll = allEmails;
     _emailCacheTs = Date.now(); // update cache timestamp
 
     // Build email→name lookup from contacts (for display names)

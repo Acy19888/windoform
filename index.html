@@ -94,6 +94,10 @@
     <a href="#" data-page="dashboard"  onclick="showPage('dashboard');return false;"><i class="bi bi-graph-up"></i>Dashboard</a>
     <a href="#" data-page="companies"  onclick="showPage('companies');return false;"><i class="bi bi-building"></i>Firmalar</a>
     <a href="#" data-page="contacts"   onclick="showPage('contacts');return false;"><i class="bi bi-people"></i>&#x4b;i&#x15f;iler</a>
+    <a href="#" data-page="gorevler"   onclick="showPage('gorevler');return false;" style="position:relative;">
+      <i class="bi bi-check2-square"></i>Aufgaben
+      <span id="tasks-open-badge" class="badge bg-danger" style="display:none;position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:10px;padding:2px 5px;"></span>
+    </a>
   </nav>
   <div class="divider"></div>
   <div class="section-label">&#x130;&#x15f;lemler</div>
@@ -1647,6 +1651,82 @@
   </div>
 </div>
 
+<!-- AUFGABEN PAGE -->
+<div id="gorevler" class="page">
+  <div class="page-topbar">
+    <div class="page-topbar-left">
+      <h1><i class="bi bi-check2-square me-2" style="color:#6366f1;"></i>Aufgaben</h1>
+    </div>
+    <div class="page-topbar-right">
+      <button class="btn btn-sm btn-primary me-2" onclick="openTaskModal(null)">
+        <i class="bi bi-plus-lg me-1"></i>Neue Aufgabe
+      </button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="loadTasksPage()" title="Yenile">
+        <i class="bi bi-arrow-clockwise"></i>
+      </button>
+    </div>
+  </div>
+  <div class="page-content">
+    <div id="tasks-content"><div class="text-muted p-3"><span class="spinner-border spinner-border-sm me-2"></span>Wird geladen…</div></div>
+  </div>
+</div>
+
+<!-- TASK EDIT MODAL -->
+<div class="modal fade" id="taskEditModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-check2-square me-2 text-primary"></i><span id="task-modal-title">Neue Aufgabe</span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="task-edit-id">
+        <input type="hidden" id="task-edit-contact">
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label fw-semibold">Titel <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="task-edit-title" placeholder="Aufgabentitel…">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">Beschreibung</label>
+            <textarea class="form-control" id="task-edit-desc" rows="2" placeholder="Details…"></textarea>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Fällig am</label>
+            <input type="date" class="form-control" id="task-edit-due">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Priorität</label>
+            <select class="form-select" id="task-edit-priority">
+              <option value="normal">Normal</option>
+              <option value="high">Hoch</option>
+              <option value="low">Niedrig</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Zugewiesen an</label>
+            <select class="form-select" id="task-edit-assigned">
+              <option value="">— Nicht zugewiesen —</option>
+            </select>
+          </div>
+          <div class="col-md-8">
+            <label class="form-label fw-semibold">Kontakt verknüpfen</label>
+            <div class="position-relative">
+              <input type="text" class="form-control" id="task-edit-contact-name" placeholder="Kontaktname suchen…" autocomplete="off">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+        <button type="button" class="btn btn-primary" onclick="saveTask()">
+          <i class="bi bi-check-lg me-1"></i>Speichern
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- LEADS + PIPELINE PAGE -->
 <div id="leads" class="page">
   <div class="page-topbar">
@@ -2471,6 +2551,7 @@
 <script src="./assets/js/email.js?v=20260326c"></script>
 <script src="./assets/js/performans.js?v=20260325a"></script>
 <script src="./assets/js/home.js?v=20260330a"></script>
+<script src="./assets/js/tasks.js?v=20260401a"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="./assets/js/geo.js?v=20260331a"></script>
 <script>document.addEventListener('DOMContentLoaded', () => { initChatbot(); });</script>

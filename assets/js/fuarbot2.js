@@ -1258,10 +1258,10 @@ function renderFuarUsers() {
         <table class="table table-hover mb-0 fbd-users-table">
           <thead class="table-light">
             <tr>
-              <th>Ad Soyad</th>
-              <th>E-posta</th>
-              <th>Rol</th>
-              <th style="width:140px;"></th>
+              <th>Benutzer</th>
+              <th>Funktion</th>
+              <th>CRM Rolle</th>
+              <th style="width:120px;"></th>
             </tr>
           </thead>
           <tbody>
@@ -1403,25 +1403,64 @@ async function saveFuarbotImport() {
 }
 
 function renderFuarUserRow(u) {
-  const name  = esc(u.name || u._id || '—');
-  const email = esc(u.email || '—');
-  const role  = esc(u.role || '—');
+  const name    = esc(u.name || u._id || '—');
+  const email   = esc(u.email || '—');
+  const jobRole = esc(u.role || '—');
+  const crmRole = (u.crmRole || '').toLowerCase();
+  const isAdmin = crmRole === 'admin';
+  const myUid   = typeof authUid === 'function' ? authUid() : '';
+  const isMe    = u._id === myUid || u.uid === myUid;
+
+  // CRM-Rolle Badge + Dropdown
+  const crmBadge = `
+    <div class="dropdown d-inline-block">
+      <button class="badge border-0 dropdown-toggle" data-bs-toggle="dropdown" style="cursor:pointer;background:${isAdmin?'#fee2e2':'#dbeafe'};color:${isAdmin?'#dc2626':'#1d4ed8'};font-size:11px;padding:3px 8px;">
+        ${isAdmin ? '👑 Admin' : '👤 Sales'}
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end" style="min-width:120px;font-size:13px;">
+        <li><a class="dropdown-item ${isAdmin?'fw-bold':''}" href="#" onclick="setCrmRole('${esc(u._id)}','admin');return false;">
+          👑 Admin</a></li>
+        <li><a class="dropdown-item ${!isAdmin?'fw-bold':''}" href="#" onclick="setCrmRole('${esc(u._id)}','sales');return false;">
+          👤 Sales</a></li>
+      </ul>
+    </div>`;
+
   return `<tr>
-    <td class="fw-semibold">${name}</td>
-    <td><span style="font-family:monospace;font-size:12px;">${email}</span></td>
-    <td><span class="badge bg-light text-dark border">${role}</span></td>
     <td>
-      <button class="btn btn-sm btn-outline-primary me-1" onclick="editFuarUser('${esc(u._id)}')" title="Düzenle">
-        <i class="bi bi-pencil-fill"></i>
-      </button>
-      <button class="btn btn-sm btn-outline-warning me-1" onclick="resetFuarUserPassword('${esc(u._id)}')" title="Şifre Sıfırlama E-postası">
-        <i class="bi bi-key-fill"></i>
-      </button>
-      <button class="btn btn-sm btn-outline-danger" onclick="deleteFuarUser('${esc(u._id)}')" title="Sil">
-        <i class="bi bi-trash-fill"></i>
-      </button>
+      <div class="fw-semibold small">${name} ${isMe ? '<span class="badge bg-secondary" style="font-size:9px;">Ich</span>' : ''}</div>
+      <div class="text-muted" style="font-size:11px;font-family:monospace;">${email}</div>
+    </td>
+    <td><span class="badge bg-light text-dark border" style="font-size:11px;">${jobRole}</span></td>
+    <td>${crmBadge}</td>
+    <td>
+      <button class="btn btn-sm btn-outline-primary py-0 me-1" onclick="editFuarUser('${esc(u._id)}')" title="Düzenle"><i class="bi bi-pencil-fill"></i></button>
+      <button class="btn btn-sm btn-outline-warning py-0 me-1" onclick="resetFuarUserPassword('${esc(u._id)}')" title="Şifre sıfırlama"><i class="bi bi-key-fill"></i></button>
+      <button class="btn btn-sm btn-outline-danger py-0" onclick="deleteFuarUser('${esc(u._id)}')" title="Sil"><i class="bi bi-trash-fill"></i></button>
     </td>
   </tr>`;
+}
+
+// ── CRM-Rolle setzen (Admin / Sales) ─────────────────────────
+async function setCrmRole(uid, role) {
+  const cfg = loadFbConfig();
+  if (!cfg?.apiKey || !cfg?.projectId) return;
+  const token = typeof authToken === 'function' ? await authToken() : null;
+  const url   = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/fuarEmployees/${uid}?updateMask.fieldPaths=crmRole&key=${cfg.apiKey}`;
+  try {
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization:`Bearer ${token}` } : {}) },
+      body: JSON.stringify({ fields: { crmRole: { stringValue: role } } }),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    // Update local cache
+    const u = fbUsersData.find(x => x._id === uid);
+    if (u) u.crmRole = role;
+    renderFuarUsers();
+    if (typeof toast === 'function') toast(`${uid === (typeof authUid==='function'?authUid():'') ? 'Deine' : 'CRM'}-Rolle → ${role === 'admin' ? '👑 Admin' : '👤 Sales'}`, 'success');
+  } catch(e) {
+    alert('Fehler beim Speichern: ' + e.message);
+  }
 }
 
 function openAddFuarUser() {

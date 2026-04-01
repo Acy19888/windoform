@@ -1683,3 +1683,16 @@ main {
   background: #eff6ff;
   color: #1d4ed8;
 }
+
+/* ── Tasks / Aufgaben ───────────────────────────────────────── */
+.tasks-stat-card {
+  background: #fff;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 10px 18px;
+  min-width: 100px;
+  text-align: center;
+  color: #2B5597;
+}
+.tasks-stat-num   { font-size: 22px; font-weight: 700; line-height: 1.1; }
+.tasks-stat-label { font-size: 11px; color: #6b7280; margin-top: 2px; }

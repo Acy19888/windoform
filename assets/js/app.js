@@ -103,6 +103,7 @@ function showPage(name) {
   if (name === 'uretim')         { loadUretim(); return; }
   if (name === 'performans')     { if (typeof performansLoad === 'function') performansLoad(); return; }
   if (name === 'musteri-geo')   { if (typeof loadMusteriGeo === 'function') loadMusteriGeo(); return; }
+  if (name === 'gorevler')      { if (typeof loadTasksPage  === 'function') loadTasksPage();  return; }
 
   // 4. IndexedDB-abhängige Seiten
   if (!db) { console.warn('showPage: DB henüz hazır değil, içerik yüklenemedi'); return; }
