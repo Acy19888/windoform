@@ -34,27 +34,25 @@ async function loadHome(forceRefresh) {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Guten Morgen' : hour < 18 ? 'Guten Tag' : 'Guten Abend';
 
-  // Try profile cache first (_userDispName is set by email.js after init)
-  let displayName = (typeof _userDispName !== 'undefined' && _userDispName)
-    ? _userDispName
-    : null;
+  // 1. Try _userDispName (set by email.js if already initialized)
+  let displayName = (typeof _userDispName !== 'undefined' && _userDispName) ? _userDispName : null;
 
-  // Also try localStorage profile cache directly
+  // 2. Scan ALL _wf_profile_* keys in localStorage (doesn't need authUid)
   if (!displayName) {
     try {
-      const uid = typeof authUid === 'function' ? authUid() : null;
-      if (uid) {
-        const cached = JSON.parse(localStorage.getItem(`_wf_profile_${uid}`) || 'null');
-        if (cached?.name) displayName = cached.name;
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('_wf_profile_')) {
+          const cached = JSON.parse(localStorage.getItem(key) || 'null');
+          if (cached?.name) { displayName = cached.name; break; }
+        }
       }
     } catch {}
   }
 
-  // Last resort: email prefix
+  // 3. Last resort: email prefix (only if nothing else found)
   if (!displayName && typeof authEmail === 'function') {
-    const emailPart = (authEmail() || '').split('@')[0];
-    // Only use if it doesn't look like an email username (e.g. "cyuksel88")
-    displayName = emailPart;
+    displayName = (authEmail() || '').split('@')[0] || null;
   }
 
   // Capitalize first letter only
@@ -516,8 +514,22 @@ function _homeRenderProduction(el, entries) {
 function _homeUpdateGreeting() {
   const el = document.getElementById('home-greeting');
   if (!el) return;
-  const name = (typeof _userDispName !== 'undefined' && _userDispName) ? _userDispName : null;
-  if (!name) return;
+
+  // Try _userDispName first, then scan localStorage cache
+  let name = (typeof _userDispName !== 'undefined' && _userDispName) ? _userDispName : null;
+  if (!name) {
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('_wf_profile_')) {
+          const cached = JSON.parse(localStorage.getItem(key) || 'null');
+          if (cached?.name) { name = cached.name; break; }
+        }
+      }
+    } catch {}
+  }
+  if (!name) return; // still nothing — don't overwrite with empty
+
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Guten Morgen' : hour < 18 ? 'Guten Tag' : 'Guten Abend';
   const nameCap = name.charAt(0).toUpperCase() + name.slice(1);
