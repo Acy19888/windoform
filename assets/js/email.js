@@ -114,6 +114,8 @@ async function emailInit() {
             profilePhoto: window._profilePhoto
           }));
         } catch(e) {}
+        // Update Home greeting with real name if home page already loaded
+        _homeUpdateGreeting();
       }
     }
 

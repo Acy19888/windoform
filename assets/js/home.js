@@ -30,15 +30,40 @@ async function loadHome(forceRefresh) {
   _homeLoaded = true;
   const cfg = typeof loadFbConfig === 'function' ? loadFbConfig() : null;
 
-  // Greeting
+  // Greeting — prefer real display name from profile cache, fallback to email prefix
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Guten Morgen' : hour < 18 ? 'Guten Tag' : 'Guten Abend';
-  const userName = typeof authEmail === 'function'
-    ? (authEmail() || '').split('@')[0]
+
+  // Try profile cache first (_userDispName is set by email.js after init)
+  let displayName = (typeof _userDispName !== 'undefined' && _userDispName)
+    ? _userDispName
+    : null;
+
+  // Also try localStorage profile cache directly
+  if (!displayName) {
+    try {
+      const uid = typeof authUid === 'function' ? authUid() : null;
+      if (uid) {
+        const cached = JSON.parse(localStorage.getItem(`_wf_profile_${uid}`) || 'null');
+        if (cached?.name) displayName = cached.name;
+      }
+    } catch {}
+  }
+
+  // Last resort: email prefix
+  if (!displayName && typeof authEmail === 'function') {
+    const emailPart = (authEmail() || '').split('@')[0];
+    // Only use if it doesn't look like an email username (e.g. "cyuksel88")
+    displayName = emailPart;
+  }
+
+  // Capitalize first letter only
+  const nameCap = displayName
+    ? displayName.charAt(0).toUpperCase() + displayName.slice(1)
     : '';
-  const nameCap = userName.charAt(0).toUpperCase() + userName.slice(1);
+
   const el = document.getElementById('home-greeting');
-  if (el) el.textContent = `${greeting}, ${nameCap} 👋`;
+  if (el) el.textContent = nameCap ? `${greeting}, ${nameCap} 👋` : `${greeting} 👋`;
 
   // Date
   const dateEl = document.getElementById('home-date');
@@ -484,6 +509,19 @@ function _homeRenderProduction(el, entries) {
       </div>
       <div class="home-list-badge">${Math.round(qty)} Stk</div>
     </div>`).join('');
+}
+
+// ── Update greeting after profile loaded ─────────────────────
+// Called by email.js once the real display name is available
+function _homeUpdateGreeting() {
+  const el = document.getElementById('home-greeting');
+  if (!el) return;
+  const name = (typeof _userDispName !== 'undefined' && _userDispName) ? _userDispName : null;
+  if (!name) return;
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Guten Morgen' : hour < 18 ? 'Guten Tag' : 'Guten Abend';
+  const nameCap = name.charAt(0).toUpperCase() + name.slice(1);
+  el.textContent = `${greeting}, ${nameCap} 👋`;
 }
 
 // ── Helpers ──────────────────────────────────────────────────
