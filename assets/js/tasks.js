@@ -14,8 +14,31 @@ async function loadTasksPage() {
       `<div class="alert alert-warning">Firebase nicht konfiguriert.</div>`;
     return;
   }
+  // Ensure fuarbot user list is loaded for "Zugewiesen an" dropdown
+  await _tasksEnsureUsers(cfg);
   await _fetchTasks(cfg);
   _renderTasksPage();
+}
+
+// Load fuarEmployees into fbUsersData if not already loaded
+async function _tasksEnsureUsers(cfg) {
+  if (typeof fbUsersData !== 'undefined' && fbUsersData.length > 0) return;
+  try {
+    const token = typeof authToken === 'function' ? await authToken() : null;
+    const url = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/fuarEmployees?pageSize=100&key=${cfg.apiKey}`;
+    const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!res.ok) return;
+    const data = await res.json();
+    const docs = data.documents || [];
+    const users = docs.map(d => {
+      const f = d.fields || {};
+      const id = d.name?.split('/').pop() || '';
+      return { _id: id, uid: id, name: f.name?.stringValue || f.displayName?.stringValue || '', email: f.email?.stringValue || '', role: f.role?.stringValue || '', crmRole: f.crmRole?.stringValue || 'sales' };
+    }).filter(u => u.name || u.email);
+    if (typeof fbUsersData !== 'undefined') {
+      fbUsersData.splice(0, fbUsersData.length, ...users);
+    }
+  } catch(_) {}
 }
 
 async function _fetchTasks(cfg, force) {
