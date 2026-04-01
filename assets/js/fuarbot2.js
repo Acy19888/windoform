@@ -2,7 +2,10 @@
 // Collections: crm_customers | crm_activities | crm_quotes
 
 const FB_CFG_KEY = 'crm_fuarbot_firebase_config';
-let fbPollInterval = null;
+let fbPollInterval  = null;
+let fbDailyTimer    = null;      // setTimeout handle for 20:00 auto-sync
+const FB_CACHE_KEY  = 'wf_fb_cache';        // localStorage key for full data cache
+const FB_CACHE_TTL  = 23 * 60 * 60 * 1000; // 23h — treat cache as stale after this
 let fbCustomers        = [];
 let fbAllCustomersRaw  = [];  // all crm_customers incl. already-imported (for timeline lookup)
 let fbActivities       = {};
@@ -142,7 +145,19 @@ async function fetchAllData(apiKey, projectId, silent) {
     document.getElementById('fb-config-panel').style.display = 'none';
     document.getElementById('fb-tabs-wrapper').style.display = '';
     const syncEl = document.getElementById('fb-last-sync');
-    if (syncEl) syncEl.textContent = new Date().toLocaleTimeString('tr-TR');
+    const now = new Date();
+    if (syncEl) syncEl.textContent = now.toLocaleTimeString('tr-TR');
+
+    // ── Persist to localStorage cache ─────────────────────
+    try {
+      localStorage.setItem(FB_CACHE_KEY, JSON.stringify({
+        ts: now.getTime(),
+        customers: fbAllCustomersRaw,
+        activities: Object.entries(fbActivities),
+        quotes: Object.entries(fbQuotes),
+        employees: fbUsersData,
+      }));
+    } catch(e) { /* quota exceeded — not critical */ }
 
     if (!silent) {
       renderCustomerList(fbCustomers);
@@ -153,23 +168,108 @@ async function fetchAllData(apiKey, projectId, silent) {
   }
 }
 
+// ── Load data from localStorage cache (zero Firestore reads) ──
+async function fbLoadFromCache() {
+  try {
+    const raw = localStorage.getItem(FB_CACHE_KEY);
+    if (!raw) return false;
+    const cache = JSON.parse(raw);
+    if (!cache?.customers?.length) return false;
+
+    const rawCustomers = cache.customers;
+    fbUsersData    = cache.employees || fbUsersData;
+    fbActivities   = Object.fromEntries(cache.activities || []);
+    fbQuotes       = Object.fromEntries(cache.quotes || []);
+    fbAllCustomersRaw = rawCustomers;
+
+    // Filter already-imported contacts
+    fbCustomers = [...rawCustomers];
+    if (typeof dbAll === 'function') {
+      try {
+        const crmContacts = await dbAll('contacts');
+        if (crmContacts.length) {
+          const crmSet = new Set(
+            crmContacts
+              .filter(c => (c.name||'').trim() || (c.email||'').trim())
+              .map(c => [(c.name||'').toLowerCase().trim(), (c.email||'').toLowerCase().trim()].join('§'))
+          );
+          fbCustomers = fbCustomers.filter(c => {
+            const key = [(c.name||'').toLowerCase().trim(), (c.email||'').toLowerCase().trim()].join('§');
+            if (!key || key === '§') return true;
+            return !crmSet.has(key);
+          });
+        }
+      } catch(_) {}
+    }
+
+    const age     = Date.now() - (cache.ts || 0);
+    const stale   = age > FB_CACHE_TTL;
+    const syncTime = new Date(cache.ts).toLocaleTimeString('tr-TR');
+    const syncDate = new Date(cache.ts).toLocaleDateString('tr-TR');
+    const ageHours = Math.floor(age / 3600000);
+
+    document.getElementById('fb-config-panel').style.display = 'none';
+    document.getElementById('fb-tabs-wrapper').style.display = '';
+    const syncEl = document.getElementById('fb-last-sync');
+    if (syncEl) syncEl.textContent = syncDate + ' ' + syncTime + (stale ? ' ⚠️' : '');
+
+    setFbStatus(
+      `Cache · ${fbCustomers.length} kişi · ${ageHours}s önce güncellendi${stale ? ' — eskimiş, yenile' : ''}`,
+      stale ? 'warning' : 'success'
+    );
+    renderCustomerList(fbCustomers);
+    if (fbSelectedId) showDetail(fbSelectedId);
+    return true;
+  } catch(e) { return false; }
+}
+
 function fbManualRefresh() {
   const cfg = loadFbConfig();
-  if (cfg?.apiKey && cfg?.projectId) fetchAllData(cfg.apiKey, cfg.projectId, false);
+  if (!cfg?.apiKey || !cfg?.projectId) return;
+  setFbStatus('Güncelleniyor…', 'warning');
+  fetchAllData(cfg.apiKey, cfg.projectId, false);
+}
+
+// ── Schedule next auto-sync at 20:00 every day ────────────
+function fbScheduleDailySync() {
+  if (fbDailyTimer) clearTimeout(fbDailyTimer);
+  const cfg = loadFbConfig();
+  if (!cfg?.apiKey || !cfg?.projectId) return;
+
+  const now  = new Date();
+  const next = new Date();
+  next.setHours(20, 0, 0, 0);
+  if (next <= now) next.setDate(next.getDate() + 1); // already past 20:00 → tomorrow
+  const msUntil = next - now;
+
+  fbDailyTimer = setTimeout(() => {
+    console.log('[Fuarbot] Daily 20:00 auto-sync starting…');
+    fetchAllData(cfg.apiKey, cfg.projectId, false);
+    fbScheduleDailySync(); // reschedule for next day
+  }, msUntil);
+
+  console.log(`[Fuarbot] Next auto-sync in ${Math.round(msUntil/60000)} min (20:00)`);
 }
 
 function startFuarbotSync(apiKey, projectId) {
-  setFbStatus('Bağlanıyor…', 'warning');
-  if (fbPollInterval) clearInterval(fbPollInterval);
-  fetchAllData(apiKey, projectId, false);
-  // Poll every 10 minutes and only when Fuarbot/Fuar-Dashboard page is visible
-  fbPollInterval = setInterval(() => {
-    const fbPage  = document.getElementById('fuarbot');
-    const fbDash  = document.getElementById('fuar-dashboard');
-    const visible = (fbPage && fbPage.style.display !== 'none') ||
-                    (fbDash && fbDash.style.display !== 'none');
-    if (visible) fetchAllData(apiKey, projectId, true);
-  }, 10 * 60 * 1000);
+  // Remove old interval if any
+  if (fbPollInterval) { clearInterval(fbPollInterval); fbPollInterval = null; }
+
+  // Try cache first — if fresh enough, skip Firestore read entirely
+  fbLoadFromCache().then(fromCache => {
+    const cached = (() => {
+      try { const r = JSON.parse(localStorage.getItem(FB_CACHE_KEY)||'null'); return r; } catch { return null; }
+    })();
+    const age = cached ? (Date.now() - (cached.ts||0)) : Infinity;
+    // Only fetch from Firestore if cache is older than 1 hour (or missing)
+    if (!fromCache || age > 60 * 60 * 1000) {
+      setFbStatus('Bağlanıyor…', 'warning');
+      fetchAllData(apiKey, projectId, false);
+    }
+  });
+
+  // Schedule daily 20:00 auto-sync
+  fbScheduleDailySync();
 }
 
 // ── Targeted fetch: fresh activities + quotes for ONE contact ──
@@ -279,11 +379,12 @@ async function fbFindCustomerByEmailOrName(email, nameLow) {
   } catch(e) { return null; }
 }
 
-// ── Silent background sync (called from app startup) ──────
+// ── Silent background init (called from app startup) ──────
+// Loads from localStorage cache first — no Firestore reads if cache is fresh.
 function fbBackgroundSync() {
   const cfg = loadFbConfig();
   if (!cfg?.apiKey || !cfg?.projectId) return;
-  if (!fbPollInterval) startFuarbotSync(cfg.apiKey, cfg.projectId);
+  startFuarbotSync(cfg.apiKey, cfg.projectId);
 }
 
 // ── Main tab switching ────────────────────────────────────
@@ -741,11 +842,13 @@ function showQuotePreview(qId) {
 function loadFuarbotPage() {
   const cfg = loadFbConfig();
   if (cfg?.apiKey && cfg?.projectId) {
-    if (!fbPollInterval) startFuarbotSync(cfg.apiKey, cfg.projectId);
-    else {
+    // If already have data in memory, just re-render (no Firestore read)
+    if (fbCustomers.length) {
       document.getElementById('fb-config-panel').style.display = 'none';
       document.getElementById('fb-tabs-wrapper').style.display = '';
       renderCustomerList(fbCustomers); if (fbSelectedId) showDetail(fbSelectedId);
+    } else {
+      startFuarbotSync(cfg.apiKey, cfg.projectId);
     }
   } else { _fbShowNotConnected(); }
 }
@@ -2571,7 +2674,7 @@ function loadAyarlar() {
   // Firebase connection status badge
   const badge = document.getElementById('ay-fb-status');
   if (badge) {
-    if (fbCfg?.apiKey && fbPollInterval) {
+    if (fbCfg?.apiKey && fbCustomers.length) {
       badge.className = 'badge bg-success ms-auto';
       badge.textContent = 'Bağlı';
     } else if (fbCfg?.apiKey) {

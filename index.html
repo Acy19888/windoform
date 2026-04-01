@@ -445,9 +445,15 @@
         </div>
       </div>
     </div>
-    <div class="home-greeting-area">
-      <div class="home-greeting" id="home-greeting">Willkommen 👋</div>
-      <div class="home-date" id="home-date"></div>
+    <div class="home-greeting-area" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+      <div>
+        <div class="home-greeting" id="home-greeting">Willkommen 👋</div>
+        <div class="home-date" id="home-date"></div>
+      </div>
+      <button onclick="_homeClearCache();loadHome(true);" title="Daten aktualisieren"
+        style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap;">
+        <i class="bi bi-arrow-clockwise"></i> Aktualisieren
+      </button>
     </div>
   </div>
 

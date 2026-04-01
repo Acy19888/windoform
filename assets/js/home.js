@@ -6,7 +6,27 @@
 let _homeLoaded = false;
 let _homeChart  = null;
 
-async function loadHome() {
+// ── Home data cache (avoids repeated Firestore reads) ──────────
+const HOME_CACHE_KEY = 'wf_home_cache';
+const HOME_CACHE_TTL = 30 * 60 * 1000; // 30 min
+
+function _homeGetCache() {
+  try {
+    const raw = localStorage.getItem(HOME_CACHE_KEY);
+    if (!raw) return null;
+    const c = JSON.parse(raw);
+    if (Date.now() - (c.ts || 0) > HOME_CACHE_TTL) return null; // stale
+    return c;
+  } catch { return null; }
+}
+function _homeSetCache(data) {
+  try { localStorage.setItem(HOME_CACHE_KEY, JSON.stringify({ ts: Date.now(), ...data })); } catch {}
+}
+function _homeClearCache() {
+  try { localStorage.removeItem(HOME_CACHE_KEY); } catch {}
+}
+
+async function loadHome(forceRefresh) {
   _homeLoaded = true;
   const cfg = typeof loadFbConfig === 'function' ? loadFbConfig() : null;
 
@@ -28,14 +48,16 @@ async function loadHome() {
     });
   }
 
+  const cache = forceRefresh ? null : _homeGetCache();
+
   // Load all sections in parallel
   _homeLoadWeather();
   _homeLoadStats(cfg);
-  _homeLoadEmails(cfg);
-  _homeLoadTasks(cfg);
-  _homeLoadRevenue(cfg);
-  _homeLoadProduction(cfg);
-  _homeLoadRevenueChart(cfg);
+  _homeLoadEmails(cfg, cache);
+  _homeLoadTasks(cfg, cache);
+  _homeLoadRevenue(cfg, cache);
+  _homeLoadProduction(cfg, cache);
+  _homeLoadRevenueChart(cfg, cache);
 }
 
 // ── Weather ─────────────────────────────────────────────────
@@ -116,9 +138,15 @@ async function _homeLoadStats(cfg) {
 }
 
 // ── Emails ───────────────────────────────────────────────────
-async function _homeLoadEmails(cfg) {
+async function _homeLoadEmails(cfg, cache) {
   const el = document.getElementById('home-email-list');
   if (!el || !cfg?.apiKey) return;
+
+  // Use cache if available
+  if (cache?.emails) {
+    _homeRenderEmails(el, cache.emails);
+    return;
+  }
 
   try {
     const token = typeof authToken === 'function' ? await authToken() : null;
@@ -154,38 +182,44 @@ async function _homeLoadEmails(cfg) {
           id:      r.document.name.split('/').pop(),
         };
       });
-
-    // Count today's emails
-    const todayCount = emails.filter(e => e.at >= today0).length;
-    _homeSetStat('home-stat-emails-today', todayCount);
-
-    if (!emails.length) {
-      el.innerHTML = `<div class="home-empty">Keine E-Mails</div>`;
-      return;
-    }
-
-    el.innerHTML = emails.slice(0, 5).map(e => {
-      const isOut  = e.dir === 'outbound';
-      const nm     = (e.name.match(/^([^<]+?)\s*</) || [,''])[1].trim() || e.name.replace(/<[^>]+>/g,'').trim() || '—';
-      const dt     = e.at ? new Date(e.at).toLocaleString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
-      return `<div class="home-list-item" onclick="showPage('emails')">
-        <div class="home-list-icon ${isOut ? 'out' : 'in'}">${isOut ? '↑' : '↓'}</div>
-        <div class="home-list-body">
-          <div class="home-list-title">${_hesc(e.subject)}</div>
-          <div class="home-list-sub">${_hesc(nm)}</div>
-        </div>
-        <div class="home-list-time">${dt}</div>
-      </div>`;
-    }).join('');
+    _homeSetCache({ emails });
+    _homeRenderEmails(el, emails);
   } catch (_) {
     el.innerHTML = `<div class="home-empty">Nicht verfügbar</div>`;
   }
 }
 
+function _homeRenderEmails(el, emails) {
+  const today0 = new Date(); today0.setHours(0,0,0,0);
+  const today0iso = today0.toISOString();
+  const todayCount = emails.filter(e => e.at >= today0iso).length;
+  _homeSetStat('home-stat-emails-today', todayCount);
+
+  if (!emails.length) {
+    el.innerHTML = `<div class="home-empty">Keine E-Mails</div>`;
+    return;
+  }
+  el.innerHTML = emails.slice(0, 5).map(e => {
+    const isOut = e.dir === 'outbound';
+    const nm    = (e.name.match(/^([^<]+?)\s*</) || [,''])[1].trim() || e.name.replace(/<[^>]+>/g,'').trim() || '—';
+    const dt    = e.at ? new Date(e.at).toLocaleString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
+    return `<div class="home-list-item" onclick="showPage('emails')">
+      <div class="home-list-icon ${isOut ? 'out' : 'in'}">${isOut ? '↑' : '↓'}</div>
+      <div class="home-list-body">
+        <div class="home-list-title">${_hesc(e.subject)}</div>
+        <div class="home-list-sub">${_hesc(nm)}</div>
+      </div>
+      <div class="home-list-time">${dt}</div>
+    </div>`;
+  }).join('');
+}
+
 // ── Tasks ────────────────────────────────────────────────────
-async function _homeLoadTasks(cfg) {
+async function _homeLoadTasks(cfg, cache) {
   const el = document.getElementById('home-task-list');
   if (!el || !cfg?.apiKey) return;
+
+  if (cache?.tasks) { _homeRenderTasks(el, cache.tasks); return; }
 
   try {
     const token = typeof authToken === 'function' ? await authToken() : null;
@@ -218,42 +252,43 @@ async function _homeLoadTasks(cfg) {
         };
       });
 
-    _homeSetStat('home-stat-tasks', tasks.length);
-
-    if (!tasks.length) {
-      el.innerHTML = `<div class="home-empty">✅ Keine offenen Aufgaben</div>`;
-      return;
-    }
-
-    el.innerHTML = tasks.slice(0, 5).map(t => {
-      const overdue = t.due && new Date(t.due) < new Date();
-      const dt      = t.due ? new Date(t.due).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit' }) : '';
-      const prioCol = t.prio === 'high' ? '#ef4444' : t.prio === 'low' ? '#94a3b8' : '#f59e0b';
-      return `<div class="home-list-item">
-        <div class="home-list-icon task" style="background:${prioCol}20; color:${prioCol};">●</div>
-        <div class="home-list-body">
-          <div class="home-list-title">${_hesc(t.title)}</div>
-          ${dt ? `<div class="home-list-sub ${overdue ? 'overdue' : ''}">${overdue ? '⚠ ' : ''}Fällig: ${dt}</div>` : ''}
-        </div>
-      </div>`;
-    }).join('');
+    _homeSetCache({ tasks });
+    _homeRenderTasks(el, tasks);
   } catch (_) {
     el.innerHTML = `<div class="home-empty">Nicht verfügbar</div>`;
   }
 }
 
+function _homeRenderTasks(el, tasks) {
+  _homeSetStat('home-stat-tasks', tasks.length);
+  if (!tasks.length) {
+    el.innerHTML = `<div class="home-empty">✅ Keine offenen Aufgaben</div>`;
+    return;
+  }
+  el.innerHTML = tasks.slice(0, 5).map(t => {
+    const overdue = t.due && new Date(t.due) < new Date();
+    const dt      = t.due ? new Date(t.due).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit' }) : '';
+    const prioCol = t.prio === 'high' ? '#ef4444' : t.prio === 'low' ? '#94a3b8' : '#f59e0b';
+    return `<div class="home-list-item">
+      <div class="home-list-icon task" style="background:${prioCol}20; color:${prioCol};">●</div>
+      <div class="home-list-body">
+        <div class="home-list-title">${_hesc(t.title)}</div>
+        ${dt ? `<div class="home-list-sub ${overdue ? 'overdue' : ''}">${overdue ? '⚠ ' : ''}Fällig: ${dt}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
 // ── Revenue ──────────────────────────────────────────────────
-async function _homeLoadRevenue(cfg) {
+async function _homeLoadRevenue(cfg, cache) {
   const el     = document.getElementById('home-revenue-area');
   const role   = typeof _userCrmRole !== 'undefined' ? _userCrmRole : 'sales';
   if (!el || !cfg?.apiKey) return;
 
-  // Only admin sees revenue details
-  if (role !== 'admin') {
-    el.style.display = 'none';
-    return;
-  }
+  if (role !== 'admin') { el.style.display = 'none'; return; }
   el.style.display = '';
+
+  if (cache?.quotes) { _homeRenderRevenue(cache.quotes); return; }
 
   try {
     const token    = typeof authToken === 'function' ? await authToken() : null;
@@ -286,29 +321,31 @@ async function _homeLoadRevenue(cfg) {
         createdBy: f.createdBy?.stringValue || '',
       };
     });
-
-    // Total revenue last 6 months
-    const total = quotes.reduce((s, q) => s + q.amount, 0);
-    const fmt   = n => n.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-
-    // This month
-    const thisMonth0 = new Date(); thisMonth0.setDate(1); thisMonth0.setHours(0,0,0,0);
-    const monthRev   = quotes.filter(q => q.createdAt >= thisMonth0.toISOString()).reduce((s,q) => s+q.amount, 0);
-
-    document.getElementById('home-rev-total').textContent  = '€ ' + fmt(total);
-    document.getElementById('home-rev-month').textContent  = '€ ' + fmt(monthRev);
-    document.getElementById('home-rev-count').textContent  = quotes.length + ' Angebote';
-
+    _homeSetCache({ quotes });
+    _homeRenderRevenue(quotes);
   } catch (_) {
     document.getElementById('home-rev-total').textContent = '—';
   }
 }
 
+function _homeRenderRevenue(quotes) {
+  const fmt = n => n.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  const total = quotes.reduce((s, q) => s + q.amount, 0);
+  const thisMonth0 = new Date(); thisMonth0.setDate(1); thisMonth0.setHours(0,0,0,0);
+  const monthRev   = quotes.filter(q => q.createdAt >= thisMonth0.toISOString()).reduce((s,q) => s+q.amount, 0);
+  document.getElementById('home-rev-total').textContent  = '€ ' + fmt(total);
+  document.getElementById('home-rev-month').textContent  = '€ ' + fmt(monthRev);
+  document.getElementById('home-rev-count').textContent  = quotes.length + ' Angebote';
+}
+
 // ── Revenue Chart (6 months) ─────────────────────────────────
-async function _homeLoadRevenueChart(cfg) {
+async function _homeLoadRevenueChart(cfg, cache) {
   const canvas = document.getElementById('home-rev-chart');
   const role   = typeof _userCrmRole !== 'undefined' ? _userCrmRole : 'sales';
   if (!canvas || !cfg?.apiKey || role !== 'admin') return;
+
+  // Use cached quotes if available
+  if (cache?.quotes) { _homeRenderRevenueChart(canvas, cache.quotes); return; }
 
   try {
     const token = typeof authToken === 'function' ? await authToken() : null;
@@ -338,8 +375,13 @@ async function _homeLoadRevenueChart(cfg) {
         createdAt: f.createdAt?.timestampValue || f.createdAt?.stringValue || '',
       };
     });
+    // Don't overwrite the full quotes cache — just render from this subset
+    _homeRenderRevenueChart(canvas, quotes);
+  } catch (_) {}
+}
 
-    // Build monthly buckets
+function _homeRenderRevenueChart(canvas, quotes) {
+  try {
     const months = [];
     for (let i = 5; i >= 0; i--) {
       const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i);
@@ -378,19 +420,18 @@ async function _homeLoadRevenueChart(cfg) {
         },
       },
     });
-  } catch (_) {}
+  } catch(_) {}
 }
 
 // ── Production ───────────────────────────────────────────────
-async function _homeLoadProduction(cfg) {
+async function _homeLoadProduction(cfg, cache) {
   const el   = document.getElementById('home-prod-list');
-  const role = typeof _userCrmRole !== 'undefined' ? _userCrmRole : 'sales';
   if (!el || !cfg?.apiKey) return;
+
+  if (cache?.production) { _homeRenderProduction(el, cache.production); return; }
 
   try {
     const token = typeof authToken === 'function' ? await authToken() : null;
-    const today = new Date(); today.setHours(0,0,0,0);
-    const week  = new Date(today); week.setDate(week.getDate() - 7);
 
     const res = await fetch(
       `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents:runQuery?key=${cfg.apiKey}`,
@@ -405,7 +446,7 @@ async function _homeLoadProduction(cfg) {
       }
     );
     const rows    = await res.json();
-    const entries = (Array.isArray(rows) ? rows : []).filter(r => r.document).map(r => {
+    const production = (Array.isArray(rows) ? rows : []).filter(r => r.document).map(r => {
       const f = r.document.fields || {};
       return {
         product:  f.productName?.stringValue || f.product?.stringValue || '—',
@@ -415,38 +456,34 @@ async function _homeLoadProduction(cfg) {
         worker:   f.worker?.stringValue || f.createdBy?.stringValue || '',
       };
     });
-
-    // Today's production count
-    const todayStr  = today.toISOString().slice(0,10);
-    const todayProd = entries.filter(e => (e.date||'').slice(0,10) === todayStr);
-    const todayQty  = todayProd.reduce((s,e) => s + e.qty, 0);
-    _homeSetStat('home-stat-prod', Math.round(todayQty) + ' Stk');
-
-    if (!entries.length) {
-      el.innerHTML = `<div class="home-empty">Keine Produktionsdaten</div>`;
-      return;
-    }
-
-    // Group by product for last 7 days
-    const groups = {};
-    entries.forEach(e => {
-      if (!groups[e.product]) groups[e.product] = 0;
-      groups[e.product] += e.qty;
-    });
-
-    el.innerHTML = Object.entries(groups).slice(0, 5).map(([prod, qty]) => `
-      <div class="home-list-item">
-        <div class="home-list-icon prod">⚙</div>
-        <div class="home-list-body">
-          <div class="home-list-title">${_hesc(prod)}</div>
-          <div class="home-list-sub">Letzte 50 Einträge gesamt</div>
-        </div>
-        <div class="home-list-badge">${Math.round(qty)} Stk</div>
-      </div>`).join('');
-
+    _homeSetCache({ production });
+    _homeRenderProduction(el, production);
   } catch (_) {
     el.innerHTML = `<div class="home-empty">Nicht verfügbar</div>`;
   }
+}
+
+function _homeRenderProduction(el, entries) {
+  const today    = new Date(); today.setHours(0,0,0,0);
+  const todayStr = today.toISOString().slice(0,10);
+  const todayQty = entries.filter(e => (e.date||'').slice(0,10) === todayStr).reduce((s,e) => s + e.qty, 0);
+  _homeSetStat('home-stat-prod', Math.round(todayQty) + ' Stk');
+
+  if (!entries.length) {
+    el.innerHTML = `<div class="home-empty">Keine Produktionsdaten</div>`;
+    return;
+  }
+  const groups = {};
+  entries.forEach(e => { if (!groups[e.product]) groups[e.product] = 0; groups[e.product] += e.qty; });
+  el.innerHTML = Object.entries(groups).slice(0, 5).map(([prod, qty]) => `
+    <div class="home-list-item">
+      <div class="home-list-icon prod">⚙</div>
+      <div class="home-list-body">
+        <div class="home-list-title">${_hesc(prod)}</div>
+        <div class="home-list-sub">Letzte 50 Einträge gesamt</div>
+      </div>
+      <div class="home-list-badge">${Math.round(qty)} Stk</div>
+    </div>`).join('');
 }
 
 // ── Helpers ──────────────────────────────────────────────────

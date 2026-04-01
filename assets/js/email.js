@@ -302,20 +302,22 @@ let _emailContactsCache = [];
 async function _loadEmailContactsCache() {
   if (_emailContactsCache.length > 0) return;
   try {
-    // Try IndexedDB first
-    if (typeof dbGetAll === 'function' && typeof db !== 'undefined' && db) {
-      const contacts = await dbGetAll('contacts');
-      _emailContactsCache = (contacts || [])
-        .filter(c => c.email || c.contactEmail)
-        .map(c => ({
-          name:  [c.firstName, c.lastName].filter(Boolean).join(' ') || c.name || c.firma || '',
-          email: c.contactEmail || c.email || '',
-          firma: c.firma || '',
-        }))
-        .filter(c => c.email);
-      return;
+    // Use IndexedDB (contacts already synced there — zero Firestore reads)
+    if (typeof dbAll === 'function') {
+      const contacts = await dbAll('contacts');
+      if (contacts && contacts.length > 0) {
+        _emailContactsCache = contacts
+          .filter(c => c.email || c.contactEmail)
+          .map(c => ({
+            name:  [c.firstName, c.lastName].filter(Boolean).join(' ') || c.name || c.firma || '',
+            email: c.contactEmail || c.email || '',
+            firma: c.firma || '',
+          }))
+          .filter(c => c.email);
+        return;
+      }
     }
-    // Fallback: Firestore
+    // Fallback: Firestore (only if IndexedDB empty/unavailable)
     const cfg   = loadFbConfig(); if (!cfg) return;
     const token = await authToken(); if (!token) return;
     const res   = await fetch(
@@ -500,6 +502,8 @@ async function emailSend() {
       }
     } catch (_) {}
 
+    // Invalidate timeline cache for this contact so next open fetches fresh data
+    if (contactId) _emailTimelineCache.delete(contactId);
     // Inbox neu laden falls offen
     if (contactId) emailLoadContactEmails(contactId);
     // Globale E-Posta Seite neu laden
@@ -596,7 +600,16 @@ async function emailLoadContactEmails(contactId) {
 window._emContactRef = null;
 
 // ── Emails für Timeline laden (ohne Panel zu rendern) ────────
+// In-memory cache so re-opening same contact doesn't re-read Firestore
+const _emailTimelineCache = new Map(); // contactId → emails[]
+
 async function emailLoadContactEmailsSilent(contactId) {
+  // Return from memory cache if available
+  if (_emailTimelineCache.has(contactId)) {
+    window._cmEmails = _emailTimelineCache.get(contactId);
+    if (typeof _contRenderTimeline === 'function') _contRenderTimeline();
+    return;
+  }
   try {
     const cfg   = loadFbConfig();
     const token = await authToken();
@@ -616,6 +629,7 @@ async function emailLoadContactEmailsSilent(contactId) {
     if (!res.ok) return;
     const rows = await res.json();
     const emails = _parseEmailRows(rows);
+    _emailTimelineCache.set(contactId, emails); // cache in memory
     window._cmEmails = emails;
     if (typeof window._contRenderTimeline === 'function') window._contRenderTimeline();
   } catch (_) {}
