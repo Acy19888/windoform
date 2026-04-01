@@ -14,6 +14,12 @@ let fbSelectedId   = null;
 let fbMainTabActive = 'contacts'; // 'contacts' | 'quotes'
 
 // ── Config ────────────────────────────────────────────────
+// Default config — hardcoded so the app works on every device without manual setup
+const _FB_DEFAULT_CFG = {
+  apiKey:     'AIzaSyCvFT3pQn4OFtTjep87-y9wrSZjrKbno1s',
+  projectId:  'fuarbot',
+  authDomain: 'fuarbot.firebaseapp.com',
+};
 function loadFbConfig() {
   try {
     const cfg = JSON.parse(localStorage.getItem(FB_CFG_KEY) || 'null');
@@ -26,8 +32,9 @@ function loadFbConfig() {
       localStorage.setItem(FB_CFG_KEY, JSON.stringify(migrated));
       return migrated;
     }
-    return null;
-  } catch { return null; }
+    // Always return default config — no device setup required
+    return _FB_DEFAULT_CFG;
+  } catch { return _FB_DEFAULT_CFG; }
 }
 function saveFbConfig(cfg) { localStorage.setItem(FB_CFG_KEY, JSON.stringify(cfg)); }
 

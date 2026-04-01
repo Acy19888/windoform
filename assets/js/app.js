@@ -137,21 +137,6 @@ async function _appStart() {
     if (el) { el.textContent = authEmail(); el.closest('#auth-user-display').style.display = ''; }
   }
 
-  // If no Firebase config yet → send user to settings page
-  const _startCfg = typeof loadFbConfig === 'function' ? loadFbConfig() : null;
-  if (!_startCfg?.apiKey || !_startCfg?.projectId) {
-    await initDB().catch(()=>{});
-    showPage('ayarlar');
-    setTimeout(() => {
-      const el = document.getElementById('fb-connect-error');
-      if (el) {
-        el.textContent = '⚠️ Firebase bağlantısı henüz yapılandırılmamış. API Key ve Project ID girerek "Bağlan & Kaydet"e tıklayın.';
-        el.style.display = '';
-      }
-    }, 300);
-    return;
-  }
-
   try {
     await initDB();
     // Show home dashboard immediately
