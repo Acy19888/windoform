@@ -116,62 +116,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
   populateSelects();
 
-  // ── Firebase config bootstrap check ────────────────
-  const cfg = loadFbConfig();
-  const hasFbConfig = cfg?.apiKey && cfg?.projectId;
-
-  // ── Auth init ───────────────────────────────────────
+  // ── Auth init — sadece email/şifre, Firebase config gizli ──
   let loggedIn = false;
   if (typeof authInit === 'function') {
-    if (!hasFbConfig) {
-      // Show login overlay with Firebase config fields visible
-      authShowLogin('');
-      const fbSection = document.getElementById('auth-fb-config-section');
-      if (fbSection) fbSection.style.display = '';
-      // Wire up Firebase config save on login button press
-      const _origLogin = window.authSubmitLogin;
-      window.authSubmitLogin = async function() {
-        const ak = document.getElementById('auth-fb-apikey')?.value.trim();
-        const pid = document.getElementById('auth-fb-projid')?.value.trim();
-        if (ak && pid) {
-          // Use saveFbConfig() so loadFbConfig() finds it (crm_fuarbot_firebase_config)
-          if (typeof saveFbConfig === 'function') {
-            saveFbConfig({ apiKey: ak, projectId: pid, authDomain: pid + '.firebaseapp.com' });
-          } else {
-            localStorage.setItem('fb_api_key', ak);
-            localStorage.setItem('fb_project_id', pid);
-          }
-        }
-        await _origLogin();
-      };
-      window.authSubmitRegister = async function() {
-        const ak = document.getElementById('auth-fb-apikey')?.value.trim();
-        const pid = document.getElementById('auth-fb-projid')?.value.trim();
-        if (ak && pid) {
-          if (typeof saveFbConfig === 'function') {
-            saveFbConfig({ apiKey: ak, projectId: pid, authDomain: pid + '.firebaseapp.com' });
-          } else {
-            localStorage.setItem('fb_api_key', ak);
-            localStorage.setItem('fb_project_id', pid);
-          }
-        }
-        const fn = (await import('./auth.js').catch(()=>null))?.authSubmitRegister;
-        // fallback: call the real function
-        const emailEl = document.getElementById('auth-reg-email');
-        const passEl  = document.getElementById('auth-reg-password');
-        const pass2El = document.getElementById('auth-reg-password2');
-        const btnEl   = document.getElementById('auth-register-btn');
-        const errEl   = document.getElementById('auth-register-error');
-        if (!emailEl?.value || !passEl?.value) { errEl.textContent = 'E-posta ve şifre gerekli.'; return; }
-        if (passEl.value !== pass2El?.value)   { errEl.textContent = 'Şifreler eşleşmiyor.'; return; }
-        btnEl.disabled = true; btnEl.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>';
-        errEl.textContent = '';
-        try { await authRegister(emailEl.value.trim(), passEl.value); await _authOnSuccess(); }
-        catch(e) { errEl.textContent = e.message; }
-        finally  { btnEl.disabled = false; btnEl.textContent = 'Kayıt Ol'; }
-      };
-      return; // don't proceed until user logs in
-    }
     loggedIn = await authInit();
     if (!loggedIn) {
       authShowLogin('Devam etmek için giriş yapın.');
@@ -188,6 +135,21 @@ async function _appStart() {
   if (typeof authEmail === 'function' && authEmail()) {
     const el = document.getElementById('auth-user-email');
     if (el) { el.textContent = authEmail(); el.closest('#auth-user-display').style.display = ''; }
+  }
+
+  // If no Firebase config yet → send user to settings page
+  const _startCfg = typeof loadFbConfig === 'function' ? loadFbConfig() : null;
+  if (!_startCfg?.apiKey || !_startCfg?.projectId) {
+    await initDB().catch(()=>{});
+    showPage('ayarlar');
+    setTimeout(() => {
+      const el = document.getElementById('fb-connect-error');
+      if (el) {
+        el.textContent = '⚠️ Firebase bağlantısı henüz yapılandırılmamış. API Key ve Project ID girerek "Bağlan & Kaydet"e tıklayın.';
+        el.style.display = '';
+      }
+    }, 300);
+    return;
   }
 
   try {
