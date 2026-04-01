@@ -24,10 +24,6 @@ Office.onReady(() => {
   _cfg  = _loadCfg();
   _auth = _loadAuth();
 
-  if (!_cfg?.projectId || !_cfg?.apiKey) {
-    document.getElementById('config-area').style.display = '';
-  }
-
   if (_auth && Date.now() < _auth.expiresAt) {
     _showMain();
   }
@@ -45,8 +41,12 @@ Office.onReady(() => {
 });
 
 // ── Config ───────────────────────────────────────────────────
+const _CFG_DEFAULT = { projectId: 'fuarbot', apiKey: 'AIzaSyCvFT3pQn4OFtTjep87-y9wrSZjrKbno1s' };
 function _loadCfg() {
-  try { return JSON.parse(localStorage.getItem(CFG_KEY) || 'null'); } catch { return null; }
+  try {
+    const cfg = JSON.parse(localStorage.getItem(CFG_KEY) || 'null');
+    return (cfg?.projectId && cfg?.apiKey) ? cfg : _CFG_DEFAULT;
+  } catch { return _CFG_DEFAULT; }
 }
 
 function saveConfig() {
