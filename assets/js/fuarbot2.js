@@ -678,21 +678,13 @@ function renderTimeline(acts) {
 
 // ── Import to IndexedDB (with duplicate check) ────────────
 async function checkDuplicate(name, email) {
-  return new Promise((res, rej) => {
-    const tx = db.transaction(['contacts'], 'readonly');
-    const r  = tx.objectStore('contacts').getAll();
-    r.onsuccess = () => {
-      const all  = r.result;
-      const nameLow  = (name||'').trim().toLowerCase();
-      const emailLow = (email||'').trim().toLowerCase();
-      const dup = all.find(ct =>
-        (nameLow  && (ct.name||'').trim().toLowerCase()  === nameLow)  ||
-        (emailLow && (ct.email||'').trim().toLowerCase() === emailLow)
-      );
-      res(dup || null);
-    };
-    r.onerror = () => rej(r.error);
-  });
+  const all      = await dbAll('contacts');
+  const nameLow  = (name||'').trim().toLowerCase();
+  const emailLow = (email||'').trim().toLowerCase();
+  return all.find(ct =>
+    (nameLow  && (ct.name||'').trim().toLowerCase()  === nameLow)  ||
+    (emailLow && (ct.email||'').trim().toLowerCase() === emailLow)
+  ) || null;
 }
 
 async function importFuarbotContact(id) {
@@ -709,12 +701,14 @@ async function importFuarbotContact(id) {
     // ── Company lookup / create ──────────────────────────
     let companyId = null;
     if (c.company?.trim()) {
-      const all = await new Promise((res,rej) => { const tx=db.transaction(['companies'],'readonly'); const r=tx.objectStore('companies').getAll(); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); });
-      const match = all.find(co => (co.name||'').toLowerCase().trim() === c.company.toLowerCase().trim());
-      if (match) { companyId = match.id; } else {
+      const allCos = await dbAll('companies');
+      const match  = allCos.find(co => (co.name||'').toLowerCase().trim() === c.company.toLowerCase().trim());
+      if (match) {
+        companyId = match.id;
+      } else {
         const nc = { name:c.company.trim(), phone:c.phone||'', email:'', website:c.website||'', address:c.address||'', city:'', notes:'Fuarbot: '+(c.source||'Fuarbot'), marketingStatus:'Aranacak', qualityScore:0, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
         nc.qualityScore = calculateCompanyQuality(nc);
-        companyId = await new Promise((res,rej) => { const tx2=db.transaction(['companies'],'readwrite'); const r2=tx2.objectStore('companies').add(nc); r2.onsuccess=()=>res(r2.result); r2.onerror=()=>rej(r2.error); });
+        companyId = await dbAdd('companies', nc);
       }
     }
 
@@ -722,7 +716,7 @@ async function importFuarbotContact(id) {
     const phone = c.phone||c.mobile||'';
     const ct = { name:c.name||'', title:c.position||'', phone, phoneNormalized:phone.replace(/\D/g,''), phoneValid:/^0[0-9]{10}$/.test(phone.replace(/[\s\-()]/g,'')), email:c.email||'', companyId, status:'Aktif', sourceTag: c.source||'Fuarbot', notes:'Fuarbot: '+(c.source||'Fuarbot')+(c.notes?'\n'+c.notes:''), createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
     ct.qualityScore = calculateContactQuality(ct);
-    await new Promise((res,rej) => { const tx3=db.transaction(['contacts'],'readwrite'); const r3=tx3.objectStore('contacts').add(ct); r3.onsuccess=()=>res(r3.result); r3.onerror=()=>rej(r3.error); });
+    await dbAdd('contacts', ct);
     toast('✓ ' + c.name + ' CRM\'e aktarıldı', 'success');
 
     // ── Remove from list + update badge ──────────────────
