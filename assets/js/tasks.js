@@ -251,19 +251,41 @@ async function _fillTaskContactDropdown(selectedId, selectedName) {
   if (!inp) return;
   if (selectedName) inp.value = selectedName;
 
+  // Ensure dropdown container exists below input
+  let dd = document.getElementById('task-contact-dd');
+  if (!dd) {
+    dd = document.createElement('ul');
+    dd.id = 'task-contact-dd';
+    dd.className = 'list-group shadow-sm';
+    dd.style.cssText = 'display:none;max-height:200px;overflow-y:auto;border:1px solid #dee2e6;border-radius:6px;margin-top:2px;background:#fff;z-index:10000;';
+    inp.parentNode.appendChild(dd);
+  }
+
   // Autocomplete on input
   inp.oninput = async () => {
-    const q = inp.value.toLowerCase();
-    if (q.length < 2) { hid.value = ''; return; }
+    const q = inp.value.toLowerCase().trim();
+    if (q.length < 2) { dd.style.display = 'none'; hid.value = ''; return; }
     try {
       const contacts = typeof dbAll === 'function' ? await dbAll('contacts') : [];
-      const matches  = contacts.filter(c => (c.name||'').toLowerCase().includes(q) || (c.contactEmail||'').toLowerCase().includes(q)).slice(0,8);
-      let dd = document.getElementById('task-contact-dd');
-      if (!dd) { dd = document.createElement('ul'); dd.id='task-contact-dd'; dd.className='list-group position-absolute shadow'; dd.style='z-index:9999;max-width:300px;'; inp.parentNode.style.position='relative'; inp.parentNode.appendChild(dd); }
-      dd.innerHTML = matches.map(c => `<li class="list-group-item list-group-item-action py-1 small" style="cursor:pointer;" onclick="_pickTaskContact('${c.id}','${_tesc(c.name||'')}')">
-        ${_tesc(c.name||'')} <span class="text-muted">${_tesc(c.contactEmail||'')}</span></li>`).join('');
-    } catch(_) {}
+      const matches  = contacts.filter(c =>
+        (c.name||'').toLowerCase().includes(q) ||
+        (c.email||'').toLowerCase().includes(q) ||
+        (c.company||'').toLowerCase().includes(q)
+      ).slice(0, 8);
+      if (!matches.length) { dd.style.display = 'none'; return; }
+      dd.innerHTML = matches.map(c =>
+        `<li class="list-group-item list-group-item-action py-1 px-2 small" style="cursor:pointer;"
+          onmousedown="_pickTaskContact('${_tesc(c.id||'')}','${_tesc(c.name||'')}')">
+          <span class="fw-semibold">${_tesc(c.name||'—')}</span>
+          ${c.company ? `<span class="text-muted ms-1">${_tesc(c.company)}</span>` : ''}
+          ${c.email ? `<div style="font-size:10px;color:#6b7280;">${_tesc(c.email)}</div>` : ''}
+        </li>`
+      ).join('');
+      dd.style.display = 'block';
+    } catch(e) { console.warn('Contact search error:', e); }
   };
+
+  inp.onblur = () => { setTimeout(() => { dd.style.display = 'none'; }, 200); };
 }
 
 function _pickTaskContact(id, name) {
