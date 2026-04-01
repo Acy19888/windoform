@@ -173,9 +173,10 @@ async function _homeLoadEmails(cfg, cache) {
 
   try {
     const token = typeof authToken === 'function' ? await authToken() : null;
-    const uid   = typeof authUid   === 'function' ? authUid()   : null;
     const today = new Date(); today.setHours(0,0,0,0);
 
+    // No uid filter — Firestore needs a composite index for (createdByUid + orderBy createdAt)
+    // Dashboard shows the 10 most recent emails from all users, sorted by date
     const res = await fetch(
       `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents:runQuery?key=${cfg.apiKey}`,
       {
@@ -183,9 +184,8 @@ async function _homeLoadEmails(cfg, cache) {
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ structuredQuery: {
           from:    [{ collectionId: 'crm_emails' }],
-          where: uid ? { fieldFilter: { field: { fieldPath: 'createdByUid' }, op: 'EQUAL', value: { stringValue: uid } } } : undefined,
           orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'DESCENDING' }],
-          limit:   20,
+          limit:   10,
         }}),
       }
     );

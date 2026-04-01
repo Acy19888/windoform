@@ -26,7 +26,7 @@ const _EMAIL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const _DEFAULT_PERMS = {
   admin: ['home','dashboard','companies','contacts','fuarbot','fuar-dashboard','fuar-users',
           'leads','teklifler','fatura','urunler','uretim','import','reports',
-          'duplicates','add-company','add-contact','ayarlar','emails'],
+          'duplicates','musteri-geo','add-company','add-contact','ayarlar','emails'],
   sales: ['home','dashboard','companies','contacts','teklifler','fatura','leads','emails'],
 };
 
@@ -44,6 +44,7 @@ const _ALL_PAGES = [
   { id:'fuarbot',       label:'Fuarbot Sync',        icon:'bi-qr-code-scan' },
   { id:'fuar-dashboard',label:'Fuar Dashboard',      icon:'bi-speedometer2' },
   { id:'fuar-users',    label:'Kullanıcılar',        icon:'bi-people-fill' },
+  { id:'musteri-geo',   label:'Müşteri Geo',         icon:'bi-globe2' },
   { id:'import',        label:'Excel Aktar',         icon:'bi-upload' },
   { id:'reports',       label:'Raporlar',            icon:'bi-bar-chart' },
   { id:'duplicates',    label:'Tekrar Kayıtlar',     icon:'bi-copy' },
