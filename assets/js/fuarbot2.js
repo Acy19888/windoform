@@ -734,19 +734,57 @@ async function importFuarbotContact(id) {
 
 async function importAllFuarbotContacts() {
   if (!fbCustomers.length) { toast('Aktarılacak kişi yok', 'error'); return; }
-  let imported = 0, skipped = 0;
-  for (const c of fbCustomers) {
+  let imported = 0, skipped = 0, errors = 0;
+  const snapshot = [...fbCustomers]; // freeze list before we start modifying it
+
+  for (const c of snapshot) {
     try {
+      // ── Duplicate check ──────────────────────────────────
       const dup = await checkDuplicate(c.name, c.email);
       if (dup) { skipped++; continue; }
-      await importFuarbotContact(c._id);
+
+      // ── Company lookup / create ──────────────────────────
+      let companyId = null;
+      if (c.company?.trim()) {
+        const allCos = await dbAll('companies');
+        const match  = allCos.find(co => (co.name||'').toLowerCase().trim() === c.company.toLowerCase().trim());
+        if (match) {
+          companyId = match.id;
+        } else {
+          const nc = { name:c.company.trim(), phone:c.phone||'', email:'', website:c.website||'', address:c.address||'', city:'', notes:'Fuarbot: '+(c.source||'Fuarbot'), marketingStatus:'Aranacak', qualityScore:0, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
+          if (typeof calculateCompanyQuality === 'function') nc.qualityScore = calculateCompanyQuality(nc);
+          companyId = await dbAdd('companies', nc);
+        }
+      }
+
+      // ── Add contact ──────────────────────────────────────
+      const phone = c.phone||c.mobile||'';
+      const ct = { name:c.name||'', title:c.position||'', phone, phoneNormalized:phone.replace(/\D/g,''), phoneValid:/^0[0-9]{10}$/.test(phone.replace(/[\s\-()]/g,'')), email:c.email||'', companyId, status:'Aktif', sourceTag:c.source||'Fuarbot', notes:'Fuarbot: '+(c.source||'Fuarbot')+(c.notes?'\n'+c.notes:''), createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
+      if (typeof calculateContactQuality === 'function') ct.qualityScore = calculateContactQuality(ct);
+      await dbAdd('contacts', ct);
       imported++;
-    } catch(_) {}
+
+    } catch(e) {
+      console.error('[importAll] Fehler bei', c.name, e);
+      errors++;
+    }
   }
-  if (skipped > 0) toast(`✓ ${imported} aktarıldı · ${skipped} zaten mevcut (atlandı)`, 'info');
-  else toast(`✓ ${imported} kişi aktarıldı`, 'success');
-  // Badge already updated per-contact inside importFuarbotContact; final sync:
+
+  // Remove successfully imported contacts from the list
+  const importedNames = new Set();
+  snapshot.forEach((c, i) => { if (i < imported + skipped) importedNames.add(c._id); });
+  fbCustomers = fbCustomers.filter(c => {
+    const dup = snapshot.find(s => s._id === c._id);
+    return !dup || errors > 0; // keep if had error
+  });
+  renderCustomerList(fbCustomers);
   setFbStatus('Bağlı · ' + fbCustomers.length + ' kişi', 'success');
+
+  if (errors > 0) toast(`⚠ ${imported} aktarıldı · ${skipped} mevcut · ${errors} hata — Console'u kontrol et`, 'error');
+  else if (skipped > 0) toast(`✓ ${imported} aktarıldı · ${skipped} zaten mevcut (atlandı)`, 'info');
+  else toast(`✓ ${imported} kişi aktarıldı`, 'success');
+
+  if (typeof syncToFirestore === 'function') syncToFirestore();
 }
 
 // ── Quote Preview Modal ───────────────────────────────────
