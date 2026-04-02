@@ -652,6 +652,18 @@ async function emailLoadContactEmailsSilent(contactId) {
   } catch (_) {}
 }
 
+// Strip HTML to clean readable text (removes style/script blocks + decodes entities)
+function _htmlToText(html) {
+  if (!html) return '';
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ').trim();
+}
+
 function _parseEmailRows(rows) {
   return (Array.isArray(rows) ? rows : [])
     .filter(r => r.document)
@@ -677,7 +689,7 @@ function _parseEmailRows(rows) {
 function _renderEmailItem(em) {
   const isOut   = em.direction === 'outbound';
   const dt      = em.sentAt ? new Date(em.sentAt).toLocaleString('tr-TR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
-  const preview = (em.text || (em.html||'').replace(/<[^>]+>/g, '')).slice(0, 80).replace(/\s+/g,' ').trim();
+  const preview = _htmlToText(em.text || em.html || '').slice(0, 80);
   const nameRaw = isOut ? (em.to||'') : (em.from||'');
   const nameMatch = nameRaw.match(/^([^<]+?)\s*</);
   const namePart  = (nameMatch ? nameMatch[1].trim() : nameRaw.replace(/<[^>]+>/g,'').trim()) || (isOut ? 'Alıcı' : 'Gönderici');

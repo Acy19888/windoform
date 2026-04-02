@@ -302,7 +302,7 @@ async function showContactModal(id) {
       createdAt: em.sentAt || em.createdAt || '',
       text:      (em.direction === 'outbound' ? '↑ ' : '↓ ') + (em.subject || '(Konu yok)'),
       createdBy: em.direction === 'outbound' ? (em.createdBy || '') : '',
-      message:   (em.html || '').replace(/<[^>]+>/g, '').trim().slice(0, 300),
+      message:   (typeof _htmlToText === 'function' ? _htmlToText(em.html || em.text || '') : (em.text || (em.html||'').replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'').replace(/<[^>]+>/g,' ').replace(/&nbsp;/g,' ').replace(/\s+/g,' ').trim())).slice(0, 300),
       _emailId:  em._id,
       _emailDir: em.direction,
     }));
