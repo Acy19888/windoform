@@ -597,15 +597,13 @@ async function _fetchContactEmailsAll(contactId) {
     contactEmail = (ct?.email || '').toLowerCase().trim();
   } catch(_) {}
 
-  // Hilfsfunktion: 1 Firestore-Query ausführen
+  // Hilfsfunktion: 1 Firestore-Query — KEIN orderBy (würde Composite Index brauchen)
   const runQ = async (where) => {
     const res = await fetch(
       `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents:runQuery?key=${cfg.apiKey}`,
       { method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${token}`},
         body: JSON.stringify({ structuredQuery: {
-          from: [{ collectionId: _EM_COL }], where,
-          orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'DESCENDING' }],
-          limit: 50,
+          from: [{ collectionId: _EM_COL }], where, limit: 100,
         }}),
       }
     );
