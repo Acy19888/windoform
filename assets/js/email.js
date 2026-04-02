@@ -130,8 +130,15 @@ async function emailInit() {
     if (settingsRes.ok) {
       const sd = await settingsRes.json();
       const sf = sd.fields || {};
-      if (sf.sales?.arrayValue?.values) _rolePerms.sales = sf.sales.arrayValue.values.map(v => v.stringValue).filter(Boolean);
-      if (sf.admin?.arrayValue?.values) _rolePerms.admin = sf.admin.arrayValue.values.map(v => v.stringValue).filter(Boolean);
+      if (sf.sales?.arrayValue?.values) {
+        _rolePerms.sales = sf.sales.arrayValue.values.map(v => v.stringValue).filter(Boolean);
+        // Yeni eklenen varsayılan sayfaları (örn. 'gorevler') eski kayıtlarda eksik olabilir → otomatik ekle
+        _DEFAULT_PERMS.sales.forEach(p => { if (!_rolePerms.sales.includes(p)) _rolePerms.sales.push(p); });
+      }
+      if (sf.admin?.arrayValue?.values) {
+        _rolePerms.admin = sf.admin.arrayValue.values.map(v => v.stringValue).filter(Boolean);
+        _DEFAULT_PERMS.admin.forEach(p => { if (!_rolePerms.admin.includes(p)) _rolePerms.admin.push(p); });
+      }
     }
 
     _applyRolePerms();
@@ -592,12 +599,43 @@ function _emailContactToolbar(contactId) {
   </div>`;
 }
 
-async function _manualEmailAdd(contactId) {
-  // Simple prompt-based manual email entry
-  const subject = prompt('Konu:'); if (!subject) return;
-  const body    = prompt('İçerik (kısa özet):'); if (body === null) return;
-  const dirChoice = confirm('Gelen e-posta mı? (Tamam = Gelen, İptal = Giden)');
-  const direction = dirChoice ? 'inbound' : 'outbound';
+let _manualEmailContactId = null;
+
+function _manualEmailAdd(contactId) {
+  _manualEmailContactId = contactId;
+  // Varsayılan tarih: şu an
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const localDt = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const dateEl = document.getElementById('manual-email-date');
+  if (dateEl) dateEl.value = localDt;
+  // Felder zurücksetzen
+  const subj = document.getElementById('manual-email-subject');
+  const body = document.getElementById('manual-email-body');
+  const inbound = document.getElementById('manual-dir-inbound');
+  if (subj) subj.value = '';
+  if (body) body.value = '';
+  if (inbound) inbound.checked = true;
+  new bootstrap.Modal(document.getElementById('manualEmailModal')).show();
+}
+
+async function _manualEmailSave() {
+  const contactId = _manualEmailContactId;
+  if (!contactId) return;
+
+  const subject = (document.getElementById('manual-email-subject')?.value || '').trim();
+  const body    = (document.getElementById('manual-email-body')?.value    || '').trim();
+  const dirEl   = document.querySelector('input[name="manual-direction"]:checked');
+  const direction = dirEl?.value || 'inbound';
+  const dateVal = document.getElementById('manual-email-date')?.value;
+  const sentAt  = dateVal ? new Date(dateVal).toISOString() : new Date().toISOString();
+
+  if (!subject) { _emToast('Lütfen konu girin', 'error'); return; }
+
+  // Modal schließen
+  const modalEl = document.getElementById('manualEmailModal');
+  const modal = bootstrap.Modal.getInstance(modalEl);
+  if (modal) modal.hide();
 
   try {
     const cfg   = loadFbConfig();
@@ -607,19 +645,19 @@ async function _manualEmailAdd(contactId) {
     const now   = new Date().toISOString();
 
     const fields = {
-      contactId:  { stringValue: String(contactId) },
-      subject:    { stringValue: subject },
-      text:       { stringValue: body },
-      html:       { stringValue: body.replace(/\n/g, '<br>') },
-      from:       { stringValue: direction === 'inbound' ? (ct?.email || '') : (_userEmailAddr || '') },
-      to:         { stringValue: direction === 'inbound' ? (_userEmailAddr || '') : (ct?.email || '') },
-      direction:  { stringValue: direction },
-      status:     { stringValue: 'sent' },
+      contactId:    { stringValue: String(contactId) },
+      subject:      { stringValue: subject },
+      text:         { stringValue: body },
+      html:         { stringValue: body.replace(/\n/g, '<br>') },
+      from:         { stringValue: direction === 'inbound' ? (ct?.email || '') : (_userEmailAddr || '') },
+      to:           { stringValue: direction === 'inbound' ? (_userEmailAddr || '') : (ct?.email || '') },
+      direction:    { stringValue: direction },
+      status:       { stringValue: 'sent' },
       createdByUid: { stringValue: uid },
-      createdBy:  { stringValue: _userDispName || '' },
-      createdAt:  { stringValue: now },
-      sentAt:     { stringValue: now },
-      manual:     { booleanValue: true },
+      createdBy:    { stringValue: _userDispName || '' },
+      createdAt:    { stringValue: now },
+      sentAt:       { stringValue: sentAt },
+      manual:       { booleanValue: true },
     };
 
     await fetch(

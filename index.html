@@ -1281,6 +1281,51 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════
+     MANUEL E-POSTA EKLE MODAL
+══════════════════════════════════════════════════════ -->
+<div class="modal fade" id="manualEmailModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2 px-3">
+        <h6 class="modal-title fw-semibold"><i class="bi bi-plus-circle me-2 text-secondary"></i>Manuel E-posta Ekle</h6>
+        <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div class="p-3 border-bottom" style="font-size:13px;">
+          <div class="d-flex align-items-center gap-2 mb-3">
+            <span class="text-muted" style="width:80px;flex-shrink:0;">Yön</span>
+            <div class="btn-group btn-group-sm" role="group">
+              <input type="radio" class="btn-check" name="manual-direction" id="manual-dir-inbound" value="inbound" checked autocomplete="off">
+              <label class="btn btn-outline-success" for="manual-dir-inbound"><i class="bi bi-inbox me-1"></i>Gelen</label>
+              <input type="radio" class="btn-check" name="manual-direction" id="manual-dir-outbound" value="outbound" autocomplete="off">
+              <label class="btn btn-outline-primary" for="manual-dir-outbound"><i class="bi bi-send me-1"></i>Giden</label>
+            </div>
+          </div>
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <label class="text-muted mb-0" style="width:80px;flex-shrink:0;" for="manual-email-date">Tarih</label>
+            <input type="datetime-local" id="manual-email-date" class="form-control form-control-sm" style="font-size:13px;max-width:240px;">
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <label class="text-muted mb-0" style="width:80px;flex-shrink:0;" for="manual-email-subject">Konu</label>
+            <input type="text" id="manual-email-subject" class="form-control form-control-sm border-0 border-bottom rounded-0 p-0"
+                   placeholder="E-posta konusu" style="font-size:13px;font-weight:500;">
+          </div>
+        </div>
+        <textarea id="manual-email-body" class="form-control border-0 rounded-0 p-3"
+                  rows="8" placeholder="İçerik…"
+                  style="font-size:14px;line-height:1.6;resize:none;outline:none;box-shadow:none;"></textarea>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+        <button type="button" class="btn btn-primary btn-sm" onclick="_manualEmailSave()">
+          <i class="bi bi-floppy me-1"></i>Kaydet
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
      E-POSTA DETAIL MODAL
 ══════════════════════════════════════════════════════ -->
 <div class="modal fade" id="emailDetailModal" tabindex="-1">
