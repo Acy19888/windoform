@@ -13,8 +13,8 @@
   <DisplayName DefaultValue="Windoform CRM"/>
   <Description DefaultValue="Kontaktinfos anzeigen und E-Mails automatisch ins CRM speichern"/>
 
-  <IconUrl DefaultValue="https://windoform.vercel.app/assets/img/icon-80.png"/>
-  <HighResolutionIconUrl DefaultValue="https://windoform.vercel.app/assets/img/icon-80.png"/>
+  <IconUrl DefaultValue="https://windoform.vercel.app/outlook/icon-80.png"/>
+  <HighResolutionIconUrl DefaultValue="https://windoform.vercel.app/outlook/icon-80.png"/>
   <SupportUrl DefaultValue="https://windoform.vercel.app"/>
 
   <AppDomains>
@@ -123,9 +123,9 @@
 
     <Resources>
       <bt:Images>
-        <bt:Image id="Icon.16x16" DefaultValue="https://windoform.vercel.app/assets/img/icon-16.png"/>
-        <bt:Image id="Icon.32x32" DefaultValue="https://windoform.vercel.app/assets/img/icon-32.png"/>
-        <bt:Image id="Icon.80x80" DefaultValue="https://windoform.vercel.app/assets/img/icon-80.png"/>
+        <bt:Image id="Icon.16x16" DefaultValue="https://windoform.vercel.app/outlook/icon-16.png"/>
+        <bt:Image id="Icon.32x32" DefaultValue="https://windoform.vercel.app/outlook/icon-32.png"/>
+        <bt:Image id="Icon.80x80" DefaultValue="https://windoform.vercel.app/outlook/icon-80.png"/>
       </bt:Images>
       <bt:Urls>
         <bt:Url id="Taskpane.Url"     DefaultValue="https://windoform.vercel.app/outlook/taskpane.html"/>
