@@ -561,23 +561,7 @@ async function emailLoadContactEmails(contactId) {
   c.innerHTML = '<div class="text-center py-4"><span class="spinner-border spinner-border-sm text-muted"></span></div>';
 
   try {
-    const cfg   = loadFbConfig();
-    const token = await authToken();
-    const res   = await fetch(
-      `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents:runQuery?key=${cfg.apiKey}`,
-      {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ structuredQuery: {
-          from:    [{ collectionId: _EM_COL }],
-          where:   { fieldFilter: { field: { fieldPath: 'contactId' }, op: 'EQUAL', value: { stringValue: contactId } } },
-          orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'DESCENDING' }],
-          limit:   50,
-        }}),
-      }
-    );
-    const rows   = await res.json();
-    const emails = _parseEmailRows(rows);
+    const emails = await _fetchContactEmailsAll(contactId);
 
     if (!emails.length) {
       c.innerHTML = `
@@ -593,14 +577,60 @@ async function emailLoadContactEmails(contactId) {
     }
 
     c.innerHTML = emails.map(_renderEmailItem).join('');
-
-    // E-Mails für Timeline-Integration cachen
     window._cmEmails = emails;
     if (typeof window._contRenderTimeline === 'function') window._contRenderTimeline();
 
   } catch (e) {
     c.innerHTML = `<div class="alert alert-warning small m-2">E-postalar yüklenemedi: ${esc(e.message)}</div>`;
   }
+}
+
+// ── Alle E-Mails eines Kontakts holen (by contactId + by email address) ──────
+async function _fetchContactEmailsAll(contactId) {
+  const cfg   = loadFbConfig();
+  const token = await authToken();
+
+  // Kontakt-E-Mail aus IndexedDB laden
+  let contactEmail = '';
+  try {
+    const ct = typeof dbGet === 'function' ? await dbGet('contacts', contactId) : null;
+    contactEmail = (ct?.email || '').toLowerCase().trim();
+  } catch(_) {}
+
+  // Hilfsfunktion: 1 Firestore-Query ausführen
+  const runQ = async (where) => {
+    const res = await fetch(
+      `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents:runQuery?key=${cfg.apiKey}`,
+      { method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${token}`},
+        body: JSON.stringify({ structuredQuery: {
+          from: [{ collectionId: _EM_COL }], where,
+          orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'DESCENDING' }],
+          limit: 50,
+        }}),
+      }
+    );
+    return res.ok ? _parseEmailRows(await res.json()) : [];
+  };
+
+  // Query 1: by contactId (outbound sent from CRM)
+  const q1 = await runQ({ fieldFilter: { field: { fieldPath: 'contactId' }, op: 'EQUAL', value: { stringValue: String(contactId) } } });
+
+  let q2 = [], q3 = [];
+  if (contactEmail) {
+    // Query 2: by from (incoming from contact's email)
+    q2 = await runQ({ fieldFilter: { field: { fieldPath: 'from' }, op: 'EQUAL', value: { stringValue: contactEmail } } });
+    // Query 3: by to (outgoing to contact's email)
+    q3 = await runQ({ fieldFilter: { field: { fieldPath: 'to' }, op: 'EQUAL', value: { stringValue: contactEmail } } });
+  }
+
+  // Merge + deduplicate by _id, sort by date desc
+  const seen = new Set();
+  const all  = [...q1, ...q2, ...q3].filter(e => {
+    if (seen.has(e._id)) return false;
+    seen.add(e._id); return true;
+  });
+  all.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  return all;
 }
 
 // Expose für onclick im HTML
@@ -611,32 +641,14 @@ window._emContactRef = null;
 const _emailTimelineCache = new Map(); // contactId → emails[]
 
 async function emailLoadContactEmailsSilent(contactId) {
-  // Return from memory cache if available
   if (_emailTimelineCache.has(contactId)) {
     window._cmEmails = _emailTimelineCache.get(contactId);
     if (typeof _contRenderTimeline === 'function') _contRenderTimeline();
     return;
   }
   try {
-    const cfg   = loadFbConfig();
-    const token = await authToken();
-    const res   = await fetch(
-      `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents:runQuery?key=${cfg.apiKey}`,
-      {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ structuredQuery: {
-          from:    [{ collectionId: _EM_COL }],
-          where:   { fieldFilter: { field: { fieldPath: 'contactId' }, op: 'EQUAL', value: { stringValue: contactId } } },
-          orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'DESCENDING' }],
-          limit:   30,
-        }}),
-      }
-    );
-    if (!res.ok) return;
-    const rows = await res.json();
-    const emails = _parseEmailRows(rows);
-    _emailTimelineCache.set(contactId, emails); // cache in memory
+    const emails = await _fetchContactEmailsAll(contactId);
+    _emailTimelineCache.set(contactId, emails);
     window._cmEmails = emails;
     if (typeof window._contRenderTimeline === 'function') window._contRenderTimeline();
   } catch (_) {}
