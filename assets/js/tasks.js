@@ -1,4 +1,4 @@
-// tasks.js — Aufgaben/Görevler Management
+// tasks.js — Görevler/Görevler Management
 'use strict';
 
 const _TASKS_COL = 'crm_tasks';
@@ -14,7 +14,7 @@ async function loadTasksPage() {
       `<div class="alert alert-warning">Firebase nicht konfiguriert.</div>`;
     return;
   }
-  // Ensure fuarbot user list is loaded for "Zugewiesen an" dropdown
+  // Ensure fuarbot user list is loaded for "Atandı an" dropdown
   await _tasksEnsureUsers(cfg);
   await _fetchTasks(cfg);
   _renderTasksPage();
@@ -64,7 +64,7 @@ async function _fetchTasks(cfg, force) {
       const f = r.document.fields || {};
       return {
         _id:            r.document.name.split('/').pop(),
-        title:          f.title?.stringValue || '(Aufgabe)',
+        title:          f.title?.stringValue || '(Görev)',
         description:    f.description?.stringValue || '',
         dueDate:        f.dueDate?.stringValue || '',
         priority:       f.priority?.stringValue || 'normal',
@@ -79,7 +79,7 @@ async function _fetchTasks(cfg, force) {
       };
     });
 
-    // Sales: nur eigene Aufgaben (erstellt von oder zugewiesen an mich)
+    // Sales: nur eigene Görevler (erstellt von oder zugewiesen an mich)
     if (role !== 'admin' && uid) {
       tasks = tasks.filter(t => t.createdByUid === uid || t.assignedToUid === uid);
     }
@@ -134,50 +134,50 @@ function _renderTasksPage() {
     <div class="tasks-summary d-flex gap-3 mb-3 flex-wrap">
       <div class="tasks-stat-card">
         <div class="tasks-stat-num">${open.length}</div>
-        <div class="tasks-stat-label">Offen</div>
+        <div class="tasks-stat-label">Açık</div>
       </div>
       <div class="tasks-stat-card" style="border-color:#ef4444;color:#ef4444;">
         <div class="tasks-stat-num">${open.filter(t=>t.priority==='high').length}</div>
-        <div class="tasks-stat-label">Hohe Priorität</div>
+        <div class="tasks-stat-label">Yüksek Öncelik</div>
       </div>
       <div class="tasks-stat-card" style="border-color:#ef4444;color:#ef4444;">
         <div class="tasks-stat-num">${open.filter(t=>t.dueDate && new Date(t.dueDate)<new Date()).length}</div>
-        <div class="tasks-stat-label">Überfällig</div>
+        <div class="tasks-stat-label">Gecikmiş</div>
       </div>
       <div class="tasks-stat-card" style="border-color:#22c55e;color:#22c55e;">
         <div class="tasks-stat-num">${done.length}</div>
-        <div class="tasks-stat-label">Erledigt</div>
+        <div class="tasks-stat-label">Tamamlandı</div>
       </div>
     </div>
 
     ${open.length ? `
     <div class="card mb-3">
       <div class="card-header py-2 px-3 fw-semibold small">
-        <i class="bi bi-list-check me-2 text-primary"></i>Offene Aufgaben (${open.length})
+        <i class="bi bi-list-check me-2 text-primary"></i>Açık Görevler (${open.length})
       </div>
       <div class="table-responsive">
         <table class="table table-hover table-sm mb-0">
           <thead class="table-light"><tr>
-            <th>Aufgabe</th><th style="width:90px;">Priorität</th>
-            <th style="width:110px;">Fällig am</th><th style="width:130px;">Zugewiesen</th>
+            <th>Görev</th><th style="width:90px;">Öncelik</th>
+            <th style="width:110px;">Son Tarih</th><th style="width:130px;">Atandı</th>
             <th style="width:80px;"></th>
           </tr></thead>
           <tbody>${open.map(renderRow).join('')}</tbody>
         </table>
       </div>
-    </div>` : `<div class="alert alert-success"><i class="bi bi-check-circle-fill me-2"></i>Keine offenen Aufgaben 🎉</div>`}
+    </div>` : `<div class="alert alert-success"><i class="bi bi-check-circle-fill me-2"></i>Açık görev yok 🎉</div>`}
 
     ${done.length ? `
     <details class="card mb-3">
       <summary class="card-header py-2 px-3 fw-semibold small" style="cursor:pointer;list-style:none;">
-        <i class="bi bi-check2-all me-2 text-success"></i>Erledigte Aufgaben (${done.length})
+        <i class="bi bi-check2-all me-2 text-success"></i>Tamamlanan Görevler (${done.length})
         <i class="bi bi-chevron-down ms-1" style="font-size:11px;"></i>
       </summary>
       <div class="table-responsive">
         <table class="table table-hover table-sm mb-0">
           <thead class="table-light"><tr>
-            <th>Aufgabe</th><th style="width:90px;">Priorität</th>
-            <th style="width:110px;">Fällig am</th><th style="width:130px;">Zugewiesen</th>
+            <th>Görev</th><th style="width:90px;">Öncelik</th>
+            <th style="width:110px;">Son Tarih</th><th style="width:130px;">Atandı</th>
             <th style="width:80px;"></th>
           </tr></thead>
           <tbody>${done.map(renderRow).join('')}</tbody>
@@ -205,7 +205,7 @@ async function toggleTaskDone(id, done) {
 
 // ── Delete ────────────────────────────────────────────────────
 async function deleteTask(id) {
-  if (!confirm('Aufgabe wirklich löschen?')) return;
+  if (!confirm('Görev wirklich löschen?')) return;
   const cfg   = loadFbConfig(); if (!cfg?.apiKey) return;
   const token = typeof authToken === 'function' ? await authToken() : null;
   const url   = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/${_TASKS_COL}/${id}?key=${cfg.apiKey}`;
@@ -217,7 +217,7 @@ async function deleteTask(id) {
 // ── Modal: open / create / edit ───────────────────────────────
 function openTaskModal(id) {
   const t = id ? _tasksCache.find(x => x._id === id) : null;
-  document.getElementById('task-modal-title').textContent = t ? 'Aufgabe bearbeiten' : 'Neue Aufgabe';
+  document.getElementById('task-modal-title').textContent = t ? 'Görevi düzenle' : 'Yeni Görev';
   document.getElementById('task-edit-id').value           = t?._id || '';
   document.getElementById('task-edit-title').value        = t?.title || '';
   document.getElementById('task-edit-desc').value         = t?.description || '';
@@ -351,7 +351,7 @@ async function saveTask() {
 
     bootstrap.Modal.getOrCreateInstance(document.getElementById('taskEditModal')).hide();
     _renderTasksPage();
-    if (typeof toast === 'function') toast(id ? 'Aufgabe aktualisiert' : 'Aufgabe erstellt', 'success');
+    if (typeof toast === 'function') toast(id ? 'Görev aktualisiert' : 'Görev erstellt', 'success');
   } catch(e) { alert('Fehler: ' + e.message); }
 }
 

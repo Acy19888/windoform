@@ -36,7 +36,7 @@ const _ALL_PAGES = [
   { id:'companies',     label:'Firmalar',            icon:'bi-building' },
   { id:'contacts',      label:'Kişiler',             icon:'bi-people' },
   { id:'emails',        label:'E-postalar',          icon:'bi-envelope' },
-  { id:'gorevler',      label:'Aufgaben',            icon:'bi-check2-square' },
+  { id:'gorevler',      label:'Görevler',            icon:'bi-check2-square' },
   { id:'leads',         label:'Leads & Pipeline',    icon:'bi-funnel-fill' },
   { id:'teklifler',     label:'Teklifler',           icon:'bi-file-earmark-text-fill' },
   { id:'fatura',        label:'Fatura',              icon:'bi-receipt' },
@@ -564,25 +564,74 @@ async function emailLoadContactEmails(contactId) {
     const emails = await _fetchContactEmailsAll(contactId);
 
     if (!emails.length) {
-      c.innerHTML = `
+      c.innerHTML = _emailContactToolbar(contactId) + `
         <div class="text-center py-4 text-muted small">
           <i class="bi bi-envelope" style="font-size:2rem;opacity:.4;"></i>
           <div class="mt-2">Henüz e-posta yok</div>
-          <a href="#" class="text-primary small mt-1 d-inline-block"
-            onclick="emailCompose(window._emContactRef);return false;">
-            İlk e-postayı gönder →
-          </a>
         </div>`;
       return;
     }
 
-    c.innerHTML = emails.map(_renderEmailItem).join('');
+    c.innerHTML = _emailContactToolbar(contactId) + emails.map(_renderEmailItem).join('');
     window._cmEmails = emails;
     if (typeof window._contRenderTimeline === 'function') window._contRenderTimeline();
 
   } catch (e) {
     c.innerHTML = `<div class="alert alert-warning small m-2">E-postalar yüklenemedi: ${esc(e.message)}</div>`;
   }
+}
+
+function _emailContactToolbar(contactId) {
+  return `<div class="d-flex gap-2 p-2 border-bottom bg-light" style="font-size:12px;">
+    <button class="btn btn-sm btn-outline-primary py-0 px-2" onclick="emailCompose(window._emContactRef)">
+      <i class="bi bi-reply me-1"></i>E-posta Gönder
+    </button>
+    <button class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="_manualEmailAdd(${contactId})">
+      <i class="bi bi-plus-circle me-1"></i>Manuel Ekle
+    </button>
+  </div>`;
+}
+
+async function _manualEmailAdd(contactId) {
+  // Simple prompt-based manual email entry
+  const subject = prompt('Konu:'); if (!subject) return;
+  const body    = prompt('İçerik (kısa özet):'); if (body === null) return;
+  const dirChoice = confirm('Gelen e-posta mı? (Tamam = Gelen, İptal = Giden)');
+  const direction = dirChoice ? 'inbound' : 'outbound';
+
+  try {
+    const cfg   = loadFbConfig();
+    const token = await authToken();
+    const ct    = typeof dbGet === 'function' ? await dbGet('contacts', contactId) : null;
+    const uid   = typeof authUid === 'function' ? authUid() : '';
+    const now   = new Date().toISOString();
+
+    const fields = {
+      contactId:  { stringValue: String(contactId) },
+      subject:    { stringValue: subject },
+      text:       { stringValue: body },
+      html:       { stringValue: body.replace(/\n/g, '<br>') },
+      from:       { stringValue: direction === 'inbound' ? (ct?.email || '') : (_userEmailAddr || '') },
+      to:         { stringValue: direction === 'inbound' ? (_userEmailAddr || '') : (ct?.email || '') },
+      direction:  { stringValue: direction },
+      status:     { stringValue: 'sent' },
+      createdByUid: { stringValue: uid },
+      createdBy:  { stringValue: _userDispName || '' },
+      createdAt:  { stringValue: now },
+      sentAt:     { stringValue: now },
+      manual:     { booleanValue: true },
+    };
+
+    await fetch(
+      `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/${_EM_COL}?key=${cfg.apiKey}`,
+      { method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${token}`},
+        body: JSON.stringify({ fields }) }
+    );
+
+    _emailTimelineCache.delete(contactId);
+    await emailLoadContactEmails(contactId);
+    _emToast('E-posta eklendi ✓', 'success');
+  } catch(e) { _emToast('Hata: ' + e.message, 'error'); }
 }
 
 // ── Alle E-Mails eines Kontakts holen (by contactId + by email address) ──────
