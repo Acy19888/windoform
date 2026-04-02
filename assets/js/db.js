@@ -3,9 +3,6 @@
 /* ===================== SABITLER ===================== */
 const DB_NAME = 'CRM_DB', DB_VER = 4;
 
-/* ===================== SABITLER ===================== */
-const DB_NAME = 'CRM_DB', DB_VER = 4;
-
 const CITIES = {
   'istanbul':'İstanbul','ankara':'Ankara','izmir':'İzmir','bursa':'Bursa','antalya':'Antalya',
   'adana':'Adana','konya':'Konya','gaziantep':'Gaziantep','kocaeli':'Kocaeli','izmit':'Kocaeli',
