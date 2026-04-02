@@ -121,6 +121,9 @@ async function emailInit() {
       }
     }
 
+    // Zentrale Firma-Info laden (überschreibt ggf. User-spezifische Werte)
+    _loadCompanyInfo();
+
     // Rollen-Berechtigungen laden
     const settingsUrl = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/${_SETTINGS_COL}/rolePermissions?key=${cfg.apiKey}`;
     const settingsRes = await fetch(settingsUrl, token ? { headers: { Authorization: `Bearer ${token}` } } : {});
@@ -1288,30 +1291,33 @@ function companySettingsInit() {
           <div class="row g-2">
             <div class="col-12">
               <label class="form-label small fw-semibold mb-1">Firma Adı</label>
-              <input type="text" class="form-control form-control-sm" id="comp-name" value="${esc(window._companyName||'')}" placeholder="Windoform GmbH">
+              <input type="text" class="form-control form-control-sm" id="comp-name" value="${esc(window._companyName||'')}" placeholder="Windoform GmbH" ${_userCrmRole !== 'admin' ? 'readonly' : ''}>
             </div>
             <div class="col-md-6">
               <label class="form-label small fw-semibold mb-1">Telefon</label>
-              <input type="text" class="form-control form-control-sm" id="comp-phone" value="${esc(window._companyPhone||'')}" placeholder="+49 xxx xxx xxxx">
+              <input type="text" class="form-control form-control-sm" id="comp-phone" value="${esc(window._companyPhone||'')}" placeholder="+49 xxx xxx xxxx" ${_userCrmRole !== 'admin' ? 'readonly' : ''}>
             </div>
             <div class="col-md-6">
               <label class="form-label small fw-semibold mb-1">E-posta</label>
-              <input type="email" class="form-control form-control-sm" id="comp-email" value="${esc(window._companyEmail||'')}" placeholder="info@windoform.de">
+              <input type="email" class="form-control form-control-sm" id="comp-email" value="${esc(window._companyEmail||'')}" placeholder="info@windoform.de" ${_userCrmRole !== 'admin' ? 'readonly' : ''}>
             </div>
             <div class="col-md-6">
               <label class="form-label small fw-semibold mb-1">Website</label>
-              <input type="text" class="form-control form-control-sm" id="comp-website" value="${esc(window._companyWebsite||'')}" placeholder="www.windoform.de">
+              <input type="text" class="form-control form-control-sm" id="comp-website" value="${esc(window._companyWebsite||'')}" placeholder="www.windoform.de" ${_userCrmRole !== 'admin' ? 'readonly' : ''}>
             </div>
             <div class="col-md-6">
               <label class="form-label small fw-semibold mb-1">Adres</label>
-              <input type="text" class="form-control form-control-sm" id="comp-address" value="${esc(window._companyAddress||'')}" placeholder="Musterstraße 1, 12345 Stadt">
+              <input type="text" class="form-control form-control-sm" id="comp-address" value="${esc(window._companyAddress||'')}" placeholder="Musterstraße 1, 12345 Stadt" ${_userCrmRole !== 'admin' ? 'readonly' : ''}>
             </div>
           </div>
         </div>
       </div>
       <div class="d-flex gap-2 align-items-center">
-        <button class="btn btn-primary btn-sm" onclick="companySave()"><i class="bi bi-floppy me-1"></i>Firma Bilgilerini Kaydet</button>
-        <span id="comp-save-status" class="text-success small" style="display:none;">✓ Kaydedildi</span>
+        ${_userCrmRole === 'admin'
+          ? `<button class="btn btn-primary btn-sm" onclick="companySave()"><i class="bi bi-floppy me-1"></i>Firma Bilgilerini Kaydet</button>
+             <span id="comp-save-status" class="text-success small" style="display:none;">✓ Kaydedildi</span>`
+          : `<div class="alert alert-info py-1 px-2 mb-0 small"><i class="bi bi-info-circle me-1"></i>Nur Admins können Firmendaten speichern.</div>`
+        }
       </div>
     </div>
   </div>`;
@@ -1431,6 +1437,8 @@ async function signatureSave() {
 }
 
 async function companySave() {
+  if (_userCrmRole !== 'admin') { _emToast('Nur Admins können Firmendaten speichern', 'error'); return; }
+
   const name    = document.getElementById('comp-name')?.value?.trim()    || '';
   const phone   = document.getElementById('comp-phone')?.value?.trim()   || '';
   const email   = document.getElementById('comp-email')?.value?.trim()   || '';
@@ -1440,14 +1448,13 @@ async function companySave() {
 
   try {
     const cfg   = loadFbConfig();
-    const uid   = typeof authUid === 'function' ? authUid() : null;
     const token = await authToken();
-    if (!uid) throw new Error('Giriş yapılmamış');
 
+    // ── Zentral für alle User speichern (_sync/companyInfo) ──
     const mask = ['companyName','companyPhone','companyEmail','companyWebsite','companyAddress','companyLogo']
       .map(f => `updateMask.fieldPaths=${f}`).join('&');
     await fetch(
-      `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/fuarEmployees/${uid}?${mask}&key=${cfg.apiKey}`,
+      `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/_sync/companyInfo?${mask}&key=${cfg.apiKey}`,
       {
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -1469,10 +1476,60 @@ async function companySave() {
     window._companyAddress = address;
     if (logo) { window._companyLogo = logo; window._companyLogoNew = null; }
 
+    // Lokal cachen damit alle User es sofort haben
+    try {
+      const ci = { companyName:name, companyPhone:phone, companyEmail:email, companyWebsite:website, companyAddress:address, companyLogo:logo };
+      localStorage.setItem('_wf_companyInfo', JSON.stringify(ci));
+    } catch(_) {}
+
     const s = document.getElementById('comp-save-status');
     if (s) { s.style.display = ''; setTimeout(() => s.style.display = 'none', 3000); }
-    _emToast('Firma bilgileri kaydedildi ✓', 'success');
+    _emToast('Firma bilgileri kaydedildi ✓ (für alle Benutzer)', 'success');
   } catch (e) { _emToast('Hata: ' + e.message, 'error'); }
+}
+
+// ── Firma-Info zentral laden (für alle User) ───────────────────
+async function _loadCompanyInfo() {
+  // 1. Zuerst aus localStorage-Cache (sofort)
+  try {
+    const ci = JSON.parse(localStorage.getItem('_wf_companyInfo') || 'null');
+    if (ci) {
+      window._companyName    = ci.companyName    || window._companyName    || '';
+      window._companyPhone   = ci.companyPhone   || window._companyPhone   || '';
+      window._companyEmail   = ci.companyEmail   || window._companyEmail   || '';
+      window._companyWebsite = ci.companyWebsite || window._companyWebsite || '';
+      window._companyAddress = ci.companyAddress || window._companyAddress || '';
+      window._companyLogo    = ci.companyLogo    || window._companyLogo    || '';
+    }
+  } catch(_) {}
+
+  // 2. Dann aus Firestore (aktuellste Version)
+  try {
+    const cfg   = loadFbConfig();
+    const token = typeof authToken === 'function' ? await authToken() : null;
+    const res   = await fetch(
+      `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/_sync/companyInfo?key=${cfg.apiKey}`,
+      token ? { headers: { Authorization: `Bearer ${token}` } } : {}
+    );
+    if (!res.ok) return;
+    const f = (await res.json()).fields || {};
+    if (f.companyName?.stringValue) {
+      window._companyName    = f.companyName?.stringValue    || '';
+      window._companyPhone   = f.companyPhone?.stringValue   || '';
+      window._companyEmail   = f.companyEmail?.stringValue   || '';
+      window._companyWebsite = f.companyWebsite?.stringValue || '';
+      window._companyAddress = f.companyAddress?.stringValue || '';
+      window._companyLogo    = f.companyLogo?.stringValue    || '';
+      // Lokal cachen
+      try {
+        localStorage.setItem('_wf_companyInfo', JSON.stringify({
+          companyName: window._companyName, companyPhone: window._companyPhone,
+          companyEmail: window._companyEmail, companyWebsite: window._companyWebsite,
+          companyAddress: window._companyAddress, companyLogo: window._companyLogo,
+        }));
+      } catch(_) {}
+    }
+  } catch(_) {}
 }
 
 // ── Image upload helpers ───────────────────────────────────────
