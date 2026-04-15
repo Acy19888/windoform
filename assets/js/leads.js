@@ -437,6 +437,7 @@ function _ldOpenModal(lead) {
 
   // Populate company autocomplete + show live confidence preview
   _ldPopulateCompanyDatalist();
+  _ldHideContactPicker();
   _ldConfPreview();
 
   new bootstrap.Modal(document.getElementById('leadEditModal')).show();
@@ -608,17 +609,82 @@ function _ldPopulateCompanyDatalist() {
 }
 
 // ── Auto-fill form fields when a company is picked ────────
-function _ldCompanyPick() {
+async function _ldCompanyPick() {
   const val = (document.getElementById('ld-f-company')?.value || '').trim().toLowerCase();
   const match = _ldAllCompanies.find(c => (c.name || '').toLowerCase() === val);
-  if (!match) return;
+  if (!match) { _ldHideContactPicker(); return; }
   const f = id => document.getElementById(id);
-  // Only fill empty fields — don't overwrite what the user already typed
+  // Firma-Felder befüllen (nur leere Felder)
   if (match.city    && !f('ld-f-city').value)    f('ld-f-city').value    = match.city;
+  if (match.country && !f('ld-f-country').value)  f('ld-f-country').value = match.country;
   if (match.website && !f('ld-f-website').value)  f('ld-f-website').value = match.website;
   if (match.sector  && !f('ld-f-sector').value)   f('ld-f-sector').value  = match.sector;
-  if (match.email   && !f('ld-f-email').value)    f('ld-f-email').value   = match.email;
   if (match.phone   && !f('ld-f-phone').value)    f('ld-f-phone').value   = match.phone;
+
+  // Kontakt-Picker: Mitarbeiter dieser Firma laden
+  let contacts = [];
+  if (typeof dbAll === 'function') {
+    const all = await dbAll('contacts').catch(() => []);
+    contacts = all.filter(c => c.companyId === match.id || (c.company || '').toLowerCase() === val);
+  }
+  if (contacts.length === 1) {
+    // Nur ein Kontakt → direkt befüllen
+    const c = contacts[0];
+    const parts = (c.name || '').split(' ');
+    if (!f('ld-f-fname').value) f('ld-f-fname').value = parts[0] || '';
+    if (!f('ld-f-lname').value) f('ld-f-lname').value = parts.slice(1).join(' ') || '';
+    if (!f('ld-f-email').value) f('ld-f-email').value = c.email || '';
+    if (!f('ld-f-phone').value && c.phone) f('ld-f-phone').value = c.phone;
+    _ldHideContactPicker();
+  } else if (contacts.length > 1) {
+    // Mehrere Kontakte → Picker anzeigen
+    _ldShowContactPicker(contacts);
+  } else {
+    // Kein Kontakt: Firmen-E-Mail als Fallback
+    if (match.email && !f('ld-f-email').value) f('ld-f-email').value = match.email;
+    _ldHideContactPicker();
+  }
+  _ldConfPreview();
+}
+
+function _ldShowContactPicker(contacts) {
+  let picker = document.getElementById('ld-contact-picker');
+  if (!picker) {
+    picker = document.createElement('div');
+    picker.id = 'ld-contact-picker';
+    picker.style.cssText = 'margin-top:6px;';
+    const companyRow = document.getElementById('ld-f-company')?.closest('.mb-2') || document.getElementById('ld-f-company')?.parentElement;
+    if (companyRow) companyRow.after(picker);
+  }
+  picker.innerHTML = `
+    <label class="form-label form-label-sm text-muted mb-1" style="font-size:12px;">
+      <i class="bi bi-person-lines-fill me-1"></i>Kişi seç (${contacts.length} kişi bulundu)
+    </label>
+    <select class="form-select form-select-sm" onchange="_ldContactPickerSelect(this.value)">
+      <option value="">— Kişi seçin —</option>
+      ${contacts.map(c => `<option value="${c.id}">${(c.name||'').replace(/</g,'&lt;')} ${c.email ? '· '+c.email : ''}</option>`).join('')}
+    </select>`;
+  picker.style.display = '';
+  picker._contacts = contacts;
+}
+
+function _ldHideContactPicker() {
+  const p = document.getElementById('ld-contact-picker');
+  if (p) p.style.display = 'none';
+}
+
+function _ldContactPickerSelect(contactId) {
+  if (!contactId) return;
+  const picker = document.getElementById('ld-contact-picker');
+  const contacts = picker?._contacts || [];
+  const c = contacts.find(x => String(x.id) === String(contactId));
+  if (!c) return;
+  const f = id => document.getElementById(id);
+  const parts = (c.name || '').split(' ');
+  f('ld-f-fname').value = parts[0] || '';
+  f('ld-f-lname').value = parts.slice(1).join(' ') || '';
+  if (c.email) f('ld-f-email').value = c.email;
+  if (c.phone) f('ld-f-phone').value = c.phone;
   _ldConfPreview();
 }
 
