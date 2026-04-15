@@ -144,7 +144,7 @@ function doLogout() {
 // ── Main Panel ───────────────────────────────────────────────
 function _showMain() {
   document.getElementById('login-panel').style.display = 'none';
-  document.getElementById('main-panel').style.display  = '';
+  document.getElementById('main-panel').style.display  = 'block';
   document.getElementById('header-user').textContent    = _auth?.email || '';
   _loadRecipients();
 }
@@ -257,7 +257,7 @@ function _renderContact(data, email) {
         <span class="recent-dt">${dt}</span>
       </div>`;
     }).join('');
-    recentArea.style.display = '';
+    recentArea.style.display = 'block';
   } else {
     recentArea.style.display = 'none';
   }
@@ -400,7 +400,7 @@ function _renderTrackingSection(list) {
     </div>`;
   }).join('');
 
-  area.style.display = '';
+  area.style.display = 'block';
 }
 
 // ── Save Email to CRM ────────────────────────────────────────
