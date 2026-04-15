@@ -429,7 +429,11 @@ function _ldOpenModal(lead) {
   f('ld-f-value').value        = lead?.expectedValue   || '';
   f('ld-f-currency').value     = lead?.currency        || 'EUR';
   f('ld-f-close-date').value   = lead?.expectedCloseDate || '';
-  f('ld-f-assigned').value     = lead?.assignedTo      || '';
+  // Atanan: mevcut lead için kayıtlı değer, yeni lead için giriş yapan kullanıcı
+  const _defaultAssignee = (typeof _userDispName !== 'undefined' && _userDispName)
+    ? _userDispName
+    : (typeof authEmail === 'function' ? (authEmail() || '') : '');
+  f('ld-f-assigned').value = lead?.assignedTo || (!isEdit ? _defaultAssignee : '');
   f('ld-f-product').value      = lead?.productInterest || '';
   f('ld-f-sector').value       = lead?.sector          || '';
   f('ld-f-notes').value        = lead?.notes           || '';
@@ -439,6 +443,8 @@ function _ldOpenModal(lead) {
   _ldPopulateCompanyDatalist();
   _ldHideContactPicker();
   _ldConfPreview();
+  // Atanan datalist: bilinen kişileri doldur
+  _ldPopulateAssigneeList();
 
   new bootstrap.Modal(document.getElementById('leadEditModal')).show();
 }
@@ -608,6 +614,18 @@ function _ldPopulateCompanyDatalist() {
     .join('');
 }
 
+function _ldPopulateAssigneeList() {
+  const dl = document.getElementById('ld-assignee-list');
+  if (!dl) return;
+  // Mevcut leadlerden bilinen kişileri topla
+  const known = new Set();
+  const _me = (typeof _userDispName !== 'undefined' && _userDispName) ? _userDispName
+    : (typeof authEmail === 'function' ? authEmail() : '');
+  if (_me) known.add(_me);
+  (leadsData || []).forEach(l => { if (l.assignedTo) known.add(l.assignedTo); });
+  dl.innerHTML = [...known].map(n => `<option value="${n.replace(/"/g,'&quot;')}"></option>`).join('');
+}
+
 // ── Auto-fill form fields when a company is picked ────────
 async function _ldCompanyPick() {
   const val = (document.getElementById('ld-f-company')?.value || '').trim().toLowerCase();
@@ -615,8 +633,6 @@ async function _ldCompanyPick() {
   if (!match) { _ldHideContactPicker(); return; }
   const f = id => document.getElementById(id);
   // Firma-Felder befüllen (nur leere Felder)
-  if (match.city    && !f('ld-f-city').value)    f('ld-f-city').value    = match.city;
-  if (match.country && !f('ld-f-country').value)  f('ld-f-country').value = match.country;
   if (match.website && !f('ld-f-website').value)  f('ld-f-website').value = match.website;
   if (match.sector  && !f('ld-f-sector').value)   f('ld-f-sector').value  = match.sector;
   if (match.phone   && !f('ld-f-phone').value)    f('ld-f-phone').value   = match.phone;
@@ -627,6 +643,15 @@ async function _ldCompanyPick() {
     const all = await dbAll('contacts').catch(() => []);
     contacts = all.filter(c => c.companyId === match.id || (c.company || '').toLowerCase() === val);
   }
+
+  // City/Country: Firma → Kontakt-Fallback (Visitenkarte-Adresse)
+  const _empForCity = contacts.find(c => c.city);
+  const _empForCountry = contacts.find(c => c.country);
+  const _fillCity    = match.city    || _empForCity?.city    || '';
+  const _fillCountry = match.country || _empForCountry?.country || '';
+  if (_fillCity    && !f('ld-f-city').value)    f('ld-f-city').value    = _fillCity;
+  if (_fillCountry && !f('ld-f-country').value)  f('ld-f-country').value = _fillCountry;
+
   if (contacts.length === 1) {
     // Nur ein Kontakt → direkt befüllen
     const c = contacts[0];

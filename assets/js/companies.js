@@ -351,7 +351,7 @@ async function showCompanyModal(id) {
   }
   // Adres güncelle panelini her açılışta kapat
   document.getElementById('comp-update-panel').style.display = 'none';
-  new bootstrap.Modal(document.getElementById('compModal')).show();
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('compModal')).show();
 }
 
 function editCompanyModal() {
@@ -387,7 +387,7 @@ function editCompanyModal() {
     const mktEl = document.getElementById('ec-marketing-status');
     if (mktEl) mktEl.value = c.marketingStatus || 'Aranacak';
     bootstrap.Modal.getOrCreateInstance(document.getElementById('compModal')).hide();
-    new bootstrap.Modal(document.getElementById('editCompModal')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('editCompModal')).show();
   })();
 }
 
