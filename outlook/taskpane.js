@@ -422,28 +422,41 @@ async function saveEmailToCRM() {
       direction = 'outbound';
       to        = _recipients[_activeIdx]?.email || '';
       from      = _auth.email;
+      contactId = _contactCache[to.toLowerCase()]?.contactId || '';
 
-      // Betreff holen – bei OWA manchmal verzögert → Retry
-      subject = await _getAsync(cb => _item.subject.getAsync(cb));
-      if (!subject.trim()) {
-        await new Promise(r => setTimeout(r, 300));
-        subject = await _getAsync(cb => _item.subject.getAsync(cb));
+      // OWA-Sync erzwingen: leeres prependAsync triggert internen Flush
+      await new Promise(resolve =>
+        _item.body.prependAsync('', { coercionType: Office.CoercionType.Html }, resolve)
+      );
+
+      // Betreff – bis zu 3 Versuche mit Wartezeit
+      for (let i = 0; i < 3; i++) {
+        subject = await _getAsync(cb => _item.subject.getAsync({ asyncContext: null }, cb));
+        if (subject.trim()) break;
+        await new Promise(r => setTimeout(r, 400));
       }
 
-      // Body: zuerst HTML (zuverlässiger), danach Text
-      bodyHtml = await _getAsync(cb => _item.body.getAsync(Office.CoercionType.Html, cb));
-      bodyText = await _getAsync(cb => _item.body.getAsync(Office.CoercionType.Text, cb));
-      // Fallback: HTML-Tags entfernen wenn Text leer
-      if (!bodyText.trim() && bodyHtml) {
+      // Body als HTML holen (zuverlässigster Weg in OWA)
+      bodyHtml = await _getAsync(cb =>
+        _item.body.getAsync(Office.CoercionType.Html, { asyncContext: null }, cb)
+      );
+
+      // Plain-Text aus HTML ableiten (HTML-Tags entfernen)
+      if (bodyHtml) {
         bodyText = bodyHtml
           .replace(/<style[\s\S]*?<\/style>/gi, '')
+          .replace(/<script[\s\S]*?<\/script>/gi, '')
           .replace(/<[^>]+>/g, ' ')
           .replace(/&nbsp;/g, ' ')
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
           .replace(/\s+/g, ' ')
           .trim();
       }
 
-      contactId = _contactCache[to.toLowerCase()]?.contactId || '';
+      // Debug-Toast: zeigt was erfasst wurde (erste 60 Zeichen)
+      showToast(`📋 Betreff: "${subject || '–'}" | Text: "${bodyText.slice(0,60) || '–'}"`, '');
 
       // Tracking-Pixel in E-Mail-Body einbetten
       if (trackingId && bodyHtml) {
@@ -464,27 +477,29 @@ async function saveEmailToCRM() {
       to        = _auth.email;
       const sender = await _getAsync(cb => _item.from.getAsync(cb));
       from      = sender?.emailAddress || '';
+      contactId = _contactCache[from.toLowerCase()]?.contactId || '';
 
-      // In Read-Modus ist subject ein einfacher String, kein Office.Subject-Objekt
+      // In Read-Modus ist subject ein einfacher String (kein Office.Subject-Objekt)
       subject = typeof _item.subject === 'string'
         ? _item.subject
-        : await _getAsync(cb => _item.subject.getAsync(cb));
+        : await _getAsync(cb => _item.subject.getAsync({ asyncContext: null }, cb));
 
-      // Body: Text-Coercion, bei Leerstand HTML als Fallback
-      bodyText = await _getAsync(cb => _item.body.getAsync(Office.CoercionType.Text, cb));
-      if (!bodyText.trim()) {
-        const html = await _getAsync(cb => _item.body.getAsync(Office.CoercionType.Html, cb));
-        if (html) {
-          bodyText = html
-            .replace(/<style[\s\S]*?<\/style>/gi, '')
-            .replace(/<[^>]+>/g, ' ')
-            .replace(/&nbsp;/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-        }
+      // Body als HTML holen, dann Text ableiten
+      bodyHtml = await _getAsync(cb =>
+        _item.body.getAsync(Office.CoercionType.Html, { asyncContext: null }, cb)
+      );
+      if (bodyHtml) {
+        bodyText = bodyHtml
+          .replace(/<style[\s\S]*?<\/style>/gi, '')
+          .replace(/<script[\s\S]*?<\/script>/gi, '')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/&nbsp;/g, ' ')
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/\s+/g, ' ')
+          .trim();
       }
-
-      contactId = _contactCache[from.toLowerCase()]?.contactId || '';
     }
 
     const emailKey    = (_mode === 'compose' ? to : from).toLowerCase();
@@ -577,9 +592,19 @@ async function saveEmailToCRM() {
 // ── Helpers ──────────────────────────────────────────────────
 function _getAsync(fn) {
   return new Promise(resolve => {
-    fn(result => {
-      resolve(result.status === Office.AsyncResultStatus.Succeeded ? (result.value || '') : '');
-    });
+    try {
+      fn(result => {
+        if (result && result.status === Office.AsyncResultStatus.Succeeded) {
+          resolve(result.value != null ? result.value : '');
+        } else {
+          console.warn('[_getAsync] status:', result?.status, result?.error?.message);
+          resolve('');
+        }
+      });
+    } catch (e) {
+      console.error('[_getAsync] exception:', e.message);
+      resolve('');
+    }
   });
 }
 
