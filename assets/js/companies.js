@@ -371,7 +371,8 @@ function editCompanyModal() {
     document.getElementById('ec-city').value            = c.city || '';
     document.getElementById('ec-district').value        = c.district || '';
     document.getElementById('ec-postcode').value        = c.postcode || '';
-    document.getElementById('ec-country').value         = c.country || 'Türkiye';
+    const _ecCountry = document.getElementById('ec-country');
+    if (_ecCountry) _ecCountry.value = c.country || 'Türkiye';
     initAddressAutocomplete('ec-address','ec-city','ec-postcode','ec-country');
     document.getElementById('ec-lat').value             = c.lat || '';
     document.getElementById('ec-lon').value             = c.lon || '';
