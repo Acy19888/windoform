@@ -139,14 +139,17 @@ async function showCompanyModal(id) {
   const taxOfficeEl = document.getElementById('comp-tax-office');
   if (taxOfficeEl) taxOfficeEl.textContent = c.taxOffice || '';
 
-  // Adres — Firma yoksa ilk çalışanın adresini göster (Visitenkarte fallback)
+  // Adres — Firma yoksa çalışan kaydından, o da yoksa Fuarbot session verisinden göster
   const _emp = employees.find(e => e.address || e.city);
+  // Fuarbot'ta bu firmaya ait müşteri adresi var mı?
+  const _fbFallback = (typeof fbCustomers !== 'undefined' ? fbCustomers : [])
+    .find(fb => (fb.company||'').toLowerCase().trim() === (c.name||'').toLowerCase().trim() && fb.address);
   const _addrEl     = document.getElementById('comp-address');
   const _cityEl     = document.getElementById('comp-city');
   const _districtEl = document.getElementById('comp-district');
-  if (_addrEl)     _addrEl.textContent     = c.address  || _emp?.address  || '-';
-  if (_cityEl)     _cityEl.textContent     = c.city     || _emp?.city     || '-';
-  if (_districtEl) _districtEl.textContent = c.district || _emp?.district || '-';
+  if (_addrEl)     _addrEl.textContent     = c.address  || _emp?.address  || _fbFallback?.address  || '-';
+  if (_cityEl)     _cityEl.textContent     = c.city     || _emp?.city     || _fbFallback?.city     || '-';
+  if (_districtEl) _districtEl.textContent = c.district || _emp?.district || _fbFallback?.district || '-';
 
   // Mahalle
   const neighWrap = document.getElementById('comp-neighbourhood-wrap');
@@ -455,12 +458,14 @@ function toggleUpdatePanel() {
       linksEl.appendChild(a);
     });
 
-    // Mevcut değerleri doldur — Firma adresi yoksa ilk çalışanın adresini kullan
+    // Mevcut değerleri doldur — Firma adresi yoksa çalışan, o da yoksa Fuarbot session
     const allCons2 = typeof dbAll === 'function' ? await dbAll('contacts').catch(() => []) : [];
-    const empFallback = allCons2.find(e => e.companyId === id && (e.address || e.city));
-    document.getElementById('cu-address').value       = c.address       || empFallback?.address       || '';
+    const empFallback = allCons2.find(e => e.companyId === currentModalCompanyId && (e.address || e.city));
+    const fbFb2 = (typeof fbCustomers !== 'undefined' ? fbCustomers : [])
+      .find(fb => (fb.company||'').toLowerCase().trim() === (c.name||'').toLowerCase().trim() && fb.address);
+    document.getElementById('cu-address').value       = c.address       || empFallback?.address       || fbFb2?.address       || '';
     document.getElementById('cu-neighbourhood').value = c.neighbourhood  || empFallback?.neighbourhood || '';
-    document.getElementById('cu-city').value          = c.city          || empFallback?.city          || '';
+    document.getElementById('cu-city').value          = c.city          || empFallback?.city          || fbFb2?.city          || '';
     document.getElementById('cu-district').value      = c.district      || empFallback?.district      || '';
     document.getElementById('cu-phone').value         = c.phone         || '';
     document.getElementById('cu-email').value         = c.email         || '';
@@ -507,6 +512,7 @@ async function saveCompanyContactUpdate() {
   updated.qualityScore = calculateCompanyQuality(updated);
 
   await dbPut('companies', updated);
+  if (typeof syncToFirestore === 'function') syncToFirestore();
 
   // Modalı güncelle (kapamadan)
   document.getElementById('comp-address').textContent  = address  || '-';

@@ -735,6 +735,7 @@ async function importFuarbotContact(id) {
       const det = document.getElementById('fb-detail');
       if (det) det.innerHTML = `<div class="fb-empty"><i class="bi bi-person-lines-fill" style="font-size:48px;opacity:.2;"></i><span>Soldaki listeden bir müşteri seçin</span></div>`;
     }
+    if (typeof syncToFirestore === 'function') syncToFirestore();
   } catch (e) { toast('Hata: ' + e.message, 'error'); }
 }
 
