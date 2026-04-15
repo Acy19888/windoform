@@ -139,17 +139,37 @@ async function showCompanyModal(id) {
   const taxOfficeEl = document.getElementById('comp-tax-office');
   if (taxOfficeEl) taxOfficeEl.textContent = c.taxOffice || '';
 
-  // Adres — Firma yoksa çalışan kaydından, o da yoksa Fuarbot session verisinden göster
+  // Adres — sadece bu firmanın kendi kaydından veya çalışanın adresinden al
   const _emp = employees.find(e => e.address || e.city);
-  // Fuarbot'ta bu firmaya ait müşteri adresi var mı?
-  const _fbFallback = (typeof fbCustomers !== 'undefined' ? fbCustomers : [])
-    .find(fb => (fb.company||'').toLowerCase().trim() === (c.name||'').toLowerCase().trim() && fb.address);
+  const _rawAddr = c.address || _emp?.address || '';
+
+  // Şehir/Ülke: kayıtta yoksa adres metninden parse et
+  function _parseAddrParts(addr) {
+    if (!addr) return { city: '', country: '' };
+    // US format: "Street, City, ST ZIP" veya "Street, City, ST ZIP, USA"
+    const usM = addr.match(/,\s*([A-Za-z\s]+),\s*[A-Z]{2}\s*\d{5}(?:-\d{4})?(?:\s*,?\s*USA?)?$/i);
+    if (usM) return { city: usM[1].trim(), country: 'USA' };
+    // Generic: son iki virgüllü parça
+    const parts = addr.split(',').map(p => p.trim()).filter(Boolean);
+    let city = '', country = '';
+    if (parts.length >= 2) {
+      const candidate = parts[parts.length - 2];
+      if (!/^\d/.test(candidate)) city = candidate;
+    }
+    if (parts.length >= 1) {
+      const last = parts[parts.length - 1];
+      if (!/^\d/.test(last) && last.length > 2) country = last;
+    }
+    return { city, country };
+  }
+
+  const _parsed = _parseAddrParts(_rawAddr);
   const _addrEl     = document.getElementById('comp-address');
   const _cityEl     = document.getElementById('comp-city');
   const _districtEl = document.getElementById('comp-district');
-  if (_addrEl)     _addrEl.textContent     = c.address  || _emp?.address  || _fbFallback?.address  || '-';
-  if (_cityEl)     _cityEl.textContent     = c.city     || _emp?.city     || _fbFallback?.city     || '-';
-  if (_districtEl) _districtEl.textContent = c.district || _emp?.district || _fbFallback?.district || '-';
+  if (_addrEl)     _addrEl.textContent     = _rawAddr || '-';
+  if (_cityEl)     _cityEl.textContent     = c.city    || _emp?.city    || _parsed.city    || '-';
+  if (_districtEl) _districtEl.textContent = c.district || _emp?.district || '';
 
   // Mahalle
   const neighWrap = document.getElementById('comp-neighbourhood-wrap');
@@ -173,13 +193,11 @@ async function showCompanyModal(id) {
   if (postcodeWrap) { postcodeWrap.style.display = c.postcode ? '' : 'none'; }
   const postcodeEl = document.getElementById('comp-postcode');
   if (postcodeEl) postcodeEl.textContent = c.postcode || '';
-  // Ülke — her zaman göster (uluslararası kullanım)
+  // Ülke — her zaman göster, adres parse fallback ile
   const countryEl = document.getElementById('comp-country');
-  const _fbFallbackCountry = (typeof fbCustomers !== 'undefined' ? fbCustomers : [])
-    .find(fb => (fb.company||'').toLowerCase().trim() === (c.name||'').toLowerCase().trim() && fb.country);
-  if (countryEl) countryEl.textContent = c.country || _emp?.country || _fbFallbackCountry?.country || '-';
+  if (countryEl) countryEl.textContent = c.country || _emp?.country || _parsed.country || '-';
   const countryWrap = document.getElementById('comp-country-wrap');
-  if (countryWrap) countryWrap.style.display = 'none'; // eski gizli alan — artık kullanılmıyor
+  if (countryWrap) countryWrap.style.display = 'none';
 
   // Pazarlama Durumu
   const mktStatus = c.marketingStatus || 'Aranacak';
@@ -461,14 +479,24 @@ function toggleUpdatePanel() {
       linksEl.appendChild(a);
     });
 
-    // Mevcut değerleri doldur — Firma adresi yoksa çalışan, o da yoksa Fuarbot session
+    // Mevcut değerleri doldur — Firma adresi yoksa çalışan kaydından al
     const allCons2 = typeof dbAll === 'function' ? await dbAll('contacts').catch(() => []) : [];
     const empFallback = allCons2.find(e => e.companyId === currentModalCompanyId && (e.address || e.city));
-    const fbFb2 = (typeof fbCustomers !== 'undefined' ? fbCustomers : [])
-      .find(fb => (fb.company||'').toLowerCase().trim() === (c.name||'').toLowerCase().trim() && fb.address);
-    document.getElementById('cu-address').value       = c.address       || empFallback?.address       || fbFb2?.address       || '';
+    const _cuRawAddr = c.address || empFallback?.address || '';
+    // Adres metninden şehir/ülke parse et
+    const _cuParsed = (function(addr) {
+      if (!addr) return { city: '', country: '' };
+      const usM = addr.match(/,\s*([A-Za-z\s]+),\s*[A-Z]{2}\s*\d{5}(?:-\d{4})?(?:\s*,?\s*USA?)?$/i);
+      if (usM) return { city: usM[1].trim(), country: 'USA' };
+      const parts = addr.split(',').map(p => p.trim()).filter(Boolean);
+      let city = '', country = '';
+      if (parts.length >= 2 && !/^\d/.test(parts[parts.length-2])) city = parts[parts.length-2];
+      if (parts.length >= 1 && !/^\d/.test(parts[parts.length-1]) && parts[parts.length-1].length > 2) country = parts[parts.length-1];
+      return { city, country };
+    })(_cuRawAddr);
+    document.getElementById('cu-address').value       = _cuRawAddr;
     document.getElementById('cu-neighbourhood').value = c.neighbourhood  || empFallback?.neighbourhood || '';
-    document.getElementById('cu-city').value          = c.city          || empFallback?.city          || fbFb2?.city          || '';
+    document.getElementById('cu-city').value          = c.city          || empFallback?.city          || _cuParsed.city    || '';
     document.getElementById('cu-district').value      = c.district      || empFallback?.district      || '';
     document.getElementById('cu-phone').value         = c.phone         || '';
     document.getElementById('cu-email').value         = c.email         || '';
