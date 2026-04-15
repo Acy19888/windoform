@@ -422,9 +422,27 @@ async function saveEmailToCRM() {
       direction = 'outbound';
       to        = _recipients[_activeIdx]?.email || '';
       from      = _auth.email;
-      subject   = await _getAsync(cb => _item.subject.getAsync(cb));
-      bodyText  = await _getAsync(cb => _item.body.getAsync(Office.CoercionType.Text, cb));
-      bodyHtml  = await _getAsync(cb => _item.body.getAsync(Office.CoercionType.Html, cb));
+
+      // Betreff holen – bei OWA manchmal verzögert → Retry
+      subject = await _getAsync(cb => _item.subject.getAsync(cb));
+      if (!subject.trim()) {
+        await new Promise(r => setTimeout(r, 300));
+        subject = await _getAsync(cb => _item.subject.getAsync(cb));
+      }
+
+      // Body: zuerst HTML (zuverlässiger), danach Text
+      bodyHtml = await _getAsync(cb => _item.body.getAsync(Office.CoercionType.Html, cb));
+      bodyText = await _getAsync(cb => _item.body.getAsync(Office.CoercionType.Text, cb));
+      // Fallback: HTML-Tags entfernen wenn Text leer
+      if (!bodyText.trim() && bodyHtml) {
+        bodyText = bodyHtml
+          .replace(/<style[\s\S]*?<\/style>/gi, '')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/&nbsp;/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+
       contactId = _contactCache[to.toLowerCase()]?.contactId || '';
 
       // Tracking-Pixel in E-Mail-Body einbetten
@@ -446,8 +464,26 @@ async function saveEmailToCRM() {
       to        = _auth.email;
       const sender = await _getAsync(cb => _item.from.getAsync(cb));
       from      = sender?.emailAddress || '';
-      subject   = await _getAsync(cb => _item.subject.getAsync(cb));
-      bodyText  = await _getAsync(cb => _item.body.getAsync(Office.CoercionType.Text, cb));
+
+      // In Read-Modus ist subject ein einfacher String, kein Office.Subject-Objekt
+      subject = typeof _item.subject === 'string'
+        ? _item.subject
+        : await _getAsync(cb => _item.subject.getAsync(cb));
+
+      // Body: Text-Coercion, bei Leerstand HTML als Fallback
+      bodyText = await _getAsync(cb => _item.body.getAsync(Office.CoercionType.Text, cb));
+      if (!bodyText.trim()) {
+        const html = await _getAsync(cb => _item.body.getAsync(Office.CoercionType.Html, cb));
+        if (html) {
+          bodyText = html
+            .replace(/<style[\s\S]*?<\/style>/gi, '')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/&nbsp;/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        }
+      }
+
       contactId = _contactCache[from.toLowerCase()]?.contactId || '';
     }
 
