@@ -6,19 +6,20 @@
   xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.0"
   xsi:type="MailApp">
 
-  <Id>4c34f5a1-b23e-4f7c-9d1a-2b3e4f5a6b7c</Id>
+  <Id>d319b1c5-8e20-491c-be20-f44638e0c6d3</Id>
   <Version>1.0.0.0</Version>
-  <ProviderName>Windoform</ProviderName>
+  <ProviderName>Windoform CRM</ProviderName>
   <DefaultLocale>de-DE</DefaultLocale>
   <DisplayName DefaultValue="Windoform CRM"/>
-  <Description DefaultValue="Kontaktinfos anzeigen und E-Mails ins CRM speichern"/>
+  <Description DefaultValue="Kontaktinfos anzeigen und E-Mails automatisch ins CRM speichern"/>
 
-  <IconUrl DefaultValue="https://windoform.vercel.app/outlook/icon-80.png"/>
-  <HighResolutionIconUrl DefaultValue="https://windoform.vercel.app/outlook/icon-80.png"/>
+  <IconUrl DefaultValue="https://windoform.vercel.app/assets/img/icon-80.png"/>
+  <HighResolutionIconUrl DefaultValue="https://windoform.vercel.app/assets/img/icon-80.png"/>
   <SupportUrl DefaultValue="https://windoform.vercel.app"/>
 
   <AppDomains>
     <AppDomain>windoform.vercel.app</AppDomain>
+    <AppDomain>firestore.googleapis.com</AppDomain>
   </AppDomains>
 
   <Hosts>
@@ -32,6 +33,11 @@
   </Requirements>
 
   <FormSettings>
+    <Form xsi:type="ItemEdit">
+      <DesktopSettings>
+        <SourceLocation DefaultValue="https://windoform.vercel.app/outlook/taskpane.html"/>
+      </DesktopSettings>
+    </Form>
     <Form xsi:type="ItemRead">
       <DesktopSettings>
         <SourceLocation DefaultValue="https://windoform.vercel.app/outlook/taskpane.html?mode=read"/>
@@ -40,24 +46,51 @@
     </Form>
   </FormSettings>
 
-  <Permissions>ReadItem</Permissions>
+  <Permissions>ReadWriteItem</Permissions>
 
   <Rule xsi:type="RuleCollection" Mode="Or">
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Edit"/>
     <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read"/>
   </Rule>
 
-  <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides/1.0" xsi:type="VersionOverridesV1_0">
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides" xsi:type="VersionOverridesV1_0">
 
     <Requirements>
-      <bt:Sets>
-        <bt:Set Name="Mailbox" MinVersion="1.3"/>
+      <bt:Sets DefaultMinVersion="1.3">
+        <bt:Set Name="Mailbox"/>
       </bt:Sets>
     </Requirements>
 
     <Hosts>
       <Host xsi:type="MailHost">
+
         <DesktopFormFactor>
 
+          <!-- Compose Modus: Seitenleiste beim Schreiben -->
+          <ExtensionPoint xsi:type="MessageComposeCommandSurface">
+            <OfficeTab id="TabDefault">
+              <Group id="msgComposeGroup">
+                <Label resid="GroupLabel"/>
+                <Control xsi:type="Button" id="msgComposeOpenPaneButton">
+                  <Label resid="TaskpaneButton.Label"/>
+                  <Supertip>
+                    <Title resid="TaskpaneButton.Label"/>
+                    <Description resid="TaskpaneButton.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16x16"/>
+                    <bt:Image size="32" resid="Icon.32x32"/>
+                    <bt:Image size="80" resid="Icon.80x80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <SourceLocation resid="Taskpane.Url"/>
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+
+          <!-- Read Modus: Seitenleiste beim Lesen -->
           <ExtensionPoint xsi:type="MessageReadCommandSurface">
             <OfficeTab id="TabDefault">
               <Group id="msgReadGroup">
@@ -74,8 +107,7 @@
                     <bt:Image size="80" resid="Icon.80x80"/>
                   </Icon>
                   <Action xsi:type="ShowTaskpane">
-                    <TaskpaneId>ButtonId1</TaskpaneId>
-                    <SourceLocation resid="Taskpane.Url"/>
+                    <SourceLocation resid="Taskpane.UrlRead"/>
                   </Action>
                 </Control>
               </Group>
@@ -88,19 +120,20 @@
 
     <Resources>
       <bt:Images>
-        <bt:Image id="Icon.16x16" DefaultValue="https://windoform.vercel.app/outlook/icon-16.png"/>
-        <bt:Image id="Icon.32x32" DefaultValue="https://windoform.vercel.app/outlook/icon-32.png"/>
-        <bt:Image id="Icon.80x80" DefaultValue="https://windoform.vercel.app/outlook/icon-80.png"/>
+        <bt:Image id="Icon.16x16" DefaultValue="https://windoform.vercel.app/assets/img/icon-16.png"/>
+        <bt:Image id="Icon.32x32" DefaultValue="https://windoform.vercel.app/assets/img/icon-32.png"/>
+        <bt:Image id="Icon.80x80" DefaultValue="https://windoform.vercel.app/assets/img/icon-80.png"/>
       </bt:Images>
       <bt:Urls>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://windoform.vercel.app/outlook/taskpane.html?mode=read"/>
+        <bt:Url id="Taskpane.Url"     DefaultValue="https://windoform.vercel.app/outlook/taskpane.html"/>
+        <bt:Url id="Taskpane.UrlRead" DefaultValue="https://windoform.vercel.app/outlook/taskpane.html?mode=read"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GroupLabel"           DefaultValue="Windoform CRM"/>
         <bt:String id="TaskpaneButton.Label" DefaultValue="CRM Kontakt"/>
       </bt:ShortStrings>
       <bt:LongStrings>
-        <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Kontaktinfos anzeigen und E-Mail speichern"/>
+        <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Kontaktinfos aus dem CRM anzeigen und E-Mail speichern"/>
       </bt:LongStrings>
     </Resources>
 

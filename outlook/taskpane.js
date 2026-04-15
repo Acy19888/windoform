@@ -7,16 +7,18 @@ const AUTH_BASE  = 'https://identitytoolkit.googleapis.com/v1/accounts';
 const TOKEN_BASE = 'https://securetoken.googleapis.com/v1/token';
 const FS_BASE    = 'https://firestore.googleapis.com/v1/projects';
 const EM_COL     = 'crm_emails';
+const TR_COL     = 'email_tracking';
 const API_BASE   = 'https://windoform.vercel.app/api/outlook';
+const TRACK_URL  = 'https://windoform.vercel.app/api/track'; // Pixel-URL: TRACK_URL/trackingId
 
 // ── State ────────────────────────────────────────────────────
-let _auth        = null;   // { uid, email, idToken, refreshToken, expiresAt }
-let _cfg         = null;   // { projectId, apiKey }
-let _item        = null;   // Office mailbox item
-let _recipients  = [];     // [{email, name}]
-let _activeIdx   = 0;
-let _contactCache = {};    // email → result from API
-let _mode        = 'compose';
+let _auth         = null;   // { uid, email, idToken, refreshToken, expiresAt }
+let _cfg          = null;   // { projectId, apiKey }
+let _item         = null;   // Office mailbox item
+let _recipients   = [];     // [{email, name}]
+let _activeIdx    = 0;
+let _contactCache = {};     // email → result from API
+let _mode         = 'compose';
 
 // ── Office Init ──────────────────────────────────────────────
 Office.onReady(() => {
@@ -30,7 +32,6 @@ Office.onReady(() => {
 
   _item = Office.context.mailbox.item;
 
-  // Empfänger-Änderungen in Compose-Modus beobachten
   if (_mode === 'compose' && _item?.addHandlerAsync) {
     _item.addHandlerAsync(
       Office.EventType.RecipientsChanged,
@@ -42,6 +43,7 @@ Office.onReady(() => {
 
 // ── Config ───────────────────────────────────────────────────
 const _CFG_DEFAULT = { projectId: 'fuarbot', apiKey: 'AIzaSyCvFT3pQn4OFtTjep87-y9wrSZjrKbno1s' };
+
 function _loadCfg() {
   try {
     const cfg = JSON.parse(localStorage.getItem(CFG_KEY) || 'null');
@@ -194,13 +196,15 @@ async function _lookupContact(idx) {
 
   const emailKey = r.email.toLowerCase();
 
-  // Cache hit
   if (_contactCache[emailKey] !== undefined) {
-    return _renderContact(_contactCache[emailKey], emailKey);
+    _renderContact(_contactCache[emailKey], emailKey);
+    if (_mode === 'compose') _loadContactTracking(emailKey);
+    return;
   }
 
   _showState('loading');
-  document.getElementById('save-area').style.display = 'none';
+  document.getElementById('save-area').style.display    = 'none';
+  document.getElementById('tracking-area').style.display = 'none';
 
   try {
     const token = await _getToken();
@@ -214,18 +218,20 @@ async function _lookupContact(idx) {
     _contactCache[emailKey] = data;
     _renderContact(data, emailKey);
 
+    // Gesendete E-Mails + Tracking laden (nur Compose)
+    if (_mode === 'compose') _loadContactTracking(emailKey);
+
   } catch (e) {
     _contactCache[emailKey] = null;
     _renderContact(null, emailKey);
   }
 }
 
+// ── Render Contact ───────────────────────────────────────────
 function _renderContact(data, email) {
-  // Show save button always
   document.getElementById('save-area').style.display = '';
 
   if (!data || !data.found) {
-    // Unknown contact — show "not found" + still allow saving
     document.getElementById('c-nf-email').textContent = email;
     _showState('notfound');
     document.getElementById('save-hint').textContent = 'Wird ohne Kontaktverknüpfung gespeichert';
@@ -233,14 +239,12 @@ function _renderContact(data, email) {
     return;
   }
 
-  // Known contact
   document.getElementById('c-name').textContent    = data.name || email;
   document.getElementById('c-company').textContent = '';
   document.getElementById('c-email').textContent   = email;
   document.getElementById('c-phone-row').style.display  = 'none';
   document.getElementById('c-status-row').style.display = 'none';
 
-  // Recent emails
   const recentArea = document.getElementById('recent-area');
   const recentList = document.getElementById('recent-list');
   if (data.recentEmails?.length) {
@@ -269,6 +273,136 @@ function _showState(state) {
   );
 }
 
+// ── Tracking ─────────────────────────────────────────────────
+
+/** Zufällige UUID generieren */
+function _genUUID() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+
+/**
+ * Gesendete E-Mails an diesen Kontakt aus Firestore laden
+ * und Tracking-Status für jede E-Mail mit trackingId abfragen.
+ */
+async function _loadContactTracking(email) {
+  const token = await _getToken();
+  if (!token) return;
+
+  try {
+    // Firestore-Abfrage: gesendete E-Mails an diese Adresse
+    const query = {
+      structuredQuery: {
+        from: [{ collectionId: EM_COL }],
+        where: {
+          compositeFilter: {
+            op: 'AND',
+            filters: [
+              { fieldFilter: { field: { fieldPath: 'from' }, op: 'EQUAL', value: { stringValue: _auth.email.toLowerCase() } } },
+              { fieldFilter: { field: { fieldPath: 'to'   }, op: 'EQUAL', value: { stringValue: email.toLowerCase() } } },
+            ]
+          }
+        },
+        orderBy: [{ field: { fieldPath: 'sentAt' }, direction: 'DESCENDING' }],
+        limit: 6
+      }
+    };
+
+    const res = await fetch(
+      `${FS_BASE}/${_cfg.projectId}/databases/(default)/documents:runQuery?key=${_cfg.apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(query)
+      }
+    );
+
+    const results = await res.json();
+    const emails = (Array.isArray(results) ? results : [])
+      .filter(r => r.document)
+      .map(r => ({
+        subject:    r.document.fields?.subject?.stringValue    || '(kein Betreff)',
+        sentAt:     r.document.fields?.sentAt?.timestampValue  || '',
+        trackingId: r.document.fields?.trackingId?.stringValue || null,
+      }));
+
+    if (emails.length === 0) {
+      document.getElementById('tracking-area').style.display = 'none';
+      return;
+    }
+
+    // Tracking-Status für E-Mails mit trackingId laden
+    const withTracking = await Promise.all(
+      emails.map(async e => {
+        if (!e.trackingId) return { ...e, tracking: null };
+        const status = await _fetchTrackingStatus(e.trackingId, token);
+        return { ...e, tracking: status };
+      })
+    );
+
+    _renderTrackingSection(withTracking);
+
+  } catch (err) {
+    console.warn('[Tracking] Laden fehlgeschlagen:', err.message);
+    document.getElementById('tracking-area').style.display = 'none';
+  }
+}
+
+/** Tracking-Status eines einzelnen Dokuments aus Firestore lesen */
+async function _fetchTrackingStatus(trackingId, token) {
+  try {
+    const res = await fetch(
+      `${FS_BASE}/${_cfg.projectId}/databases/(default)/documents/${TR_COL}/${trackingId}?key=${_cfg.apiKey}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!res.ok) return null;
+    const doc = await res.json();
+    if (!doc.fields) return null;
+    return {
+      openedAt:     doc.fields.openedAt?.timestampValue     || null,
+      openCount:    parseInt(doc.fields.openCount?.integerValue) || 0,
+      lastOpenedAt: doc.fields.lastOpenedAt?.timestampValue || null,
+    };
+  } catch { return null; }
+}
+
+/** Tracking-Bereich im Panel rendern */
+function _renderTrackingSection(list) {
+  const area = document.getElementById('tracking-area');
+  const lst  = document.getElementById('tracking-list');
+
+  if (!list || list.length === 0) { area.style.display = 'none'; return; }
+
+  lst.innerHTML = list.map(e => {
+    const dt = e.sentAt
+      ? new Date(e.sentAt).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'2-digit' })
+      : '';
+
+    let badge;
+    if (!e.trackingId) {
+      // Kein Tracking für diese E-Mail
+      badge = `<span class="track-badge track-none">Kein Tracking</span>`;
+    } else if (!e.tracking || !e.tracking.openedAt) {
+      badge = `<span class="track-badge track-unseen">📧 Nicht geöffnet</span>`;
+    } else {
+      const openDt   = new Date(e.tracking.openedAt).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'2-digit' });
+      const openTime = new Date(e.tracking.openedAt).toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
+      const multi    = e.tracking.openCount > 1 ? ` · ${e.tracking.openCount}× geöffnet` : '';
+      badge = `<span class="track-badge track-seen">👁 ${openDt} ${openTime}${multi}</span>`;
+    }
+
+    return `<div class="tracking-item">
+      <div class="tracking-subj">${_esc(e.subject)}</div>
+      <div class="tracking-meta">${dt} ${badge}</div>
+    </div>`;
+  }).join('');
+
+  area.style.display = '';
+}
+
 // ── Save Email to CRM ────────────────────────────────────────
 async function saveEmailToCRM() {
   const btn  = document.getElementById('save-btn');
@@ -279,7 +413,10 @@ async function saveEmailToCRM() {
     const token = await _getToken();
     if (!token) throw new Error('Nicht angemeldet');
 
-    let subject = '', bodyText = '', to = '', from = '', contactId = '', direction = '';
+    let subject = '', bodyText = '', bodyHtml = '', to = '', from = '', contactId = '', direction = '';
+
+    // Tracking nur für ausgehende E-Mails (Compose)
+    const trackingId = _mode === 'compose' ? _genUUID() : null;
 
     if (_mode === 'compose') {
       direction = 'outbound';
@@ -287,7 +424,23 @@ async function saveEmailToCRM() {
       from      = _auth.email;
       subject   = await _getAsync(cb => _item.subject.getAsync(cb));
       bodyText  = await _getAsync(cb => _item.body.getAsync(Office.CoercionType.Text, cb));
+      bodyHtml  = await _getAsync(cb => _item.body.getAsync(Office.CoercionType.Html, cb));
       contactId = _contactCache[to.toLowerCase()]?.contactId || '';
+
+      // Tracking-Pixel in E-Mail-Body einbetten
+      if (trackingId && bodyHtml) {
+        const pixel  = `<img src="${TRACK_URL}/${trackingId}" `
+          + `width="1" height="1" alt="" `
+          + `style="display:block;width:1px!important;height:1px!important;`
+          + `max-width:1px!important;overflow:hidden;opacity:0.01;">`;
+        const newHtml = bodyHtml.includes('</body>')
+          ? bodyHtml.replace('</body>', pixel + '</body>')
+          : bodyHtml + pixel;
+        await new Promise(resolve =>
+          _item.body.setAsync(newHtml, { coercionType: Office.CoercionType.Html }, resolve)
+        );
+      }
+
     } else {
       direction = 'inbound';
       to        = _auth.email;
@@ -298,14 +451,12 @@ async function saveEmailToCRM() {
       contactId = _contactCache[from.toLowerCase()]?.contactId || '';
     }
 
-    // Get display name from cache
     const emailKey    = (_mode === 'compose' ? to : from).toLowerCase();
     const cachedData  = _contactCache[emailKey];
     const displayName = cachedData?.name || '';
-
-    const now    = new Date().toISOString();
-    const toRaw  = displayName && _mode === 'compose' ? `${displayName} <${to}>` : to;
-    const fromRaw = displayName && _mode === 'read'   ? `${displayName} <${from}>` : from;
+    const now         = new Date().toISOString();
+    const toRaw       = displayName && _mode === 'compose' ? `${displayName} <${to}>` : to;
+    const fromRaw     = displayName && _mode === 'read'    ? `${displayName} <${from}>` : from;
 
     const fields = {
       direction:    { stringValue: direction },
@@ -315,7 +466,7 @@ async function saveEmailToCRM() {
       from:         { stringValue: from.toLowerCase() },
       fromRaw:      { stringValue: fromRaw },
       fromName:     { stringValue: _mode === 'inbound' ? displayName : _auth.email },
-      subject:      { stringValue: subject || '(Konu yok)' },
+      subject:      { stringValue: subject || '(Kein Betreff)' },
       text:         { stringValue: (bodyText || '').slice(0, 5000) },
       sentAt:       { timestampValue: now },
       createdAt:    { timestampValue: now },
@@ -325,33 +476,64 @@ async function saveEmailToCRM() {
       status:       { stringValue: 'sent' },
     };
 
-    const url = `${FS_BASE}/${_cfg.projectId}/databases/(default)/documents/${EM_COL}?key=${_cfg.apiKey}`;
-    const res = await fetch(url, {
+    if (trackingId) fields.trackingId = { stringValue: trackingId };
+
+    // E-Mail in crm_emails speichern
+    const saveUrl = `${FS_BASE}/${_cfg.projectId}/databases/(default)/documents/${EM_COL}?key=${_cfg.apiKey}`;
+    const saveRes = await fetch(saveUrl, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body:    JSON.stringify({ fields }),
     });
 
-    if (!res.ok) {
-      const e = await res.json().catch(() => ({}));
-      throw new Error(e.error?.message || 'HTTP ' + res.status);
+    if (!saveRes.ok) {
+      const e = await saveRes.json().catch(() => ({}));
+      throw new Error(e.error?.message || 'HTTP ' + saveRes.status);
     }
 
-    // Invalidate cache so next lookup shows this email
+    // Tracking-Dokument in email_tracking anlegen
+    if (trackingId) {
+      await fetch(
+        `${FS_BASE}/${_cfg.projectId}/databases/(default)/documents/${TR_COL}?documentId=${trackingId}&key=${_cfg.apiKey}`,
+        {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            fields: {
+              trackingId: { stringValue: trackingId },
+              subject:    { stringValue: subject || '' },
+              to:         { stringValue: to.toLowerCase() },
+              from:       { stringValue: from.toLowerCase() },
+              createdAt:  { timestampValue: now },
+              openCount:  { integerValue: '0' },
+            }
+          })
+        }
+      );
+    }
+
+    // Cache leeren damit nächster Lookup frische Daten holt
     delete _contactCache[emailKey];
 
-    showToast('✓ E-Mail im CRM gespeichert!', 'success');
-    text.textContent = '✓ Gespeichert';
+    const msg = trackingId ? '✓ Gespeichert + Tracking aktiv 👁' : '✓ Gespeichert';
+    showToast(msg, 'success');
+    text.textContent   = trackingId ? '✓ Gespeichert + Tracking 👁' : '✓ Gespeichert';
     btn.style.background = '#059669';
+
     setTimeout(() => {
-      text.textContent = 'E-Mail ins CRM speichern';
+      text.textContent   = 'E-Mail ins CRM speichern';
       btn.style.background = '';
-      btn.disabled = false;
+      btn.disabled       = false;
     }, 3000);
+
+    // Tracking-Bereich sofort aktualisieren
+    if (trackingId) {
+      setTimeout(() => _loadContactTracking(emailKey), 800);
+    }
 
   } catch (e) {
     showToast('Fehler: ' + e.message, 'error');
-    btn.disabled = false;
+    btn.disabled     = false;
     text.textContent = 'E-Mail ins CRM speichern';
   }
 }
@@ -360,11 +542,7 @@ async function saveEmailToCRM() {
 function _getAsync(fn) {
   return new Promise(resolve => {
     fn(result => {
-      if (result.status === Office.AsyncResultStatus.Succeeded) {
-        resolve(result.value || '');
-      } else {
-        resolve('');
-      }
+      resolve(result.status === Office.AsyncResultStatus.Succeeded ? (result.value || '') : '');
     });
   });
 }
