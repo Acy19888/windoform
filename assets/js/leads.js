@@ -429,11 +429,16 @@ function _ldOpenModal(lead) {
   f('ld-f-value').value        = lead?.expectedValue   || '';
   f('ld-f-currency').value     = lead?.currency        || 'EUR';
   f('ld-f-close-date').value   = lead?.expectedCloseDate || '';
-  // Atanan: mevcut lead için kayıtlı değer, yeni lead için giriş yapan kullanıcı
+  // Atanan: dataset ile değeri _ldPopulateAssigneeList'e ilet
   const _defaultAssignee = (typeof _userDispName !== 'undefined' && _userDispName)
     ? _userDispName
     : (typeof authEmail === 'function' ? (authEmail() || '') : '');
-  f('ld-f-assigned').value = lead?.assignedTo || (!isEdit ? _defaultAssignee : '');
+  const _assignedVal = lead?.assignedTo || (!isEdit ? _defaultAssignee : '');
+  const _selAssigned = f('ld-f-assigned');
+  if (_selAssigned) _selAssigned.dataset.currentValue = _assignedVal;
+  // Custom input sıfırla
+  const _ciAssigned = document.getElementById('ld-f-assigned-custom');
+  if (_ciAssigned) { _ciAssigned.style.display = 'none'; _ciAssigned.value = ''; }
   f('ld-f-product').value      = lead?.productInterest || '';
   f('ld-f-sector').value       = lead?.sector          || '';
   f('ld-f-notes').value        = lead?.notes           || '';
@@ -484,7 +489,7 @@ async function ldSave() {
     expectedValue: parseFloat(get('ld-f-value')) || 0,
     currency: get('ld-f-currency') || 'EUR',
     expectedCloseDate: get('ld-f-close-date'),
-    assignedTo: get('ld-f-assigned'),
+    assignedTo: _ldGetAssignedValue(),
     productInterest: get('ld-f-product'),
     sector: get('ld-f-sector'),
     notes: get('ld-f-notes'),
@@ -615,15 +620,58 @@ function _ldPopulateCompanyDatalist() {
 }
 
 function _ldPopulateAssigneeList() {
-  const dl = document.getElementById('ld-assignee-list');
-  if (!dl) return;
-  // Mevcut leadlerden bilinen kişileri topla
+  const sel = document.getElementById('ld-f-assigned');
+  if (!sel) return;
+  const currentVal = sel.dataset.currentValue || '';
+  // Bilinen kullanıcıları topla: aktif kullanıcı + mevcut leadlerden
   const known = new Set();
   const _me = (typeof _userDispName !== 'undefined' && _userDispName) ? _userDispName
     : (typeof authEmail === 'function' ? authEmail() : '');
   if (_me) known.add(_me);
   (leadsData || []).forEach(l => { if (l.assignedTo) known.add(l.assignedTo); });
-  dl.innerHTML = [...known].map(n => `<option value="${n.replace(/"/g,'&quot;')}"></option>`).join('');
+  // currentVal dışarıdan geldiyse (düzenleme modu) ekle
+  if (currentVal && !known.has(currentVal)) known.add(currentVal);
+
+  const opts = [...known].map(n =>
+    `<option value="${n.replace(/"/g,'&quot;')}">${n.replace(/</g,'&lt;')}</option>`
+  ).join('');
+  sel.innerHTML = opts + `<option value="__other__">— Diğer (elle gir) —</option>`;
+
+  // Mevcut değeri seç
+  if (currentVal && known.has(currentVal)) sel.value = currentVal;
+  else if (currentVal) { sel.value = '__other__'; _ldShowCustomAssignee(currentVal); }
+  else sel.value = _me || (sel.options[0]?.value || '');
+}
+
+function _ldAssignedChange(sel) {
+  if (sel.value === '__other__') {
+    _ldShowCustomAssignee('');
+  } else {
+    const ci = document.getElementById('ld-f-assigned-custom');
+    if (ci) { ci.style.display = 'none'; ci.value = ''; }
+  }
+}
+
+function _ldShowCustomAssignee(val) {
+  const ci = document.getElementById('ld-f-assigned-custom');
+  if (!ci) return;
+  ci.style.display = '';
+  ci.value = val || '';
+  ci.focus();
+}
+
+function _ldAssignedCustomInput(input) {
+  // Anlık önizleme için herhangi bir işlem gerekmez
+}
+
+// Atanan'ın gerçek değerini döndür (select veya custom input)
+function _ldGetAssignedValue() {
+  const sel = document.getElementById('ld-f-assigned');
+  if (!sel) return '';
+  if (sel.value === '__other__') {
+    return (document.getElementById('ld-f-assigned-custom')?.value || '').trim();
+  }
+  return sel.value;
 }
 
 // ── Auto-fill form fields when a company is picked ────────

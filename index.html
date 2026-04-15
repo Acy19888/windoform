@@ -2069,11 +2069,12 @@
             <div class="modal-section-title">Konum</div>
             <p class="mb-1"><strong>Adres:</strong> <span id="comp-address"></span></p>
             <p class="mb-1" id="comp-neighbourhood-wrap" style="display:none;"><strong>Mahalle:</strong> <span id="comp-neighbourhood" class="text-muted"></span></p>
-            <p class="mb-1"><strong>&#x130;l:</strong> <span id="comp-city"></span></p>
-            <p class="mb-1" id="comp-district-wrap"><strong>&#x130;l&#xe7;e:</strong> <span id="comp-district"></span></p>
-            <p class="mb-1" id="comp-state-wrap" style="display:none;"><strong>Eyalet/B&#xf6;lge:</strong> <span id="comp-state"></span></p>
+            <p class="mb-1"><strong>Şehir:</strong> <span id="comp-city"></span></p>
+            <p class="mb-1"><strong>Ülke:</strong> <span id="comp-country"></span></p>
+            <p class="mb-1" id="comp-district-wrap" style="display:none;"><strong>İlçe:</strong> <span id="comp-district"></span></p>
+            <p class="mb-1" id="comp-state-wrap" style="display:none;"><strong>Eyalet/Bölge:</strong> <span id="comp-state"></span></p>
             <p class="mb-1" id="comp-postcode-wrap" style="display:none;"><strong>Posta Kodu:</strong> <span id="comp-postcode"></span></p>
-            <p class="mb-1" id="comp-country-wrap" style="display:none;"><strong>&#xdc;lke:</strong> <span id="comp-country"></span></p>
+            <p class="mb-1" id="comp-country-wrap" style="display:none;"></p>
             <div id="comp-hierarchy-info" style="display:none;"></div>
             <div id="comp-maps-links" style="display:none;"></div>
             <div id="comp-static-map" class="mt-2 mb-2" style="display:none;"></div>
@@ -2677,8 +2678,8 @@
           </div>
           <div class="col-md-4">
             <label class="form-label form-label-sm fw-semibold">Atanan</label>
-            <input type="text" class="form-control form-control-sm" id="ld-f-assigned" list="ld-assignee-list" placeholder="Sorumlu kişi" autocomplete="off">
-            <datalist id="ld-assignee-list"></datalist>
+            <select class="form-select form-select-sm" id="ld-f-assigned" onchange="_ldAssignedChange(this)"></select>
+            <input type="text" class="form-control form-control-sm mt-1" id="ld-f-assigned-custom" placeholder="İsim girin..." style="display:none;" oninput="_ldAssignedCustomInput(this)">
           </div>
           <div class="col-md-4">
             <label class="form-label form-label-sm fw-semibold">Beklenen Değer</label>

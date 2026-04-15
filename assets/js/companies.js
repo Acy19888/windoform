@@ -173,10 +173,13 @@ async function showCompanyModal(id) {
   if (postcodeWrap) { postcodeWrap.style.display = c.postcode ? '' : 'none'; }
   const postcodeEl = document.getElementById('comp-postcode');
   if (postcodeEl) postcodeEl.textContent = c.postcode || '';
-  const countryWrap = document.getElementById('comp-country-wrap');
-  if (countryWrap) { countryWrap.style.display = (c.country && c.country !== 'Türkiye') ? '' : 'none'; }
+  // Ülke — her zaman göster (uluslararası kullanım)
   const countryEl = document.getElementById('comp-country');
-  if (countryEl) countryEl.textContent = c.country || '';
+  const _fbFallbackCountry = (typeof fbCustomers !== 'undefined' ? fbCustomers : [])
+    .find(fb => (fb.company||'').toLowerCase().trim() === (c.name||'').toLowerCase().trim() && fb.country);
+  if (countryEl) countryEl.textContent = c.country || _emp?.country || _fbFallbackCountry?.country || '-';
+  const countryWrap = document.getElementById('comp-country-wrap');
+  if (countryWrap) countryWrap.style.display = 'none'; // eski gizli alan — artık kullanılmıyor
 
   // Pazarlama Durumu
   const mktStatus = c.marketingStatus || 'Aranacak';
