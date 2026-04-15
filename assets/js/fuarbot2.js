@@ -705,6 +705,12 @@ async function importFuarbotContact(id) {
       const match  = allCos.find(co => (co.name||'').toLowerCase().trim() === c.company.toLowerCase().trim());
       if (match) {
         companyId = match.id;
+        // Mevcut firmada adres yoksa Fuarbot verisinden güncelle
+        if (!match.address && c.address) {
+          const updatedCo = { ...match, address: c.address, updatedAt: new Date().toISOString() };
+          if (typeof calculateCompanyQuality === 'function') updatedCo.qualityScore = calculateCompanyQuality(updatedCo);
+          await dbPut('companies', updatedCo);
+        }
       } else {
         const nc = { name:c.company.trim(), phone:c.phone||'', email:'', website:c.website||'', address:c.address||'', city:'', notes:'Fuarbot: '+(c.source||'Fuarbot'), marketingStatus:'Aranacak', qualityScore:0, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
         nc.qualityScore = calculateCompanyQuality(nc);
@@ -714,7 +720,7 @@ async function importFuarbotContact(id) {
 
     // ── Add contact ──────────────────────────────────────
     const phone = c.phone||c.mobile||'';
-    const ct = { name:c.name||'', title:c.position||'', phone, phoneNormalized:phone.replace(/\D/g,''), phoneValid:/^0[0-9]{10}$/.test(phone.replace(/[\s\-()]/g,'')), email:c.email||'', companyId, status:'Aktif', sourceTag: c.source||'Fuarbot', notes:'Fuarbot: '+(c.source||'Fuarbot')+(c.notes?'\n'+c.notes:''), createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
+    const ct = { name:c.name||'', title:c.position||'', phone, phoneNormalized:phone.replace(/\D/g,''), phoneValid:/^0[0-9]{10}$/.test(phone.replace(/[\s\-()]/g,'')), email:c.email||'', address:c.address||'', companyId, status:'Aktif', sourceTag: c.source||'Fuarbot', notes:'Fuarbot: '+(c.source||'Fuarbot')+(c.notes?'\n'+c.notes:''), createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
     ct.qualityScore = calculateContactQuality(ct);
     await dbAdd('contacts', ct);
     toast('✓ ' + c.name + ' CRM\'e aktarıldı', 'success');
@@ -750,8 +756,13 @@ async function importAllFuarbotContacts() {
         const match  = allCos.find(co => (co.name||'').toLowerCase().trim() === c.company.toLowerCase().trim());
         if (match) {
           companyId = match.id;
+          if (!match.address && c.address) {
+            const updatedCo = { ...match, address: c.address, updatedAt: new Date().toISOString() };
+            if (typeof calculateCompanyQuality === 'function') updatedCo.qualityScore = calculateCompanyQuality(updatedCo);
+            await dbPut('companies', updatedCo);
+          }
         } else {
-          const nc = { name:c.company.trim(), phone:c.phone||'', email:'', website:c.website||'', address:c.address||'', city:'', notes:'Fuarbot: '+(c.source||'Fuarbot'), marketingStatus:'Aranacak', qualityScore:0, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
+          const nc = { name:c.company.trim(), phone:c.phone||'', email:'', website:c.website||'', address:c.address||'', city:c.city||'', notes:'Fuarbot: '+(c.source||'Fuarbot'), marketingStatus:'Aranacak', qualityScore:0, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
           if (typeof calculateCompanyQuality === 'function') nc.qualityScore = calculateCompanyQuality(nc);
           companyId = await dbAdd('companies', nc);
         }
@@ -759,7 +770,7 @@ async function importAllFuarbotContacts() {
 
       // ── Add contact ──────────────────────────────────────
       const phone = c.phone||c.mobile||'';
-      const ct = { name:c.name||'', title:c.position||'', phone, phoneNormalized:phone.replace(/\D/g,''), phoneValid:/^0[0-9]{10}$/.test(phone.replace(/[\s\-()]/g,'')), email:c.email||'', companyId, status:'Aktif', sourceTag:c.source||'Fuarbot', notes:'Fuarbot: '+(c.source||'Fuarbot')+(c.notes?'\n'+c.notes:''), createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
+      const ct = { name:c.name||'', title:c.position||'', phone, phoneNormalized:phone.replace(/\D/g,''), phoneValid:/^0[0-9]{10}$/.test(phone.replace(/[\s\-()]/g,'')), email:c.email||'', address:c.address||'', companyId, status:'Aktif', sourceTag:c.source||'Fuarbot', notes:'Fuarbot: '+(c.source||'Fuarbot')+(c.notes?'\n'+c.notes:''), createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
       if (typeof calculateContactQuality === 'function') ct.qualityScore = calculateContactQuality(ct);
       await dbAdd('contacts', ct);
       imported++;

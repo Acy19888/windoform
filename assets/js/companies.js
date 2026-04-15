@@ -140,15 +140,13 @@ async function showCompanyModal(id) {
   if (taxOfficeEl) taxOfficeEl.textContent = c.taxOffice || '';
 
   // Adres — Firma yoksa ilk çalışanın adresini göster (Visitenkarte fallback)
-  const _firstEmpWithAddr = employees.find(e => e.address || e.city);
-  const _dispAddress  = c.address  || _firstEmpWithAddr?.address  || '-';
-  const _dispCity     = c.city     || _firstEmpWithAddr?.city     || '-';
-  const _dispDistrict = c.district || _firstEmpWithAddr?.district || '-';
-  const _fromContact  = !c.address && !c.city && !!_firstEmpWithAddr;
-  const _addrSuffix   = _fromContact ? ' <span class="text-muted" style="font-size:11px;">(kişiden)</span>' : '';
-  document.getElementById('comp-address').innerHTML  = esc(_dispAddress) + (_fromContact && _firstEmpWithAddr?.address ? _addrSuffix : '');
-  document.getElementById('comp-city').innerHTML     = esc(_dispCity)    + (_fromContact && _firstEmpWithAddr?.city    ? _addrSuffix : '');
-  document.getElementById('comp-district').innerHTML = esc(_dispDistrict);
+  const _emp = employees.find(e => e.address || e.city);
+  const _addrEl     = document.getElementById('comp-address');
+  const _cityEl     = document.getElementById('comp-city');
+  const _districtEl = document.getElementById('comp-district');
+  if (_addrEl)     _addrEl.textContent     = c.address  || _emp?.address  || '-';
+  if (_cityEl)     _cityEl.textContent     = c.city     || _emp?.city     || '-';
+  if (_districtEl) _districtEl.textContent = c.district || _emp?.district || '-';
 
   // Mahalle
   const neighWrap = document.getElementById('comp-neighbourhood-wrap');
