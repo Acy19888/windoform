@@ -28,22 +28,14 @@ export default async function handler(req, res) {
     }).then(r => r.json());
 
   try {
-    // ── 1. Kontakt suchen in: kisiler, contacts (beide Collections, mehrere Email-Felder)
-    const contactCollections = ['kisiler', 'contacts'];
-    const emailFields        = ['email', 'contactEmail', 'emailAddress', 'e_posta'];
-
-    const contactQueries = [];
-    for (const col of contactCollections) {
-      for (const field of emailFields) {
-        contactQueries.push(runQuery({
-          from:  [{ collectionId: col }],
-          where: { fieldFilter: { field: { fieldPath: field }, op: 'EQUAL', value: { stringValue: emailLow } } },
-          limit: 1,
-        }));
-      }
-    }
-
-    const contactResults = await Promise.all(contactQueries);
+    // ── 1. Kontakt in crm_customers suchen (email-Feld)
+    const contactResults = await Promise.all([
+      runQuery({
+        from:  [{ collectionId: 'crm_customers' }],
+        where: { fieldFilter: { field: { fieldPath: 'email' }, op: 'EQUAL', value: { stringValue: emailLow } } },
+        limit: 1,
+      }),
+    ]);
 
     // Ersten gefundenen Kontakt nehmen
     const contactRows = contactResults.flat().filter(r => r && r.document);
@@ -54,10 +46,10 @@ export default async function handler(req, res) {
     if (contactRows.length > 0) {
       const f = contactRows[0].document.fields || {};
       contactId = contactRows[0].document.name.split('/').pop();
-      // Name aus firstName+lastName oder name-Feld
+      // crm_customers hat name direkt; Fallback auf firstName+lastName
       const first = f.firstName?.stringValue || '';
       const last  = f.lastName?.stringValue  || '';
-      contactName = (first + ' ' + last).trim() || f.name?.stringValue || '';
+      contactName = f.name?.stringValue || (first + ' ' + last).trim() || '';
     }
 
     // ── 2. Letzte E-Mails aus crm_emails holen ───────────────────────
