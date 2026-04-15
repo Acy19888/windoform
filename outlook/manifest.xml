@@ -66,6 +66,14 @@
 
         <DesktopFormFactor>
 
+          <!-- Hintergrund-Funktion für Auto-Save beim Senden -->
+          <FunctionFile resid="FunctionFile.Url"/>
+
+          <!-- Auto-Save: E-Mail beim Senden automatisch ins CRM speichern -->
+          <ExtensionPoint xsi:type="Events">
+            <Event Type="ItemSend" FunctionExecution="synchronous" FunctionName="onItemSend"/>
+          </ExtensionPoint>
+
           <!-- Compose Modus: Seitenleiste beim Schreiben -->
           <ExtensionPoint xsi:type="MessageComposeCommandSurface">
             <OfficeTab id="TabDefault">
@@ -127,6 +135,7 @@
       <bt:Urls>
         <bt:Url id="Taskpane.Url"     DefaultValue="https://windoform.vercel.app/outlook/taskpane.html"/>
         <bt:Url id="Taskpane.UrlRead" DefaultValue="https://windoform.vercel.app/outlook/taskpane.html?mode=read"/>
+        <bt:Url id="FunctionFile.Url" DefaultValue="https://windoform.vercel.app/outlook/commands.html"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GroupLabel"           DefaultValue="Windoform CRM"/>
