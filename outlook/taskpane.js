@@ -436,24 +436,16 @@ async function saveEmailToCRM() {
         await new Promise(r => setTimeout(r, 400));
       }
 
-      // Body als HTML holen (zuverlässigster Weg in OWA)
+      // Body als Text holen (Outlook bereinigt das intern korrekt)
+      // prependAsync oben hat OWA-Sync erzwungen, daher liefert Text jetzt vollen Inhalt
+      bodyText = await _getAsync(cb =>
+        _item.body.getAsync(Office.CoercionType.Text, { asyncContext: null }, cb)
+      );
+
+      // HTML separat für Tracking-Pixel holen
       bodyHtml = await _getAsync(cb =>
         _item.body.getAsync(Office.CoercionType.Html, { asyncContext: null }, cb)
       );
-
-      // Plain-Text aus HTML ableiten (HTML-Tags entfernen)
-      if (bodyHtml) {
-        bodyText = bodyHtml
-          .replace(/<style[\s\S]*?<\/style>/gi, '')
-          .replace(/<script[\s\S]*?<\/script>/gi, '')
-          .replace(/<[^>]+>/g, ' ')
-          .replace(/&nbsp;/g, ' ')
-          .replace(/&amp;/g, '&')
-          .replace(/&lt;/g, '<')
-          .replace(/&gt;/g, '>')
-          .replace(/\s+/g, ' ')
-          .trim();
-      }
 
       // Debug-Toast: zeigt was erfasst wurde (erste 60 Zeichen)
       showToast(`📋 Betreff: "${subject || '–'}" | Text: "${bodyText.slice(0,60) || '–'}"`, '');
@@ -484,22 +476,11 @@ async function saveEmailToCRM() {
         ? _item.subject
         : await _getAsync(cb => _item.subject.getAsync({ asyncContext: null }, cb));
 
-      // Body als HTML holen, dann Text ableiten
-      bodyHtml = await _getAsync(cb =>
-        _item.body.getAsync(Office.CoercionType.Html, { asyncContext: null }, cb)
+      // Body als Text holen (Outlook macht die Konvertierung sauber)
+      bodyText = await _getAsync(cb =>
+        _item.body.getAsync(Office.CoercionType.Text, { asyncContext: null }, cb)
       );
-      if (bodyHtml) {
-        bodyText = bodyHtml
-          .replace(/<style[\s\S]*?<\/style>/gi, '')
-          .replace(/<script[\s\S]*?<\/script>/gi, '')
-          .replace(/<[^>]+>/g, ' ')
-          .replace(/&nbsp;/g, ' ')
-          .replace(/&amp;/g, '&')
-          .replace(/&lt;/g, '<')
-          .replace(/&gt;/g, '>')
-          .replace(/\s+/g, ' ')
-          .trim();
-      }
+      bodyHtml = '';
     }
 
     const emailKey    = (_mode === 'compose' ? to : from).toLowerCase();
