@@ -56,7 +56,7 @@
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides" xsi:type="VersionOverridesV1_0">
 
     <Requirements>
-      <bt:Sets DefaultMinVersion="1.3">
+      <bt:Sets DefaultMinVersion="1.4">
         <bt:Set Name="Mailbox"/>
       </bt:Sets>
     </Requirements>
@@ -91,6 +91,7 @@
                     <bt:Image size="80" resid="Icon.80x80"/>
                   </Icon>
                   <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>WindoformCRMPane</TaskpaneId>
                     <SourceLocation resid="Taskpane.Url"/>
                   </Action>
                 </Control>
@@ -98,7 +99,7 @@
             </OfficeTab>
           </ExtensionPoint>
 
-          <!-- Read Modus: Seitenleiste beim Lesen -->
+          <!-- Read Modus: Seitenleiste beim Lesen (mit Pin-Funktion) -->
           <ExtensionPoint xsi:type="MessageReadCommandSurface">
             <OfficeTab id="TabDefault">
               <Group id="msgReadGroup">
@@ -115,6 +116,8 @@
                     <bt:Image size="80" resid="Icon.80x80"/>
                   </Icon>
                   <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>WindoformCRMPane</TaskpaneId>
+                    <SupportsPinning>true</SupportsPinning>
                     <SourceLocation resid="Taskpane.UrlRead"/>
                   </Action>
                 </Control>
