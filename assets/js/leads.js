@@ -644,11 +644,35 @@ async function _ldCompanyPick() {
     contacts = all.filter(c => c.companyId === match.id || (c.company || '').toLowerCase() === val);
   }
 
-  // City/Country: Firma → Kontakt-Fallback (Visitenkarte-Adresse)
-  const _empForCity = contacts.find(c => c.city);
-  const _empForCountry = contacts.find(c => c.country);
-  const _fillCity    = match.city    || _empForCity?.city    || '';
-  const _fillCountry = match.country || _empForCountry?.country || '';
+  // City/Country: Firma → Adres-Parsing-Fallback
+  // Şirketin city/country alanları boşsa adres metninden çıkarmaya çalış
+  let _fillCity    = match.city    || '';
+  let _fillCountry = match.country || '';
+  if ((!_fillCity || !_fillCountry) && match.address) {
+    // "506 S Spring St, Los Angeles, CA 90013" → city: Los Angeles, country: USA
+    // "Musterstr. 5, 80331 München, Deutschland" → city: München, country: Deutschland
+    const addr = match.address;
+    // US format: ends with "State ZIP" pattern
+    const usMatch = addr.match(/,\s*([A-Za-z\s]+),\s*[A-Z]{2}\s*\d{5}(?:-\d{4})?(?:\s*,?\s*USA?)?$/i);
+    if (usMatch) {
+      if (!_fillCity)    _fillCity    = usMatch[1].trim();
+      if (!_fillCountry) _fillCountry = 'USA';
+    } else {
+      // Generic: letzte Komma-Segmente prüfen
+      const parts = addr.split(',').map(p => p.trim()).filter(Boolean);
+      if (parts.length >= 2 && !_fillCity) {
+        // Zweitletztes Segment als Stadt (letztes oft PLZ oder Land)
+        const candidate = parts[parts.length - 2];
+        if (candidate && candidate.length > 1 && !/^\d/.test(candidate)) {
+          _fillCity = candidate;
+        }
+      }
+      if (parts.length >= 1 && !_fillCountry) {
+        const last = parts[parts.length - 1];
+        if (last && !/^\d/.test(last) && last.length > 2) _fillCountry = last;
+      }
+    }
+  }
   if (_fillCity    && !f('ld-f-city').value)    f('ld-f-city').value    = _fillCity;
   if (_fillCountry && !f('ld-f-country').value)  f('ld-f-country').value = _fillCountry;
 
