@@ -28,26 +28,25 @@ export default async function handler(req, res) {
     }).then(r => r.json());
 
   try {
-    // ── 1. Kontakt in der contacts-Collection suchen ─────────────────
-    // Suche über 'email' UND 'contactEmail' Feld (zwei Queries, da Firestore kein OR über Felder unterstützt)
-    const [cByEmail, cByContactEmail] = await Promise.all([
-      runQuery({
-        from:  [{ collectionId: 'contacts' }],
-        where: { fieldFilter: { field: { fieldPath: 'email' }, op: 'EQUAL', value: { stringValue: emailLow } } },
-        limit: 1,
-      }),
-      runQuery({
-        from:  [{ collectionId: 'contacts' }],
-        where: { fieldFilter: { field: { fieldPath: 'contactEmail' }, op: 'EQUAL', value: { stringValue: emailLow } } },
-        limit: 1,
-      }),
-    ]);
+    // ── 1. Kontakt suchen in: kisiler, contacts (beide Collections, mehrere Email-Felder)
+    const contactCollections = ['kisiler', 'contacts'];
+    const emailFields        = ['email', 'contactEmail', 'emailAddress', 'e_posta'];
+
+    const contactQueries = [];
+    for (const col of contactCollections) {
+      for (const field of emailFields) {
+        contactQueries.push(runQuery({
+          from:  [{ collectionId: col }],
+          where: { fieldFilter: { field: { fieldPath: field }, op: 'EQUAL', value: { stringValue: emailLow } } },
+          limit: 1,
+        }));
+      }
+    }
+
+    const contactResults = await Promise.all(contactQueries);
 
     // Ersten gefundenen Kontakt nehmen
-    const contactRows = [
-      ...(Array.isArray(cByEmail) ? cByEmail : []),
-      ...(Array.isArray(cByContactEmail) ? cByContactEmail : []),
-    ].filter(r => r.document);
+    const contactRows = contactResults.flat().filter(r => r && r.document);
 
     let contactId   = '';
     let contactName = '';
