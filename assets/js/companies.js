@@ -139,9 +139,16 @@ async function showCompanyModal(id) {
   const taxOfficeEl = document.getElementById('comp-tax-office');
   if (taxOfficeEl) taxOfficeEl.textContent = c.taxOffice || '';
 
-  document.getElementById('comp-address').textContent  = c.address || '-';
-  document.getElementById('comp-city').textContent     = c.city || '-';
-  document.getElementById('comp-district').textContent = c.district || '-';
+  // Adres — Firma yoksa ilk çalışanın adresini göster (Visitenkarte fallback)
+  const _firstEmpWithAddr = employees.find(e => e.address || e.city);
+  const _dispAddress  = c.address  || _firstEmpWithAddr?.address  || '-';
+  const _dispCity     = c.city     || _firstEmpWithAddr?.city     || '-';
+  const _dispDistrict = c.district || _firstEmpWithAddr?.district || '-';
+  const _fromContact  = !c.address && !c.city && !!_firstEmpWithAddr;
+  const _addrSuffix   = _fromContact ? ' <span class="text-muted" style="font-size:11px;">(kişiden)</span>' : '';
+  document.getElementById('comp-address').innerHTML  = esc(_dispAddress) + (_fromContact && _firstEmpWithAddr?.address ? _addrSuffix : '');
+  document.getElementById('comp-city').innerHTML     = esc(_dispCity)    + (_fromContact && _firstEmpWithAddr?.city    ? _addrSuffix : '');
+  document.getElementById('comp-district').innerHTML = esc(_dispDistrict);
 
   // Mahalle
   const neighWrap = document.getElementById('comp-neighbourhood-wrap');
@@ -449,16 +456,18 @@ function toggleUpdatePanel() {
       linksEl.appendChild(a);
     });
 
-    // Mevcut değerleri doldur
-    document.getElementById('cu-address').value       = c.address       || '';
-    document.getElementById('cu-neighbourhood').value = c.neighbourhood  || '';
-    document.getElementById('cu-city').value          = c.city          || '';
-    document.getElementById('cu-district').value      = c.district      || '';
+    // Mevcut değerleri doldur — Firma adresi yoksa ilk çalışanın adresini kullan
+    const allCons2 = typeof dbAll === 'function' ? await dbAll('contacts').catch(() => []) : [];
+    const empFallback = allCons2.find(e => e.companyId === id && (e.address || e.city));
+    document.getElementById('cu-address').value       = c.address       || empFallback?.address       || '';
+    document.getElementById('cu-neighbourhood').value = c.neighbourhood  || empFallback?.neighbourhood || '';
+    document.getElementById('cu-city').value          = c.city          || empFallback?.city          || '';
+    document.getElementById('cu-district').value      = c.district      || empFallback?.district      || '';
     document.getElementById('cu-phone').value         = c.phone         || '';
     document.getElementById('cu-email').value         = c.email         || '';
     document.getElementById('cu-website').value       = c.website       || '';
-    document.getElementById('cu-lat').value           = c.lat           || '';
-    document.getElementById('cu-lon').value           = c.lon           || '';
+    document.getElementById('cu-lat').value           = c.lat           || empFallback?.lat           || '';
+    document.getElementById('cu-lon').value           = c.lon           || empFallback?.lon           || '';
 
     panel.style.display = '';
     panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
